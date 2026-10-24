@@ -1,0 +1,159 @@
+/* =====================================================================
+   Piezas reutilizadas de Cognose (css/modal.css, css/settings.css, css/calendar.css)
+   Mismos nombres de clase para que se sientan iguales en las dos apps.
+   ===================================================================== */
+
+/* ===== Botones ===== */
+.btn{display:inline-flex;align-items:center;gap:.4rem;background:transparent;border:1px solid var(--border);color:var(--text);padding:.42rem .95rem;border-radius:999px;cursor:pointer;font-size:.82rem;font-weight:600;white-space:nowrap}
+.btn:hover{background:color-mix(in srgb, var(--text) 8%, transparent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#121212}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.ghost{border-color:transparent;color:var(--accent)}
+.btn.sm{padding:.28rem .75rem;font-size:.74rem}
+.btn .ic{width:16px;height:16px}
+.icon-btn{width:32px;height:32px;border-radius:50%;border:none;background:transparent;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0}
+.icon-btn:hover{background:color-mix(in srgb, var(--text) 10%, transparent);color:var(--text)}
+.icon-btn.sm{width:26px;height:26px}
+.icon-btn.sm .ic{width:15px;height:15px}
+.icon-btn.ok:hover{color:var(--accent)}
+.mini{width:24px;height:24px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;flex-shrink:0;font-size:.75rem}
+.mini.x:hover:not(:disabled){color:var(--danger);border-color:var(--danger)}
+.mini:disabled{opacity:.3;cursor:default}
+.dp-link{background:none;border:none;color:var(--accent);cursor:pointer;font-size:.76rem;font-weight:600;padding:.1rem .2rem}
+.dp-link.inline{margin-left:.5rem;font-size:.72rem}
+
+/* ===== Ventanas (tools/05-modal.js) ===== */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:200;overflow-y:auto;padding:12px;animation:fadeIn .12s ease-out}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:1.3rem 1.4rem;width:320px;max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);overflow-y:auto;box-shadow:0 10px 30px rgba(0,0,0,.4);margin:auto;animation:popIn .16s cubic-bezier(.3,1.3,.5,1)}
+.modal h3{margin:0 0 1rem;font-size:1.15rem}
+.modal.small{width:min(360px,92vw)}
+.create-modal{width:440px}
+.create-modal.editor{width:620px}
+.create-modal.importar{width:820px}
+.create-modal.revision{width:680px}
+.modal-label{display:flex;align-items:center;color:var(--muted);font-size:.76rem;margin:.75rem 0 .3rem;font-weight:600}
+.modal-input{width:100%;padding:.5rem .6rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.88rem}
+.modal-input:focus{outline:none;border-color:var(--accent)}
+.modal-input.sm{padding:.32rem .45rem;font-size:.78rem}
+.modal-input.bad{border-color:var(--danger)}
+textarea.modal-input{resize:vertical;font-family:inherit}
+textarea.modal-input.mono{font-family:ui-monospace,Consolas,monospace}
+.modal-btns{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:flex-end;align-items:center;margin-top:1.1rem}
+.modal-btns.center,.modal-text.center{justify-content:center;text-align:center}
+.modal-btn{display:inline-flex;align-items:center;gap:.35rem;padding:.5rem 1rem;border-radius:8px;border:none;cursor:pointer;font-size:.84rem;font-weight:600}
+.modal-btn.cancel{background:var(--bg);color:var(--text);border:1px solid var(--border)}
+.modal-btn.ok{background:var(--accent);color:#121212}
+.modal-btn.ok:disabled{opacity:.4;cursor:default}
+.modal-btn.ok.danger{background:var(--danger);color:#fff}
+.modal-btn.danger-text:hover{color:var(--danger);border-color:var(--danger)}
+.modal-text{margin:.5rem 0 .6rem;color:var(--muted);font-size:.88rem;line-height:1.5}
+@keyframes popIn{from{opacity:0;transform:scale(.94) translateY(6px)}to{opacity:1;transform:none}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+/* ===== Pop-ups estilo Habitica: banda de color + icono grande + título centrado ===== */
+.modal.hb,.modal.create-modal{padding-top:0}
+.hb-head{position:relative;margin:0 -1.4rem .4rem;padding:0 1.4rem;text-align:center}
+.hb-band{height:62px;border-radius:13px 13px 0 0;position:relative;overflow:hidden;
+  background:linear-gradient(135deg, color-mix(in srgb, var(--hb) 85%, #000) 0%, var(--hb) 55%, color-mix(in srgb, var(--hb) 70%, #fff) 100%)}
+.hb-band::after{content:'';position:absolute;inset:0;background:repeating-linear-gradient(45deg, rgba(255,255,255,.07) 0 8px, transparent 8px 16px)}
+.hb-spark{position:absolute;width:6px;height:6px;background:#fff;opacity:.7;transform:rotate(45deg);animation:twinkle 2.4s ease-in-out infinite}
+.hb-spark.s1{left:18%;top:18px}.hb-spark.s2{right:22%;top:12px;animation-delay:.8s;width:4px;height:4px}.hb-spark.s3{right:12%;top:36px;animation-delay:1.6s}
+@keyframes twinkle{0%,100%{opacity:.15;transform:rotate(45deg) scale(.6)}50%{opacity:.9;transform:rotate(45deg) scale(1)}}
+.hb-icon{width:64px;height:64px;margin:-34px auto .35rem;border-radius:50%;display:grid;place-items:center;font-size:1.9rem;position:relative;
+  background:var(--card);box-shadow:0 0 0 4px var(--card),0 0 0 6px var(--hb),0 8px 20px -6px var(--hb);animation:bounceIn .45s cubic-bezier(.3,1.6,.5,1)}
+@keyframes bounceIn{0%{transform:scale(.3)}100%{transform:scale(1)}}
+.hb-head h3{margin:0 0 .15rem;font-size:1.25rem}
+.hb-sub{color:var(--muted);font-size:.78rem;margin-bottom:.3rem}
+.hb-stats{display:flex;justify-content:center;gap:.6rem;margin:.6rem 0}
+.hb-stats div{display:flex;flex-direction:column;align-items:center;min-width:76px;padding:.5rem .4rem;border-radius:12px;background:color-mix(in srgb, var(--accent) 10%, var(--bg))}
+.hb-stats b{font-size:1.4rem;color:var(--accent);font-family:'Anton',sans-serif;font-weight:400}
+.hb-stats span{font-size:.7rem;color:var(--muted)}
+
+/* ===== Chips de selección (energías del calendario de Cognose) ===== */
+.chip-pick{display:flex;flex-wrap:wrap;gap:.35rem}
+.echip{display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .75rem;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:.78rem}
+.echip:hover{background:color-mix(in srgb, var(--text) 7%, transparent)}
+.echip .dot{width:9px;height:9px;border-radius:50%;background:var(--ec)}
+.echip.on{border-color:var(--ec, var(--accent));background:color-mix(in srgb, var(--ec, var(--accent)) 22%, transparent);font-weight:600}
+.echip.sm{padding:.2rem .6rem;font-size:.72rem}
+.echip.est-abierta{--ec:var(--abierta)}.echip.est-nueva{--ec:var(--nueva)}.echip.est-cierre{--ec:var(--cierre)}
+
+/* ===== Mini calendario de formularios (tools/13-pickers.js) ===== */
+.date-pick{border:1px solid var(--border);border-radius:10px;padding:.5rem .6rem .45rem;background:var(--bg);user-select:none}
+.dp-head{display:flex;align-items:center;gap:.3rem;margin-bottom:.2rem}
+.dp-month{flex:1;text-align:center;font-weight:600;font-size:.82rem}
+.dp-nav{width:26px;height:26px;border-radius:50%;border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:1.1rem;line-height:1}
+.dp-nav:hover{background:color-mix(in srgb, var(--text) 10%, transparent);color:var(--text)}
+.dp-grid{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;row-gap:1px}
+.dp-dow{font-size:.6rem;color:var(--muted);font-weight:600;padding:.2rem 0}
+.dp-day{width:28px;height:28px;margin:auto;border-radius:50%;border:none;background:transparent;color:var(--text);cursor:pointer;font-size:.72rem;padding:0}
+.dp-day:hover{background:color-mix(in srgb, var(--text) 10%, transparent)}
+.dp-day.out{color:var(--muted);opacity:.55}
+.dp-day.today{color:var(--accent);font-weight:700}
+.dp-day.sel{background:var(--accent);color:#121212;font-weight:700}
+.dp-foot{display:flex;align-items:center;gap:.5rem;border-top:1px solid var(--border);margin-top:.35rem;padding-top:.4rem;font-size:.75rem}
+.dp-value{flex:1;font-weight:600}
+.dp-value.empty{color:var(--muted);font-weight:400}
+
+/* ===== Panel de ajustes (menú de cuenta de Cognose) ===== */
+.settings-fab{position:fixed;bottom:1.1rem;right:1.1rem;width:48px;height:48px;border-radius:50%;background:var(--card);color:var(--text);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 15px rgba(0,0,0,.3);z-index:100;transition:transform .2s}
+.settings-fab:hover{transform:scale(1.08) rotate(25deg);border-color:var(--accent)}
+.settings-panel{position:fixed;bottom:4.6rem;right:1.1rem;width:300px;max-height:calc(100vh - 6rem);overflow:auto;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:1rem;z-index:101;display:none;box-shadow:0 8px 25px rgba(0,0,0,.4)}
+.settings-panel.open{display:block;animation:popIn .15s ease-out}
+.settings-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem}
+.settings-header h3{margin:0;font-size:1.05rem}
+.settings-close{background:transparent;border:none;color:var(--muted);font-size:1.1rem;cursor:pointer}
+.settings-close:hover{color:var(--text)}
+.settings-group{margin-bottom:.7rem}
+.set-sec{border:1px solid var(--border);border-radius:12px;padding:.55rem .7rem;background:color-mix(in srgb, var(--bg) 60%, transparent)}
+.set-sec > summary{cursor:pointer;font-weight:800;font-size:.84rem;list-style:none;display:flex;align-items:center;gap:.4rem;padding:.15rem 0}
+.set-sec > summary::-webkit-details-marker{display:none}
+.set-sec > summary::after{content:'▾';margin-left:auto;color:var(--muted);transition:transform .2s}
+.set-sec:not([open]) > summary::after{transform:rotate(-90deg)}
+.set-row{display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-top:.6rem;font-size:.8rem;font-weight:600}
+.set-col{display:flex;flex-direction:column;gap:.4rem;margin-top:.7rem;font-size:.8rem;font-weight:600}
+.set-hint{display:block;font-size:.7rem;color:var(--muted);line-height:1.4;margin-top:.5rem;font-weight:400}
+.set-hint code{font-size:.66rem;word-break:break-all;user-select:text}
+.set-switch{position:relative;width:50px;height:27px;border-radius:999px;border:1px solid var(--border);background:#cbd5e1;cursor:pointer;padding:0;flex:none;transition:background .2s}
+.set-switch i{position:absolute;top:2px;left:2px;width:21px;height:21px;border-radius:50%;background:#fff;display:grid;place-items:center;font-style:normal;font-size:.7rem;box-shadow:0 2px 6px rgba(0,0,0,.25);transition:transform .25s cubic-bezier(.3,1.4,.5,1)}
+.set-switch.on{background:color-mix(in srgb, var(--accent) 70%, #1e293b)}
+.set-switch.on i{transform:translateX(23px);background:#1e293b}
+.theme-btn{display:block;width:100%;margin-top:.5rem;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:.45rem;border-radius:8px;cursor:pointer;font-size:.8rem;text-align:center}
+.theme-btn:hover{border-color:var(--accent)}
+.size-ctl{display:flex;align-items:center;gap:.35rem}
+.size-ctl button{width:32px;height:30px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;font-size:.72rem;font-weight:800}
+.size-ctl button:hover{border-color:var(--accent);color:var(--accent)}
+.size-ctl b{min-width:3em;text-align:center;font-size:.76rem}
+.mini-input{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.25rem .4rem;font-size:.78rem;min-width:0}
+.mini-input:focus{outline:none;border-color:var(--accent)}
+input[type=color]{width:34px;height:26px;border:none;background:none;padding:0;cursor:pointer;flex-shrink:0}
+.etq-list{display:flex;flex-direction:column;gap:.35rem;margin-top:.5rem}
+.etq-row{display:flex;align-items:center;gap:.4rem}
+.keys{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:.3rem .5rem;margin-top:.5rem;font-size:.74rem;color:var(--muted)}
+kbd{display:inline-block;min-width:1.4em;text-align:center;padding:.05rem .3rem;border-radius:5px;border:1px solid var(--border);border-bottom-width:2px;background:var(--bg);color:var(--text);font-size:.7rem;font-family:inherit}
+
+/* ===== Toast inferior con Deshacer ===== */
+.toast{position:fixed;left:1.1rem;bottom:1.1rem;z-index:300;background:#323232;color:#fff;border-radius:8px;padding:.5rem .5rem .5rem 1rem;display:flex;align-items:center;gap:.7rem;font-size:.84rem;box-shadow:0 6px 20px rgba(0,0,0,.4);animation:popIn .15s ease-out;max-width:calc(100vw - 6rem)}
+.toast button{background:none;border:none;color:var(--accent);font-weight:700;cursor:pointer;font-size:.82rem;padding:.3rem .4rem}
+.toast .x{color:#bbb;display:flex}
+.toast .x .ic{width:15px;height:15px}
+
+/* ===== Tarjetas de aviso (recordatorios del calendario de Cognose) ===== */
+.avisos{position:fixed;top:58px;right:14px;z-index:150;display:flex;flex-direction:column;gap:.45rem;width:310px;max-width:calc(100vw - 28px);max-height:calc(100vh - 80px);overflow:auto}
+.aviso{background:var(--card);border:1px solid var(--border);border-left:4px solid var(--ev);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.45);padding:.5rem .6rem .6rem;animation:popIn .18s ease-out}
+.aviso-head{display:flex;align-items:center;gap:.5rem}
+.aviso-head > .ic{color:var(--ev)}
+.aviso-title{flex:1;font-weight:700;font-size:.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aviso-body{color:var(--muted);font-size:.72rem;margin:.1rem 0 .45rem calc(18px + .5rem);line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.aviso-btns{display:flex;flex-wrap:wrap;gap:.35rem;margin-left:calc(18px + .5rem)}
+
+/* ===== Popover anclado ===== */
+.pop-layer{position:fixed;inset:0;z-index:260}
+.pop{position:fixed;background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.5);padding:.45rem;animation:popIn .12s ease-out}
+.pop-title{font-size:.7rem;color:var(--muted);font-weight:700;padding:.25rem .5rem .35rem;text-transform:uppercase;letter-spacing:.04em}
+.pop-opt{display:flex;align-items:center;gap:.55rem;width:100%;border:none;background:transparent;color:var(--text);padding:.45rem .55rem;border-radius:9px;cursor:pointer;font-size:.82rem;text-align:left}
+.pop-opt:hover{background:color-mix(in srgb, var(--text) 8%, transparent)}
+.pop-opt.on{font-weight:700}
+.pop-opt .ic{margin-left:auto;color:var(--accent)}
+.pop-opt .dot{width:11px;height:11px;border-radius:50%;background:var(--ec);box-shadow:0 0 8px var(--ec)}
+.pop-hint{display:block;font-size:.68rem;color:var(--muted);padding:.3rem .5rem .15rem}
