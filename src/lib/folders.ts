@@ -16,7 +16,7 @@ export const cleanName = (s: string) => {
 export const projectFolder = (b: Pick<Project, 'code' | 'name'>) => `Proyectos/${cleanName(`${b.code} - ${b.name}`)}`;
 
 /** Folder of one month of a project (by date), e.g. «…/2026/11 - Noviembre/Documentos». */
-export const monthFolderOf = (b: Pick<Project, 'code' | 'name'>, ym: string, sub: 'Fotos' | 'Regencias' | 'Documentos') => `${projectFolder(b)}/${monthFolder(ym)}/${sub}`;
+export const monthFolderOf = (b: Pick<Project, 'code' | 'name'>, ym: string, sub: 'Fotos' | 'Regencias' | 'Documentos' | 'SETENA') => `${projectFolder(b)}/${monthFolder(ym)}/${sub}`;
 
 const monthFolder = (ym: string) => {
   const [y, m] = ym.split('-');

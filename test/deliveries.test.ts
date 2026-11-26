@@ -251,27 +251,38 @@ console.log('deliveries OK');
   ] });
   const r = applySetena(dd, raw, '2026-11-26');
   const v = dd.projects.find(p => p.code === 'D1-0170-2020')!;
-  assert.equal(v.openedOn, '2022-01-14', 'opening = first event');
-  assert.equal(v.noOpeningDate, false);
-  assert.equal(v.deliveries!['m:2023-08'].uploaded, '2023-08-28', 'event → Llenado de bitácora');
-  assert.equal(v.deliveries!['m:2023-08'].visit, '2023-08-28', 'photos → Inspección');
-  assert(v.deliveries!['m:2023-08'].notes!.includes('SETENA 28/08/2023: El proyecto'), 'text → notes');
-  assert.equal(v.deliveries!['r:2024-01-14'].uploaded, '2024-02-29', 'report PDF → nearest Regencia');
+  assert.equal(v.noOpeningDate, true, 'opening date not guessed');
+  assert(v.deliveries!['m:2023-08'].notes!.includes('SETENA 28/08/2023: El proyecto'), 'text → notes of that month');
+  assert.equal(v.deliveries!['m:2023-08'].visit, null, 'nothing checked');
+  assert.equal(v.deliveries!['m:2023-08'].uploaded, null, 'nothing checked');
   const nw = dd.projects.find(p => p.code === 'D1-0607-2026')!;
-  assert(nw, 'new project created'); assert.equal(nw.openedOn, '2026-11-09');
-  assert.equal(nw.deliveries!['s:start'].uploaded, '2026-11-09', 'first PDF → Carta de Inicio de obras');
+  assert(nw && nw.noOpeningDate, 'new project created, date to fill in');
   assert.equal(dd.projects.find(p => p.code === 'D1-0550-2020')!.status, 'closing', 'status from SETENA');
   const f = (n: string) => r.downloads.find(x => x.name.includes(n))!;
-  assert.equal(f('76aad41f').folder, 'Proyectos/D1-0170-2020 - CONDOMINIO VISTA DEL BOSQUE/2023/08 - Agosto/Fotos');
+  assert.equal(f('76aad41f').folder, 'Proyectos/D1-0170-2020 - CONDOMINIO VISTA DEL BOSQUE/2023/08 - Agosto/SETENA');
   assert.equal(f('76aad41f').name, '2023-08-28_76aad41f.jpg');
-  assert.equal(f('553a394a').folder, 'Proyectos/D1-0170-2020 - CONDOMINIO VISTA DEL BOSQUE/2024/01 - Enero/Regencias');
-  assert.equal(f('473fa0af').folder, 'Proyectos/D1-0607-2026 - AMPLIACION DE BODEGA/Inicio de obras');
-  assert.equal(f('solicitudcierre').folder, 'Proyectos/D1-0550-2020 - Condominio Almazara/Cierre');
+  assert.equal(f('553a394a').folder, 'Proyectos/D1-0170-2020 - CONDOMINIO VISTA DEL BOSQUE/2024/02 - Febrero/SETENA');
+  assert.equal(f('473fa0af').folder, 'Proyectos/D1-0607-2026 - AMPLIACION DE BODEGA/2026/11 - Noviembre/SETENA');
+  assert.equal(f('solicitudcierre').folder, 'Proyectos/D1-0550-2020 - Condominio Almazara/2026/04 - Abril/SETENA');
   assert.equal(r.downloads.length, 7);
   // running it again changes nothing
   const before = JSON.stringify(dd);
   applySetena(dd, raw, '2026-11-26');
   assert.equal(JSON.stringify(dd), before, 'idempotent');
+}
+// ---- location from photos downloaded from SETENA (nothing checked) ----
+{
+  const dd = normalize({ projects: [{ id: 's2', code: 'D1-0002-2025', name: 'GPS', status: 'open', openedOn: '2025-01-10', createdOn: '2025-01-10', noOpeningDate: false }] });
+  replaceAll(dd);
+  const photo = jpegWithExif('2026:11:04 09:00:00', [9, 56, 1.2], 'N', [84, 4, 30], 'W');
+  const b64 = Buffer.from(new Uint8Array(photo)).toString('base64');
+  (backend as any).listTree = async () => [{ path: 'Proyectos/D1-0002-2025 - GPS/2026/11 - Noviembre/SETENA/2026-11-04_abc.jpg', size: 10, modified: 0 }];
+  (backend as any).readHead = async () => b64;
+  const msg = await scanFolders(true);
+  const p = getData().projects[0];
+  assert(p.location && Math.abs(p.location.lng + 84.075) < 0.001, 'location from SETENA photo GPS');
+  assert(!p.deliveries?.['m:2026-11']?.visit, 'no inspection checked from SETENA photos');
+  assert(msg.includes('ubicación'), msg);
 }
 console.log('moved / no-date OK');
 process.exit(0); // store.ts leaves an hourly timer running

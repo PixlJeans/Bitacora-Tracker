@@ -17,6 +17,7 @@ import { projectFolder } from './folders';
 const IMG = /\.(jpe?g|png|heic|heif|webp)$/i;
 const DOC = /\.(docx?|pdf|odt|rtf|xlsx?)$/i;
 const MONTH_DIR = /\/(\d{4})\/(\d{2}) - [^/]+\/(Fotos|Regencias)\/[^/]+$/;
+const SETENA_DIR = /\/\d{4}\/\d{2} - [^/]+\/SETENA\/[^/]+\.jpe?g$/i;
 
 function b64ToBuf(b64: string): ArrayBuffer {
   const bin = atob(b64), u = new Uint8Array(bin.length);
@@ -57,6 +58,7 @@ export async function scanFolders(force = false): Promise<string> {
       if (!files.length) continue;
       const byKey = new Map<string, typeof files>();
       const gps: { lat: number; lng: number }[] = [];
+      const setenaPhotos = b.location ? [] : files.filter(f => SETENA_DIR.test(f.path)).sort((a, c) => c.path.localeCompare(a.path));
       for (const f of files) {
         if (/\/Inicio de obras\/[^/]+$/.test(f.path) && DOC.test(f.path) && !deliveryOf(b, 's:start').uploaded && !starts.includes(b.id)) { starts.push(b.id); continue; }
         const m = MONTH_DIR.exec(f.path);
@@ -94,9 +96,18 @@ export async function scanFolders(force = false): Promise<string> {
           visits.push({ id: b.id, key, date: date <= today ? date : today });
         }
       }
+      // Photos downloaded from SETENA: only to read where they were taken (nothing is checked from them)
+      for (const f of setenaPhotos.slice(0, 25)) {
+        if (gps.length >= 5) break;
+        try {
+          const info = readExif(b64ToBuf(await backend.readHead(f.path, 262_144)));
+          if (info.lat != null && info.lng != null) gps.push({ lat: info.lat, lng: info.lng });
+        } catch { /* unreadable photo */ }
+      }
       if (!b.location && gps.length) {
-        const lat = gps.reduce((s, p) => s + p.lat, 0) / gps.length, lng = gps.reduce((s, p) => s + p.lng, 0) / gps.length;
-        places.push({ id: b.id, lat: +lat.toFixed(6), lng: +lng.toFixed(6) });
+        // the median, so one photo taken somewhere else doesn't move the project
+        const med = (l: number[]) => { const x = [...l].sort((a, c) => a - c); return x[Math.floor(x.length / 2)]; };
+        places.push({ id: b.id, lat: +med(gps.map(p => p.lat)).toFixed(6), lng: +med(gps.map(p => p.lng)).toFixed(6) });
       }
     }
     if (!visits.length && !regs.length && !starts.length && !places.length) return '';
