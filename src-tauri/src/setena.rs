@@ -59,8 +59,9 @@ fn take_chunk(app: &AppHandle, url: &tauri::Url) -> Option<String> {
 }
 
 /// Opens (or shows) the SETENA portal window.
+/// `async` on purpose: on Windows, creating a window from a synchronous command blocks it (white page).
 #[tauri::command]
-pub fn setena_open(app: AppHandle) -> Result<(), String> {
+pub async fn setena_open(app: AppHandle) -> Result<(), String> {
     if let Some(w) = app.get_webview_window("setena") {
         let _ = w.show();
         let _ = w.set_focus();
