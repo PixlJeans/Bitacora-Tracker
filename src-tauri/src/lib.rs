@@ -684,7 +684,8 @@ pub fn run() {
         .on_window_event(|window, event| {
             // Close = hide to the tray (reminders keep arriving)
             if let WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" {
+                // the SETENA window is hidden too, not closed: it keeps the login for the next project
+                if window.label() == "main" || window.label() == "setena" {
                     let _ = window.hide();
                     api.prevent_close();
                 }

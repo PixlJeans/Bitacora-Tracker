@@ -1024,3 +1024,4 @@ button.sr-chip{cursor:pointer}
 .dl-track{flex:1;min-width:120px;height:8px;border-radius:99px;background:var(--border);overflow:hidden}
 .dl-track span{display:block;height:100%;background:var(--accent);transition:width .4s}
 .setena-start{font-size:.8rem;padding:.15rem .5rem;border-radius:8px;background:color-mix(in srgb,#f59e0b 12%,transparent)}
+.month-note{overflow:hidden;resize:none;line-height:1.45;white-space:pre-wrap}

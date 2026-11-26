@@ -3,7 +3,7 @@
 // Regencia: ✍️ Elaboración (a check) and 📤 Subir (attach the Word / PDF). Dates movable to any month.
 // Files are saved in Proyectos/<Código - Nombre>/<Año>/<MM - Mes>/Fotos|Regencias.
 // Everything is saved to the data immediately.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Project, Step } from '../lib/types';
 import { MONTHLY_NAME, SEMIANNUAL_NAME, STEPS } from '../lib/types';
 import { inspectionDate, monthlyDue, monthlyDueAuto, regenciaDue } from '../lib/schedule';
@@ -233,14 +233,30 @@ export function MonthNote({ b, itemKey: key, rows = 1, placeholder }: { b: Proje
   const saved = deliveryOf(b, key).notes ?? '';
   const [txt, setTxt] = useState(saved);
   const t = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const area = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { if (!t.current) setTxt(saved); }, [saved]);
+  // grows with its text, so the whole note is always visible
+  useLayoutEffect(() => {
+    const el = area.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight + 2}px`;
+  }, [txt]);
+  useEffect(() => {
+    const el = area.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let w = el.clientWidth;
+    const ro = new ResizeObserver(() => { if (el.clientWidth !== w) { w = el.clientWidth; el.style.height = 'auto'; el.style.height = `${el.scrollHeight + 2}px`; } });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const change = (v: string) => {
     setTxt(v);
     if (t.current) clearTimeout(t.current);
     t.current = setTimeout(() => { t.current = null; editDelivery(b.id, key, { notes: v }, { undo: false }); }, 500);
   };
   return (
-    <textarea className={`month-note ${txt ? 'has' : ''}`} rows={txt ? Math.max(rows, Math.min(6, txt.split('\n').length)) : rows} value={txt}
+    <textarea ref={area} className={`month-note ${txt ? 'has' : ''}`} rows={rows} value={txt}
       placeholder={placeholder ?? '📝 Notas de este mes…'} onChange={e => change(e.target.value)}
       onBlur={() => { if (t.current) { clearTimeout(t.current); t.current = null; editDelivery(b.id, key, { notes: txt }, { undo: false }); } }} />
   );

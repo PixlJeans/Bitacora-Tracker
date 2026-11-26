@@ -17,7 +17,6 @@ import { projectFolder, regenciaKeyFor, setenaTarget } from './folders';
 const IMG = /\.(jpe?g|png|heic|heif|webp)$/i;
 const DOC = /\.(docx?|pdf|odt|rtf|xlsx?)$/i;
 const MONTH_DIR = /\/(\d{4})\/(\d{2}) - [^/]+\/(Fotos|Regencias)\/[^/]+$/;
-const SETENA_DIR = /\/\d{4}\/\d{2} - [^/]+\/SETENA\/[^/]+\.jpe?g$/i;
 /** A file downloaded from SETENA: …/<Año>/<MM - Mes>/SETENA/<YYYY-MM-DD>_… (the date of its SETENA entry). */
 const SETENA_FILE = /\/(\d{4})\/(\d{2}) - [^/]+\/(?:SETENA|Fotos|Regencias|Documentos)\/(\d{4}-\d{2}-\d{2})_[0-9a-f]{8}\.[a-z0-9]{2,5}$/i;
 const IN_SETENA = /\/(\d{4})\/(\d{2}) - [^/]+\/SETENA\/([^/]+)$/;
@@ -52,10 +51,31 @@ export async function scanFolders(force = false): Promise<string> {
   const places: { id: string; lat: number; lng: number }[] = [];
   try {
     for (const b of getData().projects) {
-      if (!isActiveProject(b) || !hasSchedule(b)) continue;
+      if (b.archived) continue;
+      const scheduled = isActiveProject(b) && hasSchedule(b);
+      if (!scheduled && b.location) continue;
       let files: { path: string; size: number; modified: number }[];
       try { files = await backend.listTree(projectFolder(b)); } catch { continue; }
       if (!files.length) continue;
+      // ---- Location: a project without one takes it from its photos' GPS (any folder, even without dates) ----
+      if (!b.location) {
+        const photos = files.filter(f => /\.jpe?g$/i.test(f.path)).sort((a, c) => c.path.localeCompare(a.path));
+        // spread over the whole project (newest first), at most 60 photos, until 7 positions are found
+        const step = Math.max(1, Math.floor(photos.length / 60));
+        const gps: { lat: number; lng: number }[] = [];
+        for (let i = 0; i < photos.length && gps.length < 7; i += step) {
+          try {
+            const info = readExif(b64ToBuf(await backend.readHead(photos[i].path, 262_144)));
+            if (info.lat != null && info.lng != null && Math.abs(info.lat) > 0.01) gps.push({ lat: info.lat, lng: info.lng });
+          } catch { /* unreadable photo */ }
+        }
+        if (gps.length) {
+          // the median, so one photo taken somewhere else doesn't move the project
+          const med = (l: number[]) => { const x = [...l].sort((a, c) => a - c); return x[Math.floor(x.length / 2)]; };
+          places.push({ id: b.id, lat: +med(gps.map(p => p.lat)).toFixed(6), lng: +med(gps.map(p => p.lng)).toFixed(6) });
+        }
+      }
+      if (!scheduled) continue;
       // Files downloaded from SETENA: from the month's SETENA folder to that month's Fotos / Regencias / Documentos
       let movedAny = false;
       for (const f of files) {
@@ -68,8 +88,6 @@ export async function scanFolders(force = false): Promise<string> {
       }
       if (movedAny) { try { files = await backend.listTree(projectFolder(b)); } catch { continue; } }
       const byKey = new Map<string, typeof files>();
-      const gps: { lat: number; lng: number }[] = [];
-      const setenaPhotos = b.location ? [] : files.filter(f => SETENA_DIR.test(f.path)).sort((a, c) => c.path.localeCompare(a.path));
       // ---- What came from SETENA, month by month (by the date of each entry) ----
       const earliest = (l: { key: string; date: string }[], key: string, date: string) => {
         const x = l.find(y => y.key === key);
@@ -112,42 +130,23 @@ export async function scanFolders(force = false): Promise<string> {
           if (key && !deliveryOf(b, key).uploaded && !regs.some(r => r.id === b.id && r.key === key)) regs.push({ id: b.id, key });
         }
       }
-      // Photos: read the EXIF only where the inspection is still unchecked, or to find the project's location
-      let readForGps = 0;
+      // Photos: read the EXIF date only where the inspection is still unchecked
       for (const [key, photos] of byKey) {
-        const needVisit = !deliveryOf(b, key).visit;
-        if (!needVisit && (b.location || readForGps >= 6)) continue;
+        if (deliveryOf(b, key).visit) continue;
         const dates: string[] = [];
-        for (const f of photos.slice(0, needVisit ? 12 : 3)) {
+        for (const f of photos.slice(0, 12)) {
           if (!/\.jpe?g$/i.test(f.path)) { if (f.modified) dates.push(new Date(f.modified).toISOString().slice(0, 10)); continue; }
           try {
             const info = readExif(b64ToBuf(await backend.readHead(f.path, 262_144)));
             if (info.date) dates.push(info.date);
             else if (f.modified) dates.push(new Date(f.modified).toISOString().slice(0, 10));
-            if (info.lat != null && info.lng != null) gps.push({ lat: info.lat, lng: info.lng });
           } catch { /* unreadable photo */ }
-          readForGps++;
         }
-        if (needVisit) {
-          const ym = key.slice(2), insp = inspectionDate(b, ym);
-          // the photo date if it is near the inspection month, otherwise the inspection date
-          const near = dates.filter(x => x >= addMonths(insp, -1) && x <= addMonths(insp, 1)).sort();
-          const date = near[near.length - 1] ?? insp;
-          visits.push({ id: b.id, key, date: date <= today ? date : today });
-        }
-      }
-      // Photos downloaded from SETENA: only to read where they were taken (nothing is checked from them)
-      for (const f of setenaPhotos.slice(0, 25)) {
-        if (gps.length >= 5) break;
-        try {
-          const info = readExif(b64ToBuf(await backend.readHead(f.path, 262_144)));
-          if (info.lat != null && info.lng != null) gps.push({ lat: info.lat, lng: info.lng });
-        } catch { /* unreadable photo */ }
-      }
-      if (!b.location && gps.length) {
-        // the median, so one photo taken somewhere else doesn't move the project
-        const med = (l: number[]) => { const x = [...l].sort((a, c) => a - c); return x[Math.floor(x.length / 2)]; };
-        places.push({ id: b.id, lat: +med(gps.map(p => p.lat)).toFixed(6), lng: +med(gps.map(p => p.lng)).toFixed(6) });
+        const ym = key.slice(2), insp = inspectionDate(b, ym);
+        // the photo date if it is near the inspection month, otherwise the inspection date
+        const near = dates.filter(x => x >= addMonths(insp, -1) && x <= addMonths(insp, 1)).sort();
+        const date = near[near.length - 1] ?? insp;
+        visits.push({ id: b.id, key, date: date <= today ? date : today });
       }
     }
     if (!visits.length && !regs.length && !starts.length && !places.length && !bits.length) return sorted ? `${sorted} archivo(s) de SETENA ordenados en Fotos / Regencias / Documentos` : '';

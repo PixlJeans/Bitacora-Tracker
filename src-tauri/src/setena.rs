@@ -24,6 +24,8 @@ const PORTAL: &str = "https://bitacora.setena.go.cr/";
 pub struct SetenaState {
     chunks: Mutex<HashMap<String, Vec<Option<String>>>>,
     downloading: Mutex<bool>,
+    /// The project page to show once the user is logged in (the login always returns to the portal's home)
+    pending: Mutex<Option<tauri::Url>>,
 }
 
 fn query(url: &tauri::Url, name: &str) -> Option<String> {
@@ -68,6 +70,13 @@ pub async fn setena_open(app: AppHandle, url: Option<String>) -> Result<(), Stri
         Some(u) if u.starts_with("https://bitacora.setena.go.cr/") => u.parse().map_err(|e| format!("{e}"))?,
         _ => PORTAL.parse().map_err(|e| format!("{e}"))?,
     };
+    {
+        let wanted = if target.as_str() == PORTAL { None } else { Some(target.clone()) };
+        let st = app.state::<SetenaState>();
+        let mut guard = st.pending.lock().map_err(|e| e.to_string())?;
+        *guard = wanted;
+        drop(guard);
+    }
     if let Some(w) = app.get_webview_window("setena") {
         let _ = w.navigate(target);
         let _ = w.show();
@@ -82,8 +91,23 @@ pub async fn setena_open(app: AppHandle, url: Option<String>) -> Result<(), Stri
         .initialization_script(SCRIPT)
         // and again when each page finishes loading (in case the start script didn't run on that page)
         .on_page_load(|w, payload| {
-            if matches!(payload.event(), PageLoadEvent::Finished) {
-                let _ = w.eval(SCRIPT);
+            if !matches!(payload.event(), PageLoadEvent::Finished) {
+                return;
+            }
+            let _ = w.eval(SCRIPT);
+            // Logged in and back on the portal: go to the project that was asked for
+            let url = payload.url().clone();
+            if url.host_str() == Some("bitacora.setena.go.cr") {
+                let st = w.state::<SetenaState>();
+                let next = match st.pending.lock() {
+                    Ok(mut p) => p.take(),
+                    Err(_) => None,
+                };
+                if let Some(next) = next {
+                    if next.path() != url.path() || next.query() != url.query() {
+                        let _ = w.navigate(next);
+                    }
+                }
             }
         })
         .on_navigation(move |url| {
