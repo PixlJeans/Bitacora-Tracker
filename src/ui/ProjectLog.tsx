@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { LogEntry, Attachment, Project, EntryType, ProjectLocation } from '../lib/types';
 import { ENTRY_TYPES, isActiveProject } from '../lib/types';
 import { backend, esTauri, esWeb } from '../lib/backend';
-import { getData, markRegencia, mutate, recordVisit, useAppData } from '../lib/store';
+import { getData, markRegencia, mutate, organizeFiles, recordVisit, useAppData } from '../lib/store';
 import { nextRegencia } from '../lib/schedule';
 import { shortDate, longDate, monthNameOf, todayISO, uid } from '../lib/dates';
 import { photoInfo, commonDate, gpsComun, type PhotoInfo } from '../lib/exif';
@@ -115,6 +115,7 @@ export function listenToPhone() {
     const gps = gpsComun(photos.map(f => ({ date: f.takenOn ?? null, time: null, lat: f.lat ?? null, lng: f.lng ?? null })));
     const hadLocation = !!b.location;
     const month = recordVisit(b.id, an?.date || r.date || todayISO(), gps, { undo: false });
+    organizeFiles(); // the photos go into the month they belong to
     const far = gps && b.location ? distanceKm(gps, b.location) : 0;
     toast(`📱 ${r.total} foto(s) recibida(s) en ${r.code}` + (month ? ` · visita y fotos marcadas (${monthNameOf(month)})` : '') +
       (gps && !hadLocation ? ' · ubicación del proyecto tomada del GPS' : '') + (far > 2 ? ` · ⚠️ las fotos se tomaron a ${kmTxt(far)} del proyecto: ¿es el proyecto correcto?` : ''));
@@ -279,6 +280,7 @@ function NewEntry({ b, onDone: onDone }: { b: Project; onDone: () => void }) {
         mutate(dd => { const x = dd.projects.find(y => y.id === b.id); if (x && !x.location) x.location = { ...gps, text: '', source: 'photo' }; });
         extra += ' · ubicación guardada';
       }
+      if (organizeFiles()) extra += ' · archivos guardados en su mes'; // photos / documents go into the month they belong to
       toast(`Anotación guardada en ${b.code}${extra}`, true);
       onDone();
     } catch (e: any) { toast('No se pudo guardar: ' + (e?.message || e)); }

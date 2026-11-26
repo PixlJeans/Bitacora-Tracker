@@ -9,8 +9,6 @@
     "core:default",
     "notification:default",
     "dialog:default",
-    "autostart:default",
-    "updater:default",
-    "process:allow-restart"
+    "autostart:default"
   ]
 }

@@ -1,6 +1,6 @@
 // Tests: adjustable dates, sorting by date, EXIF reader and grouping by distance
 import assert from 'node:assert';
-import { normalize, applyStep, emptyData } from '../src/lib/store';
+import { normalize, applyStep, emptyData, fileLogIntoDeliveries } from '../src/lib/store';
 import { agenda, completeIn, monthlyDue, regenciaInMonth, nextDue, nextRegencia, computeReminders, inspectionDeadline, sortDate, pendingOf } from '../src/lib/schedule';
 import { readExif, commonDate, gpsComun } from '../src/lib/exif';
 import { groupNearby, distanceKm, routeLink, parseCoordinates } from '../src/lib/geo';
@@ -113,5 +113,24 @@ const insp2 = normalize({ projects: [{ id: 'j', code: 'D1-0010-2026', name: 'J',
 const rem2 = computeReminders({ ...emptyData(), projects: [insp2] }, new Date(2026, 10, 25, 12).getTime());
 const n = rem2.find(r => r.key === 'n:j:2026-12')!;
 assert.equal(new Date(n.at).getDate(), 8, 'unscheduled inspection reminder 7 days before');
+// ---------- photos from the general log go into their month ----------
+const lg = normalize({ projects: [{ id: 'l', code: 'D1-0011-2026', name: 'L', status: 'open', openedOn: '2026-01-15', createdOn: '2026-01-15',
+  entries: [
+    { id: 'e1', date: '2026-11-10', type: 'visit', text: '', attachments: [
+      { id: 'a1', name: 'f1.jpg', path: 'proyectos/x/f1.jpg', type: 'photo', takenOn: '2026-11-10' },     // before Nov 15 → November
+      { id: 'a2', name: 'f2.jpg', path: 'proyectos/x/f2.jpg', type: 'photo', takenOn: '2026-11-20' } ] }, // after Nov 15 → December
+    { id: 'e2', date: '2026-07-01', type: 'regencia', regencia: '2026-07-15', text: 'Regencia', attachments: [{ id: 'a3', name: 'r.pdf', path: 'proyectos/x/r.pdf', type: 'pdf' }] },
+    { id: 'e3', date: '2026-08-01', type: 'observation', text: 'Obs SETENA', attachments: [{ id: 'a4', name: 'o.pdf', path: 'proyectos/x/o.pdf', type: 'pdf' }] }
+  ] }] });
+const moved = fileLogIntoDeliveries(lg);
+const L = lg.projects[0];
+assert.equal(moved, 3);
+assert.deepEqual(L.deliveries!['m:2026-11'].files.map(f => f.name), ['f1.jpg']);
+assert.deepEqual(L.deliveries!['m:2026-12'].files.map(f => f.name), ['f2.jpg']);
+assert.equal(L.deliveries!['m:2026-12'].photos, '2026-11-20');
+assert.deepEqual(L.deliveries!['r:2026-07-15'].files.map(f => f.name), ['r.pdf']);
+assert.deepEqual(L.entries.map(e => e.id), ['e2', 'e3'], 'empty photo-only entry removed, notes and observations kept');
+assert.equal(L.entries[1].attachments.length, 1, 'observation keeps its file');
+assert.equal(fileLogIntoDeliveries(lg), 0, 'running again moves nothing');
 console.log('deliveries OK');
 process.exit(0); // store.ts leaves an hourly timer running

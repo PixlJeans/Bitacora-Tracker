@@ -1,14 +1,11 @@
-# Builds the Bitácora Tracker installers and PUBLISHES the update:
+# Builds the Bitácora Tracker installers in the cloud (draft Release):
 #   Windows → .exe (NSIS) and .msi      macOS → universal .dmg (Intel + Apple Silicon)
-# Runs when a v1.6.1, v1.6.2… tag is pushed (publish-update.bat does it) or by hand.
-# Publishes a Release with a signed latest.json: installed apps find it and update themselves.
-# Needs the TAURI_SIGNING_PRIVATE_KEY secret (set up by setup-updates.bat).
+# Optional: the app is normally built and installed on the laptop with update-app.bat, and GitHub only keeps a
+# backup of the code. Run this by hand if you ever want installers built in the cloud (e.g. the Mac .dmg).
 name: Installers
 
 on:
-  workflow_dispatch:
-  push:
-    tags: ['v*']
+  workflow_dispatch:   # only by hand (Actions → Installers → Run workflow); the app is built on the laptop
 
 jobs:
   build:
@@ -19,11 +16,11 @@ jobs:
       matrix:
         include:
           - platform: windows-latest
-            args: ''
-            nombre: windows
+            args: '--bundles nsis'
+            name: windows
           - platform: macos-latest
             args: '--target universal-apple-darwin'
-            nombre: macos
+            name: macos
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -50,23 +47,19 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v__VERSION__
           releaseName: 'Bitácora Tracker v__VERSION__'
-          releaseBody: 'Installed apps update themselves. To install from scratch: Windows (.exe) or macOS (.dmg).'
-          releaseDraft: false
+          releaseBody: 'Installers: Windows (_x64-setup.exe) or macOS (.dmg).'
+          releaseDraft: true
           prerelease: false
-          includeUpdaterJson: true
-          args: ${{ matrix.args }} --config src-tauri/tauri.updater.conf.json
+          args: ${{ matrix.args }}
 
       - name: Upload installers
         uses: actions/upload-artifact@v4
         with:
-          name: bitacora-tracker-${{ matrix.nombre }}
+          name: bitacora-tracker-${{ matrix.name }}
           path: |
             src-tauri/target/**/release/bundle/nsis/*.exe
-            src-tauri/target/**/release/bundle/msi/*.msi
             src-tauri/target/**/release/bundle/dmg/*.dmg
           if-no-files-found: warn

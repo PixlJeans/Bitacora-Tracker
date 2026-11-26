@@ -1,7 +1,7 @@
 // Bumps the version in package.json, src-tauri/tauri.conf.json and src-tauri/Cargo.toml.
-// Usage: node scripts/bump-version.mjs          → 1.6.0 → 1.6.1
+// Usage: node scripts/bump-version.mjs          → 1.6.3 → 1.6.4
 //        node scripts/bump-version.mjs 1.7.0    → exact version
-// Prints the new version (publish-update.bat uses it).
+// Prints the new version (update-app.bat uses it).
 import fs from 'node:fs';
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 const [major, minor, patch] = pkg.version.split('.').map(Number);

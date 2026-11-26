@@ -24,7 +24,7 @@ when the window is closed to the tray. The app's screens are in Spanish; the cod
 | **Search** | Code (with or without dashes or zeros), project, status, progress and notes, ignoring case and accents; also searches archived projects. |
 | **Notifications** | Native on Windows / macOS. Closing the window leaves it in the **tray**; reminders keep arriving. Starts with the system (hidden). |
 | **PDF import** | In 3 steps: file → summary → **one by one**. Each project is saved when confirmed. Can be **paused** and resumed another day. |
-| **Automatic updates** | The installed app checks GitHub Releases on start and every 6 hours and updates itself (see below). |
+| **Updates** | Built and installed on the laptop with `update-app.bat` (see below). |
 | **Help** | **?** button bottom right: step-by-step tour or «¿Qué hace cada cosa?» mode. |
 | **Export** | CSV for Excel (UTF‑8, `;` or `,` separator) and `.json` backup/restore. **Undo** with `Ctrl+Z`. |
 
@@ -32,24 +32,21 @@ Shortcuts: `N` new · `I` import · `R` summary · `1`–`6` tabs · `/` or `Ctr
 
 ---
 
-## Automatic updates (no reinstalling)
+## Updating the app (on the laptop)
 
-From v1.6 the installed app updates itself from the GitHub Releases: on start and every 6 hours it looks for a new
-version, asks, then installs it and reopens (the data is untouched). Also in Settings → 🔄 Actualizaciones.
+The app is built and installed on this laptop; GitHub only keeps a backup of the code.
 
-1. **Once:** double-click **`setup-updates.bat`**. It creates the signing key in `%USERPROFILE%\.tauri\`
-   (**keep a copy!**), puts the public key in the app and saves the private one as the GitHub secret
-   `TAURI_SIGNING_PRIVATE_KEY`.
-2. **Every fix:** double-click **`publish-update.bat`** → type what you changed. It bumps the version, commits, tags
-   and pushes; GitHub builds Windows and Mac (~15 min) and publishes the Release with `latest.json`.
-3. The first version with updates has to be installed by hand once (from the Release). After that, never again.
-
-> The GitHub repository must be **public** so the app can download the Releases without signing in.
+1. **Once:** double-click **`install-tools.bat`** (installs Rust and the Visual Studio C++ build tools), then close the window.
+2. **After every change:** double-click **`update-app.bat`**. It runs the tests, bumps the version, builds the app
+   (5–10 min the first time, then 1–3 min), closes the old version, installs the new one silently, opens it, and
+   backs up the code to GitHub. Your data in Documents › Bitácora Tracker is never touched.
+3. **`backup-github.bat`** saves a backup to GitHub without rebuilding. **`run-dev.bat`** opens the app in development
+   mode, where changes show up as soon as a file is saved.
 
 ## Building the installers by hand
 
-- **GitHub Actions (Windows + macOS):** run **`prepare-github.bat`** once (copies `ci/installers.yml` to
-  `.github/workflows/`), push, then **Actions → Installers → Run workflow**, or push a `v1.6.1` tag.
+- **GitHub Actions (optional, Windows + macOS):** **Actions → Installers → Run workflow** builds both installers in the
+  cloud as a draft Release (useful for the Mac `.dmg`).
 - **Windows PC:** needs [Node.js LTS](https://nodejs.org), [Rust](https://rustup.rs) and *Visual Studio Build Tools*
   with "Desktop development with C++". Double-click **`build-windows.bat`**; the `.exe` ends up in
   `src-tauri\target\release\bundle\nsis\`. **`run-dev.bat`** opens the app in development mode (reloads on save).
@@ -92,7 +89,6 @@ src/
   lib/pdf.ts         reading the PDF row by row (pdf.js)
   lib/search.ts      search
   lib/csv.ts         CSV export
-  lib/updater.ts     automatic updates
   lib/backend.ts     bridge to Tauri (or localStorage / PHP server in the browser)
   ui/…               project list, editor, calendar, deliveries, log, agenda, import, review, settings, help
 src-tauri/src/lib.rs    local file, notification thread, tray, autostart

@@ -141,6 +141,18 @@ export function monthForVisit(b: Project, date: string): string | null {
   return dueInMonth(b, m0) ? m0 : null;
 }
 
+/** Which delivery does something dated `date` (a photo, a visit) belong to? The Informe Regencial of that month
+ *  if `date` is on or before its due date, otherwise next month's. Ignores the tracking start, so old photos are
+ *  filed too. null before the first monthly informe. */
+export function deliveryKeyForDate(b: Project, date: string): string | null {
+  const exists = (mk: string) => monthlyDueAuto(b, mk) > b.openedOn;
+  const m0 = date.slice(0, 7);
+  const m1 = addMonths(`${m0}-01`, 1).slice(0, 7);
+  if (exists(m0) && date <= monthlyDue(b, m0)) return `m:${m0}`;
+  if (exists(m1)) return `m:${m1}`;
+  return null;
+}
+
 /** The most urgent item of a project (to sort the list by date). */
 export function nextDue(b: Project, today = todayISO()): PendingItem | null {
   return pendingOf(b, today, addMonths(today, 14))[0] ?? null;

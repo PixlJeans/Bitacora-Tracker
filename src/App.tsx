@@ -19,7 +19,6 @@ import { openReview } from './ui/Review';
 import { Tutorial, openTutorial } from './ui/Tutorial';
 import { Help } from './ui/Help';
 import { Agenda } from './ui/Agenda';
-import { startUpdates } from './ui/Updates';
 import { listenToPhone } from './ui/ProjectLog';
 import { backend, esWeb } from './lib/backend';
 import { toCsv } from './lib/csv';
@@ -62,8 +61,6 @@ export default function App() {
   }, []);
   // Photos and notes arriving from the phone
   useEffect(() => { listenToPhone(); }, []);
-  // Automatic updates (installed app): checks on start and every 6 hours
-  useEffect(() => { startUpdates(); }, []);
   // The phone page needs the list of active projects to choose where the photos go
   const phoneList = useMemo(() => JSON.stringify(d.projects.filter(b => isActiveProject(b)).map(b => ({ code: b.code, name: b.name }))), [d.projects]);
   useEffect(() => { backend.phoneProjects(phoneList).catch(() => { /* sin servidor del celular */ }); }, [phoneList]);

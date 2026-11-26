@@ -6,7 +6,7 @@ import { useSyncExternalStore } from 'react';
 import type { AppData, Attachment, Delivery, EntryType, ImportRow, LogEntry, Project, ProjectLocation, ReminderKind, Settings, Status, Step } from './types';
 import { DEFAULT_LABELS, emptyDelivery } from './types';
 import { backend, esWeb } from './backend';
-import { computeReminders, monthForVisit } from './schedule';
+import { computeReminders, deliveryKeyForDate, monthForVisit } from './schedule';
 import { todayISO, uid } from './dates';
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -271,11 +271,14 @@ export async function start() {
     console.error('Datos ilegibles, se empieza vacío', e);
   }
   data = normalize(raw);
+  // Photos and documents still in the general log go into the month they belong to (once, then kept up to date)
+  const moved = fileLogIntoDeliveries(data);
   // First run: start with the system so reminders arrive without opening the app
   if (!raw && !esWeb && data.settings.autoStart) backend.autoStart(true).catch(() => { /* opcional */ });
   ready = true;
   emit();
   reschedule();
+  if (moved) persist();
 }
 
 // ---------- Undo (Ctrl+Z), same as in Cognose ----------
@@ -463,6 +466,39 @@ export function removeDeliveryFile(id: string, key: string, fileId: string) {
     if (!b?.deliveries?.[key]) return;
     b.deliveries[key] = { ...b.deliveries[key], files: (b.deliveries[key].files ?? []).filter(f => f.id !== fileId) };
   });
+}
+
+/** Moves the photos and documents of visit / Regencia log entries into the delivery (month) they belong to,
+ *  by the date each photo was taken (or the entry's date). Observation / other entries keep their files.
+ *  Entries left with no text and no files are removed. Works on `d` in place; returns how many files moved. */
+export function fileLogIntoDeliveries(d: AppData): number {
+  let moved = 0;
+  for (const b of d.projects) {
+    for (const entry of b.entries) {
+      if ((entry.type !== 'visit' && entry.type !== 'regencia') || !entry.attachments.length) continue;
+      const keep: Attachment[] = [];
+      for (const f of entry.attachments) {
+        const key = entry.type === 'regencia' && entry.regencia ? `r:${entry.regencia}` : deliveryKeyForDate(b, f.takenOn ?? entry.date);
+        if (!key) { keep.push(f); continue; }
+        b.deliveries = b.deliveries ?? {};
+        const e = { ...deliveryOf(b, key) };
+        if (!(e.files ?? []).some(x => x.path === f.path)) e.files = [...(e.files ?? []), f];
+        if (f.type === 'photo' && !e.photos) e.photos = f.takenOn ?? entry.date;
+        b.deliveries[key] = e;
+        moved++;
+      }
+      entry.attachments = keep;
+    }
+    b.entries = b.entries.filter(x => x.text.trim() || x.attachments.length);
+  }
+  return moved;
+}
+
+/** Runs `fileLogIntoDeliveries` as a saved change (after new photos arrive). */
+export function organizeFiles() {
+  let moved = 0;
+  mutate(d => { moved = fileLogIntoDeliveries(d); }, { undo: false });
+  return moved;
 }
 
 /** Saves the project location. */
