@@ -120,6 +120,17 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
           <span className={`status-chip status-${f.status}`}>{STATUSES.find(x => x.id === f.status)?.name}</span>
           <span>Apertura <b>{f.noOpeningDate ? '—' : longDate(f.openedOn)}</b></span>
           {isActiveProject(f) && !f.noOpeningDate && <span className="muted">· tareas el día {day} de cada mes{nextReg ? ` · regencia ${shortDate(nextReg.due)}` : ''}</span>}
+          {f.setenaStart && f.setenaStart !== f.openedOn && (
+            <span className="setena-start" title="Fecha de la primera anotación en la bitácora de SETENA (al final de su página)">
+              SETENA: inicio <b>{shortDate(f.setenaStart)} {f.setenaStart.slice(2, 4)}</b>{' '}
+              <button type="button" className="dp-link" onClick={() => {
+                const o = f.setenaStart!;
+                setF(x => ({ ...x, openedOn: o, noOpeningDate: false }));
+                mutate(dd => { const x = dd.projects.find(y => y.id === b.id); if (x) { x.openedOn = o; x.noOpeningDate = false; } });
+                toast(`📅 ${f.code}: apertura ${longDate(o)}`, true);
+              }}>usar esta fecha</button>
+            </span>
+          )}
           <span className="grow" />
           <button type="button" className="dp-link" onClick={() => setEditFields(true)}>✏️ Editar datos</button>
         </div>

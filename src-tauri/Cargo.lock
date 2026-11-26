@@ -283,7 +283,7 @@ checksum = "72503af1e72be411d74ca45cd6b309878fcb35354e252fc2a3a8bda3a97082a0"
 
 [[package]]
 name = "bitacora-tracker"
-version = "1.6.16"
+version = "1.6.17"
 dependencies = [
  "base64 0.22.1",
  "local-ip-address",

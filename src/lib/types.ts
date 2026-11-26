@@ -115,6 +115,7 @@ export interface Project {
   lastUpdated: string | null;
   createdOn: string;        // YYYY-MM-DD (added to the app)
   noOpeningDate?: boolean;  // the opening date is unknown (not in the PDF): no deliveries until it is set
+  setenaStart?: string;     // date of the first entry in the SETENA bitácora (the bottom of its page)
 }
 
 /** A saved overall review. */

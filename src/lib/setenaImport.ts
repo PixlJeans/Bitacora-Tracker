@@ -4,7 +4,9 @@
 //  · every file → Proyectos/<Código - Nombre>/<Año>/<MM - Mes>/Fotos (photos), …/Regencias (a document in the same
 //    month as a Regencia) or …/Documentos (named with that date); without opening date: …/<MM - Mes>/SETENA;
 //  · every entry's text → that month's notes («SETENA 12/09/2023: …»);
-//  · a bitácora that isn't in the app is created (with no opening date, to be filled in);
+//  · the start of the project = its first SETENA entry (the bottom of its page): it fills the opening date of
+//    projects that don't have one (a date you entered is never changed);
+//  · a bitácora that isn't in the app is created with that date;
 //  · the status is copied from SETENA (Nueva / Abierta / Solicitud de Cierre; closed → Terminada).
 // Nothing is checked and no file is classified: that stays in your hands.
 // Running it again only adds what is new (files already on disk are skipped, notes aren't repeated).
@@ -41,24 +43,27 @@ export function fileName(url: string, date: string): string {
 export function applySetena(d: AppData, m: SetenaManifest, today = todayISO()) {
   const downloads: Download[] = [];
   const seen = new Set<string>();
-  let created = 0, notes = 0, statuses = 0;
+  let created = 0, notes = 0, statuses = 0, dates = 0;
 
   for (const sp of m.projects) {
     const code = sp.code.trim().toUpperCase();
     const events = [...(sp.events || [])].filter(e => /^\d{4}-\d{2}-\d{2}$/.test(e.date)).sort((a, c) => a.date.localeCompare(c.date));
+    const start = events[0]?.date ?? null;
     let b = d.projects.find(x => x.code.toUpperCase() === code);
     if (!b) {
       b = {
         id: uid(), code, name: sp.name || code, status: statusOf(sp), labelId: d.labels.find(l => l.id === 'pending')?.id ?? d.labels[0]?.id ?? '',
-        openedOn: today, notes: '', uploads: [], visits: [], regencias: [], archived: false, archivedOn: null, entries: [],
-        location: null, deliveries: {}, lastUpdated: null, createdOn: today, noOpeningDate: true
+        openedOn: start ?? today, notes: '', uploads: [], visits: [], regencias: [], archived: false, archivedOn: null, entries: [],
+        location: null, deliveries: {}, lastUpdated: null, createdOn: today, noOpeningDate: !start
       } as Project;
       d.projects.push(b);
       created++;
     } else {
+      if (b.noOpeningDate && start) { b.openedOn = start; b.noOpeningDate = false; dates++; }
       const st = statusOf(sp);
       if (b.status !== st && !b.archived) { b.status = st; statuses++; }
     }
+    if (start) b.setenaStart = start;
     for (const e of events) {
       const ym = e.date.slice(0, 7);
       // the entry's text, in that month's notes
@@ -80,6 +85,6 @@ export function applySetena(d: AppData, m: SetenaManifest, today = todayISO()) {
       }
     }
   }
-  const summary = [created && `${created} bitácora(s) nuevas`, statuses && `${statuses} estado(s) actualizados`, notes && `${notes} notas`].filter(Boolean).join(' · ');
+  const summary = [created && `${created} bitácora(s) nuevas`, dates && `${dates} fecha(s) de inicio`, statuses && `${statuses} estado(s) actualizados`, notes && `${notes} notas`].filter(Boolean).join(' · ');
   return { downloads, summary };
 }
