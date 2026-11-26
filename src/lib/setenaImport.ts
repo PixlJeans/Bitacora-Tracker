@@ -16,7 +16,7 @@ import { todayISO, uid } from './dates';
 import { setenaTarget } from './folders';
 
 export interface SetenaEvent { date: string; text: string; files: string[] }
-export interface SetenaProject { code: string; name: string; status: string; closed?: boolean; events: SetenaEvent[] }
+export interface SetenaProject { code: string; name: string; status: string; closed?: boolean; url?: string; events: SetenaEvent[] }
 export interface SetenaManifest { projects: SetenaProject[]; readAt?: string }
 export interface Download { url: string; folder: string; name: string }
 
@@ -64,6 +64,7 @@ export function applySetena(d: AppData, m: SetenaManifest, today = todayISO()) {
       if (b.status !== st && !b.archived) { b.status = st; statuses++; }
     }
     if (start) b.setenaStart = start;
+    if (sp.url) { const u = new URL(sp.url.replace(/&amp;/g, '&'), 'https://bitacora.setena.go.cr/').href; if (u.startsWith('https://bitacora.setena.go.cr/')) b.setenaUrl = u; }
     for (const e of events) {
       const ym = e.date.slice(0, 7);
       // the entry's text, in that month's notes

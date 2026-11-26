@@ -104,6 +104,8 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
     <form onSubmit={e => { e.preventDefault(); save(); }}>
       <div className="ed-top">
         <h2>{b ? <><span className="mono">{b.code}</span> {b.name}</> : '🌿 Nueva bitácora'}</h2>
+        {b && <button type="button" className="dp-link" title={view.setenaUrl ? 'Abrir la bitácora de este proyecto en SETENA' : 'Abrir el portal de SETENA (la página del proyecto se conoce después de «Descargar todo de SETENA»)'}
+          onClick={() => backend.setenaOpen(view.setenaUrl).catch(e => toast(String(e)))}>🌐 Abrir en SETENA</button>}
         {b && <button type="button" className="dp-link" title={`Abrir ${projectFolder(b)}`} onClick={() => backend.openSubfolder(projectFolder(b)).catch(e => toast(String(e)))}>📂 Carpeta</button>}
         {b && (
           <div className="ed-tabs" role="tablist">

@@ -43,7 +43,7 @@ export interface Backend {
   /** First `max` bytes of a file, base64 (photo EXIF). */
   readHead(path: string, max: number): Promise<string>;
   /** Opens the SETENA portal window («Descargar de SETENA»). */
-  setenaOpen(): Promise<void>;
+  setenaOpen(url?: string): Promise<void>;
   /** What the portal window read (JSON). */
   onSetena(cb: (json: string) => void): void;
   /** Downloads files into folders of the data folder (background); returns how many. */
@@ -147,7 +147,7 @@ const tauri: Backend = {
   async moveFolderFiles(from, to) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<number>('move_folder_files', { from, to }); },
   async listTree(folder) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<{ path: string; size: number; modified: number }[]>('list_tree', { folder }); },
   async readHead(path, max) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<string>('read_head', { path, max }); },
-  async setenaOpen() { const { invoke } = await import('@tauri-apps/api/core'); await invoke('setena_open'); },
+  async setenaOpen(url) { const { invoke } = await import('@tauri-apps/api/core'); await invoke('setena_open', { url: url ?? null }); },
   onSetena(cb) { import('@tauri-apps/api/event').then(({ listen }) => listen<string>('setena-manifest', e => cb(e.payload))); },
   async downloadFiles(items) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<number>('download_files', { items }); },
   onDownload(cb) { import('@tauri-apps/api/event').then(({ listen }) => listen<{ done: number; total: number; saved: number; skipped: number; failed: number; finished: boolean }>('download-progress', e => cb(e.payload))); },
@@ -223,7 +223,7 @@ const web: Backend = {
   async moveFolderFiles() { return 0; },
   async listTree() { return []; },
   async readHead() { return ''; },
-  async setenaOpen() { window.open('https://bitacora.setena.go.cr/', '_blank'); },
+  async setenaOpen(url) { window.open(url || 'https://bitacora.setena.go.cr/', '_blank'); },
   onSetena() { /* solo escritorio */ },
   async downloadFiles() { return 0; },
   onDownload() { /* solo escritorio */ },
@@ -306,7 +306,7 @@ const server: Backend = {
   async moveFolderFiles() { return 0; },
   async listTree() { return []; },
   async readHead() { return ''; },
-  async setenaOpen() { window.open('https://bitacora.setena.go.cr/', '_blank'); },
+  async setenaOpen(url) { window.open(url || 'https://bitacora.setena.go.cr/', '_blank'); },
   onSetena() { /* solo escritorio */ },
   async downloadFiles() { return 0; },
   onDownload() { /* solo escritorio */ },

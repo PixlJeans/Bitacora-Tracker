@@ -204,7 +204,8 @@ export function normalize(raw: any): AppData {
         lastUpdated: pick(b, 'lastUpdated', 'ultimaActualizacion') || null,
         createdOn: isoDate(pick(b, 'createdOn', 'creada')) || todayISO(),
         noOpeningDate: !!b.noOpeningDate,
-        ...(isoDate(b.setenaStart) ? { setenaStart: isoDate(b.setenaStart)! } : {})
+        ...(isoDate(b.setenaStart) ? { setenaStart: isoDate(b.setenaStart)! } : {}),
+        ...(typeof b.setenaUrl === 'string' && b.setenaUrl.startsWith('https://bitacora.setena.go.cr/') ? { setenaUrl: b.setenaUrl } : {})
       };
       // Older data: projects imported without a date got the import day as their opening date.
       // If nothing was done on them yet, mark the date as unknown so they don't show made-up deliveries.

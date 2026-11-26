@@ -62,14 +62,21 @@ fn take_chunk(app: &AppHandle, url: &tauri::Url) -> Option<String> {
 /// Opens (or shows) the SETENA portal window.
 /// `async` on purpose: on Windows, creating a window from a synchronous command blocks it (white page).
 #[tauri::command]
-pub async fn setena_open(app: AppHandle) -> Result<(), String> {
+pub async fn setena_open(app: AppHandle, url: Option<String>) -> Result<(), String> {
+    // a project's own page in the portal, or the portal's start page
+    let target: tauri::Url = match url {
+        Some(u) if u.starts_with("https://bitacora.setena.go.cr/") => u.parse().map_err(|e| format!("{e}"))?,
+        _ => PORTAL.parse().map_err(|e| format!("{e}"))?,
+    };
     if let Some(w) = app.get_webview_window("setena") {
+        let _ = w.navigate(target);
         let _ = w.show();
+        let _ = w.unminimize();
         let _ = w.set_focus();
         return Ok(());
     }
     let h = app.clone();
-    WebviewWindowBuilder::new(&app, "setena", WebviewUrl::External(PORTAL.parse().map_err(|e| format!("{e}"))?))
+    WebviewWindowBuilder::new(&app, "setena", WebviewUrl::External(target))
         .title("SETENA · Bitácora Digital — Descargar a Bitácora Tracker")
         .inner_size(1100.0, 800.0)
         .initialization_script(SCRIPT)

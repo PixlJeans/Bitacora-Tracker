@@ -254,6 +254,7 @@ console.log('deliveries OK');
   const v = dd.projects.find(p => p.code === 'D1-0170-2020')!;
   assert.equal(v.noOpeningDate, false); assert.equal(v.openedOn, '2022-01-14', 'start = first SETENA entry (bottom of the page)');
   assert.equal(v.setenaStart, '2022-01-14');
+  assert.equal(v.setenaUrl, 'https://bitacora.setena.go.cr/BitacoraDigital/PrimerIngresoBitacora/245?estado=2&IdProyecto=D1-0170-2020');
   assert.equal(dd.projects.find(p => p.code === 'D1-0550-2020')!.openedOn, '2021-03-02', 'a date already there is not changed');
   assert(v.deliveries!['m:2023-08'].notes!.includes('SETENA 28/08/2023: El proyecto'), 'text → notes of that month');
   assert.equal(v.deliveries!['m:2023-08'].visit, null, 'nothing checked');
