@@ -1,7 +1,7 @@
 // Tests: adjustable dates, sorting by date, EXIF reader and grouping by distance
 import assert from 'node:assert';
 import { normalize, applyStep, emptyData, fileLogIntoDeliveries } from '../src/lib/store';
-import { monthlyKeysDueIn, openingFrom, hasSchedule, agenda, completeIn, monthlyDue, regenciaInMonth, nextDue, nextRegencia, computeReminders, inspectionDeadline, sortDate, pendingOf } from '../src/lib/schedule';
+import { monthlyKeysDueIn, openingFrom, hasSchedule, agenda, completeIn, monthlyDue, regenciaInMonth, nextDue, nextRegencia, computeReminders, sortDate, pendingOf, inspectionDate, taskColumns, pendingBefore } from '../src/lib/schedule';
 import { readExif, commonDate, gpsComun } from '../src/lib/exif';
 import { groupNearby, distanceKm, routeLink, parseCoordinates } from '../src/lib/geo';
 
@@ -41,10 +41,10 @@ assert(!completeIn(a, '2026-06') && a.deliveries!['m:2026-06'].uploaded === null
 // ---------- priority by date ----------
 const today = '2026-06-10';
 const ag = agenda(d, today, '2026-07-31');
-assert(ag.every((x, i) => i === 0 || sortDate(ag[i - 1]) <= sortDate(x)), 'agenda sorted by inspection / informe date');
-assert.equal(ag[0].date, '2026-03-03', 'overdue first (B, day 3, up to 3 months back)');
+assert(ag.every((x, i) => i === 0 || sortDate(ag[i - 1]) <= sortDate(x)), 'agenda sorted by date');
+assert.equal(ag[0].date, '2026-02-03', 'overdue first (B, day 3, every month since the opening)');
 assert(ag[0].overdue);
-assert.equal(nextDue(c, today)!.date, '2026-03-10', 'the most overdue one not done');
+assert.equal(nextDue(c, today)!.date, '2026-02-10', 'the most overdue one not done');
 // reminders use the adjusted date and the original key
 const av = computeReminders(d, new Date(2026, 5, 10, 12).getTime());
 const am = av.find(x => x.key === 'm:a:2026-06')!;
@@ -99,20 +99,25 @@ assert.equal(g.groups.length, 2, 'A and B together, C (Guanacaste) apart');
 assert.equal(g.withoutLocation.length, 1);
 assert(routeLink([{ lat: 1, lng: 2 }, { lat: 3, lng: 4 }]).includes('waypoints=1%2C2'));
 
-// ---------- inspection: at least 7 days before the informe ----------
-assert.equal(inspectionDeadline('2026-12-15'), '2026-12-08');
-const insp = normalize({ projects: [{ id: 'i', code: 'D1-0009-2026', name: 'I', status: 'open', openedOn: '2026-01-15', createdOn: '2026-11-01' }] }).projects[0];
-const pend = pendingOf(insp, '2026-11-25', '2027-01-31');
-const dec = pend.find(x => x.key === 'm:2026-12')!;
-assert.equal(sortDate(dec), '2026-12-08', 'pending inspection sorts by its deadline');
-insp.deliveries = { 'm:2026-12': { ...dec.b.deliveries?.['m:2026-12'], planned: '2026-12-03', due: null, visit: null, photos: null, letter: null, uploaded: null, letterText: '', files: [] } };
-assert.equal(sortDate(pendingOf(insp, '2026-11-25', '2027-01-31').find(x => x.key === 'm:2026-12')!), '2026-12-03', 'scheduled inspection sorts by its day');
-const rem = computeReminders({ ...emptyData(), projects: [insp] }, new Date(2026, 10, 25, 12).getTime());
-assert(rem.some(r => r.key.startsWith('v:i:m:2026-12:2026-12-03')), 'reminder for the scheduled inspection');
-const insp2 = normalize({ projects: [{ id: 'j', code: 'D1-0010-2026', name: 'J', status: 'open', openedOn: '2026-01-15', createdOn: '2026-11-01' }] }).projects[0];
-const rem2 = computeReminders({ ...emptyData(), projects: [insp2] }, new Date(2026, 10, 25, 12).getTime());
-const n = rem2.find(r => r.key === 'n:j:2026-12')!;
-assert.equal(new Date(n.at).getDate(), 8, 'unscheduled inspection reminder 7 days before');
+// ---------- Inspección · Bitácora · Regencia: all on the opening day, each movable ----------
+const insp = normalize({ projects: [{ id: 'i', code: 'D1-0009-2025', name: 'I', status: 'open', openedOn: '2025-01-15', createdOn: '2026-11-01' }] }).projects[0];
+assert.equal(inspectionDate(insp, '2026-12'), '2026-12-15', 'inspection on the opening day');
+const cols = taskColumns(insp, '2026-11-25');
+assert.equal(cols.inspection.next!.date, '2025-02-15', 'old months count too (from the opening)');
+assert.equal(cols.bitacora.behind, 22, 'Feb 2025 … Nov 2026 behind');
+assert.equal(cols.regencia.next!.date, '2025-07-15');
+insp.deliveries = { 'm:2026-12': { planned: '2027-01-03', due: null, visit: null, photos: null, letter: null, uploaded: null, letterText: '', files: [] } };
+assert.equal(inspectionDate(insp, '2026-12'), '2027-01-03', 'inspection moved to another month');
+assert.deepEqual(monthlyKeysDueIn(insp, '2027-01', true), ['2026-12', '2027-01'], 'calendar shows it in January');
+const rem = computeReminders({ ...emptyData(), projects: [insp] }, new Date(2026, 11, 20, 12).getTime());
+assert(rem.some(r => r.key.startsWith('v:i:2026-12:2027-01-03')), 'reminder follows the moved inspection');
+// catch up: everything before November 2026 checked with its own date
+const before = pendingBefore(insp, '2026-11-01');
+assert.equal(before.filter(t => t.step === 'visit').length, 21);
+assert.equal(before.filter(t => t.key.startsWith('r:')).length, 3, 'Jul 25, Jan 26, Jul 26');
+for (const t of before) applyStep(insp, t.key, t.step, t.date);
+assert.equal(taskColumns(insp, '2026-11-25').bitacora.next!.date, '2026-11-15', 'only November left');
+assert.equal(insp.deliveries['m:2025-03']!.uploaded, '2025-03-15', 'done on its own date');
 // ---------- photos from the general log go into their month ----------
 const lg = normalize({ projects: [{ id: 'l', code: 'D1-0011-2026', name: 'L', status: 'open', openedOn: '2026-01-15', createdOn: '2026-01-15',
   entries: [

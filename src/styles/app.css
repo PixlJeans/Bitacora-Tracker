@@ -866,3 +866,13 @@ body.help-mode [data-ayuda]:hover{outline:2px solid var(--accent)}
 .ed-missing{margin:.6rem 0;padding:.6rem .8rem;border:1px solid #f59e0b;border-radius:10px;background:color-mix(in srgb,#f59e0b 8%,transparent);font-size:.82rem}
 .ed-missing-row{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin-top:.45rem}
 .ed-missing-row label{display:flex;align-items:center;gap:.3rem;font-weight:600}
+/* ===== v1.8: three tasks per row ===== */
+.prow3-h,.prow3{grid-template-columns:118px minmax(0,1fr) 140px 140px 140px 86px 30px}
+.c-missing{grid-column:span 3}
+.c-task.na.wide{grid-column:span 3}
+.c-task.done-all{background:none;justify-content:flex-start}
+.c-task.done-all b{color:#22c55e;font-size:.78rem}
+.ent-block .grow{flex:1}
+.ent-reg-files{display:flex;flex-direction:column;gap:.5rem}
+.delivery.semiannual>.ent-block>.ent-cols{margin-top:.4rem}
+@media (max-width:760px){.prow3{grid-template-areas:none;grid-template-columns:1fr 1fr 1fr}.prow3 .c-name{grid-column:1/-1}.c-missing,.c-task.na.wide{grid-column:1/-1}}

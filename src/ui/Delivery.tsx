@@ -1,12 +1,11 @@
-// ===== One delivery: Informe Regencial (monthly) or Regencia (every 6 months) =====
-// Two checks: INSPECCIÓN (site visit, schedulable, at least 7 days before) and INFORME (presented to SETENA,
-// adjustable due date) · photos and documents · the letter (a template will fill it later).
-// · photos and documents (letter, PDF) for SETENA · space to write the letter (a template will fill it later).
+// ===== One delivery: a month (Inspección + Bitácora) or a Regencia (every 6 months) =====
+// Every task falls on the opening day and can be moved to any date · photos and documents ·
+// the letter for SETENA (a template will fill it later).
 // Everything is saved to the data immediately.
 import { useEffect, useRef, useState } from 'react';
 import type { Project, Step } from '../lib/types';
 import { MONTHLY_NAME, SEMIANNUAL_NAME, STEPS } from '../lib/types';
-import { inspectionDeadline, monthlyDue, monthlyDueAuto, regenciaDue } from '../lib/schedule';
+import { inspectionDate, monthlyDue, monthlyDueAuto, regenciaDue } from '../lib/schedule';
 import { shortDate, longDate, fromISO, monthNameOf, todayISO } from '../lib/dates';
 import { addDeliveryFiles, editDelivery, deliveryOf, markStep, removeDeliveryFile } from '../lib/store';
 import { backend } from '../lib/backend';
@@ -39,105 +38,113 @@ export function StepsMini({ b, itemKey: key }: { b: Project; itemKey: string }) 
   );
 }
 
-export function DeliveryCard({ b, itemKey: key, isOpen = false }: { b: Project; itemKey: string; isOpen?: boolean }) {
+export function DeliveryCard({ b, itemKey: key }: { b: Project; itemKey: string; isOpen?: boolean }) {
   const today = todayISO();
   const e = deliveryOf(b, key);
+  const monthly = isMonthly(key);
   const due = dueDate(b, key), auto = autoDate(b, key);
-  const adjusted = due !== auto;
-  const inspBy = inspectionDeadline(due);
-  const done = isMonthly(key) ? !!(e.visit && e.uploaded) : !!e.uploaded;
-  const days = daysUntil(due, today);
+  const insp = monthly ? inspectionDate(b, key.slice(2)) : due;
+  const done = monthly ? !!(e.visit && e.uploaded) : !!e.uploaded;
+  const late = (!e.uploaded && due < today) || (monthly && !e.visit && insp < today);
   const [showLetter, setShowLetter] = useState(!e.uploaded);
-  const [editingDate, setEditingDateRaw] = useState(false);
-  const [draft, setDraft] = useState('');
-  const setEditingDate = (on: boolean) => { setDraft(due); setEditingDateRaw(on); };
-  /** Moves the informe / regencia to another date — any month. The calendar follows it to its new month. */
-  const moveTo = (v: string) => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
-    editDelivery(b.id, key, { due: v === auto ? null : v });
-    setEditingDateRaw(false);
-    const other = v.slice(0, 7) !== due.slice(0, 7);
-    toast(`${b.code}: ${isMonthly(key) ? 'informe' : 'regencia'} ${v === auto ? 'en su fecha automática' : 'movido'} al ${longDate(v)}`, true);
-    if (other) window.dispatchEvent(new CustomEvent('bt-goto-month', { detail: v.slice(0, 7) }));
-  };
-  const lateVisit = !!e.planned && e.planned > inspBy;
 
   const step = (p: Step, date: string | null) => {
     markStep(b.id, key, p, date);
-    const nameText = STEPS.find(x => x.id === p)!.name;
-    toast(date ? `✓ ${b.code}: ${nameText} · ${shortDate(date)}` : `${b.code}: ${nameText} desmarcado`, true);
+    const nameText = monthly ? STEPS.find(x => x.id === p)!.name : 'Regencia';
+    toast(date ? `✓ ${b.code}: ${nameText} · ${shortDate(date)}` : `${b.code}: ${nameText} desmarcada`, true);
   };
-  const check = (p: Step) => (
-    <button type="button" className={`ent-check ${e[p] ? 'on' : ''}`} title={e[p] ? 'Clic para desmarcar' : 'Clic para marcarlo hecho hoy'} onClick={() => step(p, e[p] ? null : today)}>
+  const check = (p: Step, date: string) => (
+    <button type="button" className={`ent-check ${e[p] ? 'on' : ''}`} title={e[p] ? 'Clic para desmarcar' : 'Clic para marcarla hecha (con su fecha)'}
+      onClick={() => step(p, e[p] ? null : (date <= today ? date : today))}>
       <span className="cb">{e[p] && <Ic n="check" size={12} />}</span>
     </button>
   );
-  const doneOn = (p: Step) => e[p] && <>
+  const doneOn = (p: Step) => e[p] && <span className="ent-date-edit">
     <small className="muted">hecha el</small>
     <input type="date" className="ent-step-date" value={e[p]!} title="Fecha en que se hizo (editable)" onChange={ev => ev.target.value && step(p, ev.target.value)} />
-  </>;
+  </span>;
+  const letter = (
+    <div className="ent-letter">
+      <button type="button" className="dp-link" onClick={() => setShowLetter(v => !v)}>✉️ Carta {e.letter ? `lista (${shortDate(e.letter)})` : e.letterText ? `(${e.letterText.trim().split(/\s+/).length} palabras)` : '(vacía)'} {showLetter ? '▴' : '▾'}</button>
+      {showLetter && <LetterText b={b} itemKey={key} />}
+    </div>
+  );
 
   return (
-    <div className={`delivery ${done ? 'completed' : days < 0 ? 'is-overdue' : ''} ${isMonthly(key) ? 'monthly' : 'semiannual'}`}
+    <div className={`delivery ${done ? 'completed' : late ? 'is-overdue' : ''} ${monthly ? 'monthly' : 'semiannual'}`}
       onKeyDown={ev => { if (ev.key === 'Enter' && (ev.target as HTMLElement).tagName === 'INPUT') ev.preventDefault(); }}>
       <div className="ent-h">
-        <b>{isMonthly(key) ? '📋' : '🗂️'} {deliveryTitle(key)}</b>
+        <b>{monthly ? `📅 ${monthNameOf(key.slice(2))}` : '🗂️ Regencia (semestral)'}</b>
       </div>
 
-      <div className="ent-cols">
-        {/* LEFT · Inspección (site visit, at least 7 days before) + its photos */}
-        <section className={`ent-block ${e.visit ? 'on' : today > inspBy ? 'late' : ''}`}>
-          <div className="ent-row">
-            {check('visit')}
-            <b>🚗 Inspección</b>
-          </div>
-          <div className="ent-row sub">
-            {e.visit ? doneOn('visit')
-              : <small className={today > inspBy ? 'red-t' : 'muted'}>a más tardar el <b>{longDate(inspBy)}</b> · {daysText(daysUntil(inspBy, today))}</small>}
-          </div>
-          {!e.visit && (
+      {monthly ? (
+        <div className="ent-cols">
+          {/* LEFT · Inspección (site visit) + its photos */}
+          <section className={`ent-block ${e.visit ? 'on' : insp < today ? 'late' : ''}`}>
+            <div className="ent-row">{check('visit', insp)}<b>🚗 Inspección</b></div>
             <div className="ent-row sub">
-              <span>Programada</span>
-              <input type="date" className="modal-input sm" value={e.planned ?? ''} title="Día en que piensas ir (se puede mover cuando quieras)"
-                onChange={ev => { const v = ev.target.value || null; editDelivery(b.id, key, { planned: v }); toast(v ? `${b.code}: inspección programada ${longDate(v)}` : `${b.code}: inspección sin programar`, true); }} />
-              {e.planned && <button type="button" className="dp-link" onClick={() => { editDelivery(b.id, key, { planned: null }); toast(`${b.code}: inspección sin programar`, true); }}>quitar</button>}
+              {e.visit ? doneOn('visit') : <DateMover b={b} itemKey={key} what="Inspección" date={insp} auto={auto}
+                onMove={v => editDelivery(b.id, key, { planned: v })} />}
             </div>
-          )}
-          {lateVisit && !e.visit && <div className="ent-warn">⚠️ Debe ser al menos 7 días antes del informe: a más tardar el {shortDate(inspBy)}.</div>}
-          <DeliveryFiles b={b} itemKey={key} kind="photos" />
-        </section>
+            <DeliveryFiles b={b} itemKey={key} kind="photos" />
+          </section>
 
-        {/* RIGHT · Informe presented to SETENA + letter and documents */}
-        <section className={`ent-block ${e.uploaded ? 'on' : days < 0 ? 'late' : ''}`}>
+          {/* RIGHT · Bitácora presented to SETENA + letter and documents */}
+          <section className={`ent-block ${e.uploaded ? 'on' : due < today ? 'late' : ''}`}>
+            <div className="ent-row">{check('uploaded', due)}<b>📋 Bitácora a SETENA</b></div>
+            <div className="ent-row sub">
+              {e.uploaded ? doneOn('uploaded') : <DateMover b={b} itemKey={key} what="Bitácora" date={due} auto={auto}
+                onMove={v => editDelivery(b.id, key, { due: v })} />}
+            </div>
+            {letter}
+            <DeliveryFiles b={b} itemKey={key} kind="docs" />
+          </section>
+        </div>
+      ) : (
+        <section className={`ent-block ${e.uploaded ? 'on' : due < today ? 'late' : ''}`}>
           <div className="ent-row">
-            {check('uploaded')}
-            <b>📤 Informe a SETENA</b>
+            {check('uploaded', due)}<b>🗂️ Regencia presentada</b>
+            <span className="grow" />
+            {e.uploaded ? doneOn('uploaded') : <DateMover b={b} itemKey={key} what="Regencia" date={due} auto={auto}
+              onMove={v => editDelivery(b.id, key, { due: v })} />}
           </div>
-          <div className="ent-row sub">
-            {e.uploaded ? doneOn('uploaded') : editingDate ? (
-              <span className="ent-date-edit">
-                <input type="date" className="modal-input sm" value={draft} autoFocus
-                  onChange={ev => setDraft(ev.target.value)}
-                  onKeyDown={ev => { if (ev.key === 'Enter') moveTo(draft); if (ev.key === 'Escape') setEditingDate(false); }} />
-                <button type="button" className="btn sm primary" disabled={!draft || draft === due} onClick={() => moveTo(draft)}>Mover</button>
-                {adjusted && <button type="button" className="dp-link" onClick={() => moveTo(auto)}>automática ({shortDate(auto)})</button>}
-                <button type="button" className="dp-link" onClick={() => setEditingDate(false)}>cancelar</button>
-              </span>
-            ) : (
-              <span className="ent-date-edit">
-                <small className={days < 0 ? 'red-t' : 'muted'}>vence el <b>{longDate(due)}</b>{adjusted ? ' (ajustada)' : ''} · {daysText(days)}</small>
-                <button type="button" className="dp-link" onClick={() => setEditingDate(true)}>✏️ cambiar</button>
-              </span>
-            )}
+          <div className="ent-cols">
+            <div>{letter}</div>
+            <div className="ent-reg-files"><DeliveryFiles b={b} itemKey={key} kind="docs" /><DeliveryFiles b={b} itemKey={key} kind="photos" /></div>
           </div>
-          <div className="ent-letter">
-            <button type="button" className="dp-link" onClick={() => setShowLetter(v => !v)}>✉️ Carta {e.letter ? `lista (${shortDate(e.letter)})` : e.letterText ? `(${e.letterText.trim().split(/\s+/).length} palabras)` : '(vacía)'} {showLetter ? '▴' : '▾'}</button>
-            {showLetter && <LetterText b={b} itemKey={key} />}
-          </div>
-          <DeliveryFiles b={b} itemKey={key} kind="docs" />
         </section>
-      </div>
+      )}
     </div>
+  );
+}
+
+/** Date of a task with «✏️ cambiar»: it can be moved to any date, even another month (the calendar follows it). */
+function DateMover({ b, what, date, auto, onMove }: { b: Project; itemKey: string; what: string; date: string; auto: string; onMove: (v: string | null) => void }) {
+  const today = todayISO();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(date);
+  const days = daysUntil(date, today);
+  const moveTo = (v: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
+    onMove(v === auto ? null : v);
+    setEditing(false);
+    toast(`${b.code}: ${what} ${v === auto ? 'en su fecha automática' : 'movida'} al ${longDate(v)}`, true);
+    if (v.slice(0, 7) !== date.slice(0, 7)) window.dispatchEvent(new CustomEvent('bt-goto-month', { detail: v.slice(0, 7) }));
+  };
+  if (editing) return (
+    <span className="ent-date-edit">
+      <input type="date" className="modal-input sm" value={draft} autoFocus onChange={ev => setDraft(ev.target.value)}
+        onKeyDown={ev => { if (ev.key === 'Enter') moveTo(draft); if (ev.key === 'Escape') setEditing(false); }} />
+      <button type="button" className="btn sm primary" disabled={!draft || draft === date} onClick={() => moveTo(draft)}>Mover</button>
+      {date !== auto && <button type="button" className="dp-link" onClick={() => moveTo(auto)}>automática ({shortDate(auto)})</button>}
+      <button type="button" className="dp-link" onClick={() => setEditing(false)}>cancelar</button>
+    </span>
+  );
+  return (
+    <span className="ent-date-edit">
+      <small className={days < 0 ? 'red-t' : 'muted'}><b>{longDate(date)}</b>{date !== auto ? ' (movida)' : ''} · {daysText(days)}</small>
+      <button type="button" className="dp-link" onClick={() => { setDraft(date); setEditing(true); }}>✏️ cambiar</button>
+    </span>
   );
 }
 

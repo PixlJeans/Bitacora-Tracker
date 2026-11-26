@@ -41,18 +41,16 @@ export interface ProjectLocation {
 // Key: 'm:YYYY-MM' (monthly) or 'r:YYYY-MM-DD' (semiannual, automatic due date).
 // Each step stores the DATE it was done (editable) or null if it is still missing.
 export type Step = 'visit' | 'photos' | 'letter' | 'uploaded';
-// The two checks of every delivery are INSPECCIÓN (site visit, at least 7 days before) and INFORME
-// (presented to SETENA). Photos and letter are tracked too, as supporting material.
+// Monthly: INSPECCIÓN (site visit, `visit`) and BITÁCORA (presented to SETENA, `uploaded`).
+// Regencia (every 6 months): one check, presented (`uploaded`). Photos and letter are supporting material.
 export const STEPS: { id: Step; name: string; icon: string; main: boolean }[] = [
   { id: 'visit', name: 'Inspección', icon: '🚗', main: true },
   { id: 'photos', name: 'Fotos', icon: '📷', main: false },
   { id: 'letter', name: 'Carta', icon: '✉️', main: false },
-  { id: 'uploaded', name: 'Informe', icon: '📤', main: true }
+  { id: 'uploaded', name: 'Bitácora', icon: '📋', main: true }
 ];
-/** The inspection must be done at least this many days before the informe is due. */
-export const INSPECTION_LEAD_DAYS = 7;
 export interface Delivery {
-  planned: string | null;  // date the visit is SCHEDULED for (can be moved anytime; null = not scheduled)
+  planned: string | null;  // inspection date moved by hand (null = automatic: the opening day)
   due: string | null;    // due date adjusted by hand (null = automatic)
   visit: string | null;
   photos: string | null;
@@ -62,7 +60,7 @@ export interface Delivery {
   files: Attachment[];     // photos and documents (letter, PDF) of this delivery, saved in proyectos/<code>/
 }
 export const emptyDelivery = (): Delivery => ({ planned: null, due: null, visit: null, photos: null, letter: null, uploaded: null, letterText: '', files: [] });
-export const MONTHLY_NAME = 'Informe Regencial';
+export const MONTHLY_NAME = 'Bitácora';
 export const SEMIANNUAL_NAME = 'Regencia';
 
 /** A log entry of the project, like in the SETENA portal (Escribir / Adjunto). */

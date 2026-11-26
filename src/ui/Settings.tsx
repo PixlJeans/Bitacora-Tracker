@@ -174,7 +174,7 @@ export function SettingsPanel() {
               <button type="button" className={`set-switch ${(auto ?? a.autoStart) ? 'on' : ''}`} role="switch" aria-checked={!!(auto ?? a.autoStart)} onClick={toggleAuto}><i>{(auto ?? a.autoStart) ? '⚡' : '·'}</i></button>
             </div>
           )}
-          <small className="set-hint">Automático para cada bitácora activa: Informe Regencial cada mes el mismo día de su apertura, y Regencia cada 6 meses (avisos desde 1 mes antes). Si ajustas una fecha en el proyecto, el aviso la sigue. Terminadas y archivadas no avisan.</small>
+          <small className="set-hint">Automático para cada bitácora activa: inspección y bitácora cada mes el mismo día de su apertura, y Regencia cada 6 meses (avisos desde 1 mes antes). Si ajustas una fecha en el proyecto, el aviso la sigue. Terminadas y archivadas no avisan.</small>
           <button className="theme-btn" onClick={async () => { if (!(await backend.testReminder())) alertBox('Sin permiso', 'Activa las notificaciones para probar.', '🔕', '#f59e0b'); }}>🔔 Probar notificación</button>
           {esWeb && <small className="set-hint">En la versión web los avisos llegan mientras la página esté abierta (en una pestaña). Para recibirlos con la página cerrada usa la app de escritorio.</small>}
           {!esWeb && <small className="set-hint">Cerrar la ventana la deja en la bandeja del sistema: los avisos siguen llegando. Para salir del todo usa «Salir» en el icono de la bandeja.</small>}

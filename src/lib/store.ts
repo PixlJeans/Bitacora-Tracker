@@ -6,7 +6,7 @@ import { useSyncExternalStore } from 'react';
 import type { AppData, Attachment, Delivery, EntryType, ImportRow, LogEntry, Project, ProjectLocation, ReminderKind, Settings, Status, Step } from './types';
 import { DEFAULT_LABELS, emptyDelivery } from './types';
 import { backend, esWeb } from './backend';
-import { computeReminders, deliveryKeyForDate, monthForVisit } from './schedule';
+import { computeReminders, deliveryKeyForDate, monthForVisit, pendingBefore } from './schedule';
 import { todayISO, uid } from './dates';
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -391,6 +391,18 @@ export function editDelivery(id: string, key: string, change: Partial<Pick<Deliv
     b.deliveries = b.deliveries ?? {};
     b.deliveries[key] = { ...deliveryOf(b, key), ...change };
   }, opts);
+}
+
+/** Checks off everything still pending dated before `before` (projects `ids`), each with its own date. */
+export function markAllBefore(ids: string[], before: string): number {
+  let n = 0;
+  mutate(d => {
+    for (const b of d.projects) {
+      if (!ids.includes(b.id)) continue;
+      for (const t of pendingBefore(b, before)) { applyStep(b, t.key, t.step, t.date); n++; }
+    }
+  });
+  return n;
 }
 
 /** Marks / unmarks the month's upload to SETENA or its visit. */

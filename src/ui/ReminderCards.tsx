@@ -44,7 +44,7 @@ export function ReminderCards() {
     <div className="reminders">
       {group && (
         <div className="reminder" style={{ ['--ev' as any]: 'var(--accent)' }}>
-          <div className="reminder-head"><Ic n="bell" /><span className="reminder-title">📋 {monthly.length} Informes Regenciales: inspección + informe</span>
+          <div className="reminder-head"><Ic n="bell" /><span className="reminder-title">📋 {monthly.length} bitácoras por presentar</span>
             <button className="icon-btn sm" onClick={() => withoutKind('monthly')} title="Descartar"><Ic n="close" /></button></div>
           <div className="reminder-body">{monthly.slice(0, 3).map(m => m.title.split(' · ')[1]).join(' · ')}…</div>
           <div className="reminder-btns">
@@ -75,7 +75,7 @@ export function ReminderCards() {
             <div className="reminder-btns">
               {a.kind === 'monthly' && b && <>
                 {!b.visits.includes(monthOf(a)) && <button className="btn primary sm" onClick={() => { markMonth(b.id, monthOf(a), 'visit'); toast(`✓ ${b.code}: inspección de ${monthNameOf(monthOf(a))}`, true); if (b.uploads.includes(monthOf(a))) dismiss(a.key); }}>Inspección ✓</button>}
-                {!b.uploads.includes(monthOf(a)) && <button className="btn primary sm" onClick={() => { markMonth(b.id, monthOf(a), 'upload'); toast(`✓ ${b.code}: Informe Regencial de ${monthNameOf(monthOf(a))} presentado`, true); if (b.visits.includes(monthOf(a))) dismiss(a.key); }}>Informe ✓</button>}
+                {!b.uploads.includes(monthOf(a)) && <button className="btn primary sm" onClick={() => { markMonth(b.id, monthOf(a), 'upload'); toast(`✓ ${b.code}: bitácora de ${monthNameOf(monthOf(a))} presentada`, true); if (b.visits.includes(monthOf(a))) dismiss(a.key); }}>Bitácora ✓</button>}
                 <button className="btn sm" onClick={() => { dismiss(a.key); openEditor(b); }}>Abrir</button>
               </>}
               {a.kind === 'regencia' && b && <>

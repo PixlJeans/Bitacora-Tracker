@@ -4,8 +4,8 @@
 // are joined into trips, to do several visits on the same day, with the route in Google Maps.
 import { useState } from 'react';
 import type { AppData } from '../lib/types';
-import { agenda, inspectionDeadline, sortDate, type PendingItem } from '../lib/schedule';
-import { shortDate, addDays, todayISO } from '../lib/dates';
+import { agenda, sortDate, type PendingItem } from '../lib/schedule';
+import { monthNameOf, shortDate, addDays, todayISO } from '../lib/dates';
 import { groupNearby, distanceKm, mapLink, routeLink, kmTxt, orderRoute } from '../lib/geo';
 import { editDelivery, mutate } from '../lib/store';
 import { backend } from '../lib/backend';
@@ -42,19 +42,17 @@ export function Agenda({ d }: { d: AppData }) {
     return (
       <div key={id} className={`ag-row ${x.overdue ? 'overdue' : ''} ${isOpen === id ? 'open' : ''}`}>
         <div className="ag-main" onClick={() => setOpenRow(a => (a === id ? null : id))} title="Clic para ver los pasos, ajustar la fecha y escribir la carta">
-          <span className="ag-date"><b>{shortDate(x.date)}</b><small>{daysText(x.days)}</small>
-            {!x.b.deliveries?.[x.key]?.visit && (x.planned
-              ? <span className="ag-planned" title="Inspección programada">🚗 {shortDate(x.planned)}</span>
-              : <span className={`ag-planned ${today > inspectionDeadline(x.date) ? 'red-t' : ''}`} title="Último día para la inspección (7 días antes del informe)">🚗 ≤ {shortDate(inspectionDeadline(x.date))}</span>)}</span>
-          <span className={`ag-type ${x.type}`}>{x.type === 'monthly' ? '📋 Inf. Regencial' : '🗂️ Regencia'}</span>
+          <span className="ag-date"><b>{shortDate(sortDate(x))}</b><small>{daysText(x.days)}</small>
+            {x.type === 'monthly' && x.planned && <span className={`ag-planned ${today > x.planned ? 'red-t' : ''}`} title="Inspección">🚗 {shortDate(x.planned)}</span>}</span>
+          <span className={`ag-type ${x.type}`}>{x.type === 'monthly' ? `📋 ${monthNameOf(x.key.slice(2)).split(' ')[0]}` : '🗂️ Regencia'}</span>
           <span className="ag-project"><span className="mono">{x.b.code}</span> <span className="ag-name">{x.b.name}</span>
             {neighbors.length > 0 && <span className="ag-near" title={neighbors.map(v => `${v.b.code} a ${kmTxt(v.km)}`).join('\n')}>📍 cerca: {neighbors.slice(0, 2).map(v => `${v.b.code} (${kmTxt(v.km)})`).join(', ')}{neighbors.length > 2 ? ` +${neighbors.length - 2}` : ''}</span>}
             {!x.b.location && <span className="c-noloc" title="Sin ubicación">📍?</span>}
           </span>
           <StepsMini b={x.b} itemKey={x.key} />
           <span className="ag-acc" onClick={ev => ev.stopPropagation()}>
-            {!x.b.deliveries?.[x.key]?.visit && <input type="date" className="ag-move" value={x.planned ?? ''} title="Programar o mover la inspección (al menos 7 días antes del informe)"
-              onChange={ev => { const v = ev.target.value || null; editDelivery(x.b.id, x.key, { planned: v }); toast(v ? `${x.b.code}: inspección ${shortDate(v)}` : `${x.b.code}: inspección sin programar`, true); }} />}
+            {x.type === 'monthly' && x.planned && <input type="date" className="ag-move" value={x.planned} title="Mover la inspección a otro día"
+              onChange={ev => { const v = ev.target.value; if (v) { editDelivery(x.b.id, x.key, { planned: v }); toast(`${x.b.code}: inspección ${shortDate(v)}`, true); } }} />}
             {x.b.location && <button className="icon-btn sm" title="Ver en el mapa" onClick={() => openMap(mapLink(x.b.location!))}>🗺️</button>}
             <button className="icon-btn sm" title="Abrir el proyecto" onClick={() => openEditor(x.b)}><Ic n="edit" /></button>
           </span>
@@ -79,7 +77,7 @@ export function Agenda({ d }: { d: AppData }) {
           <section key={n} className="ag-group">
             <header>
               <b>{projects.length > 1 ? `🚗 Salida · ${projects.length} proyectos cercanos` : `📍 ${projects[0].b.code}`}</b>
-              <span className={`ag-due ${overdue ? 'overdue' : ''}`}>{overdue ? `${overdue} vencida(s) · ` : ''}{g[0].planned && !g[0].b.deliveries?.[g[0].key]?.visit ? `inspección ${shortDate(g[0].planned)} · ` : ''}ir antes del {shortDate(g[0].date)} ({daysText(g[0].days)})</span>
+              <span className={`ag-due ${overdue ? 'overdue' : ''}`}>{overdue ? `${overdue} vencida(s) · ` : ''}{g[0].planned ? `inspección ${shortDate(g[0].planned)} · ` : ''}bitácora {shortDate(g[0].date)} ({daysText(g[0].days)})</span>
               <span className="grow" />
               {projects.length > 1 && <small className="muted">máx. {kmTxt(Math.max(...projects.flatMap(a => projects.map(c => distanceKm(a.b.location!, c.b.location!)))))} entre ellos</small>}
               <button className="btn sm" onClick={() => openMap(projects.length > 1 ? routeLink(path.map(x => x.b.location!)) : mapLink(projects[0].b.location!))}>

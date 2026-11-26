@@ -1,12 +1,11 @@
 // ===== Project row =====
-// One line per project:  Code · Project · 🚗 Inspección · 📤 Informe · Status
-// Both cells show the most urgent pending delivery (the month's Informe Regencial, or a Regencia): the
-// inspection's date (scheduled, or its last day = 7 days before the informe) and the informe's due date,
-// each with a ✓ button. Click anywhere else on the row to open the project.
+// One line per project:  Code · Project · 🚗 Inspección · 📋 Bitácora · 🗂️ Regencia · Status
+// Each task cell shows the oldest one still pending (all on the opening day unless moved), how many are
+// behind, and a ✓ to check it off. Click anywhere else on the row to open the project.
 import { useState } from 'react';
 import type { Project, AppData, Status } from '../lib/types';
 import { STATUSES, statusName, isActiveProject, isFinished } from '../lib/types';
-import { nextDue, inspectionDeadline } from '../lib/schedule';
+import { taskColumns, type TaskColumn, type TaskKind } from '../lib/schedule';
 import { daysUntil, daysText } from './Delivery';
 import { shortDate, monthNameOf, todayISO } from '../lib/dates';
 import { archive, markStep, mutate } from '../lib/store';
@@ -18,8 +17,33 @@ export type Mode = { type: 'normal' } | { type: 'month'; mk: string } | { type: 
 export function RowHeader() {
   return (
     <div className="prow3-h" aria-hidden>
-      <span>Código</span><span>Proyecto</span><span>🚗 Inspección</span><span>📤 Informe</span><span>Estado</span><span />
+      <span>Código</span><span>Proyecto</span><span>🚗 Inspección</span><span>📋 Bitácora</span><span>🗂️ Regencia</span><span>Estado</span><span />
     </div>
+  );
+}
+
+const KIND: Record<TaskKind, { name: string; step: 'visit' | 'uploaded'; help: string }> = {
+  inspection: { name: 'Inspección', step: 'visit', help: 'La visita al proyecto, cada mes, el mismo día de la apertura (se puede mover). Muestra la más antigua que falta.' },
+  bitacora: { name: 'Bitácora', step: 'uploaded', help: 'La bitácora del mes presentada a SETENA, el mismo día de la apertura (se puede mover). Muestra la más antigua que falta.' },
+  regencia: { name: 'Regencia', step: 'uploaded', help: 'La Regencia cada 6 meses, el mismo día de la apertura (se puede mover).' }
+};
+
+function TaskCell({ b, kind, c }: { b: Project; kind: TaskKind; c: TaskColumn }) {
+  const today = todayISO();
+  const t = c.next;
+  if (!t) return <span className="c-task done-all" title="Todo al día"><span className="c-task-txt"><b>✓ al día</b></span></span>;
+  const k = KIND[kind];
+  const label = kind === 'regencia' ? '' : monthNameOf(t.key.slice(2)).replace(/ de /, ' ');
+  return (
+    <span className={`c-task ${t.overdue ? 'overdue' : ''} ${kind === 'regencia' ? 'reg' : ''}`} data-help-title={k.name} data-help={k.help}>
+      <span className="c-task-txt">
+        <b>{shortDate(t.date)}{t.date.slice(0, 4) !== today.slice(0, 4) ? ` ${t.date.slice(2, 4)}` : ''}</b>
+        <small>{c.behind > 1 ? `${c.behind} atrasadas` : label || daysText(daysUntil(t.date, today))}</small>
+      </span>
+      <button className="ck" title={`Marcar hecha: ${k.name}${label ? ' de ' + label : ''} (${shortDate(t.date)})`}
+        onClick={ev => { ev.stopPropagation(); const d = t.date <= today ? t.date : today; markStep(b.id, t.key, k.step, d);
+          toast(`✓ ${b.code}: ${k.name}${label ? ' ' + label : ''}`, true); }}><Ic n="check" size={13} /></button>
+    </span>
   );
 }
 
@@ -27,59 +51,29 @@ export function ProjectRow({ d: _d, b, data }: { d: AppData; b: Project; mode?: 
   const today = todayISO();
   const [pop, setPop] = useState<HTMLElement | null>(null);
   const active = isActiveProject(b);
-  const pf = active ? nextDue(b, today) : null;
-  const e = pf ? b.deliveries?.[pf.key] : undefined;
-  const monthly = pf?.type === 'monthly';
-  const visited = pf ? (monthly ? b.visits.includes(pf.key.slice(2)) : !!e?.visit) : false;
-  const inspDate = pf ? (e?.planned ?? inspectionDeadline(pf.date)) : null;
-  const inspLate = !!pf && !visited && today > inspDate!;
-  const what = pf ? (monthly ? `Informe ${monthNameOf(pf.key.slice(2)).split(' ')[0].toLowerCase()}` : 'Regencia') : '';
+  const cols = taskColumns(b, today);
+  const late = (['inspection', 'bitacora', 'regencia'] as TaskKind[]).some(k => cols[k].next?.overdue);
 
   function changeStatus(st: Status) {
     mutate(dd => { const x = dd.projects.find(y => y.id === b.id); if (x) x.status = st; });
     setPop(null);
     toast(`${b.code} → ${statusName(st)}` + (isFinished(st) ? ' · ya no genera entregas; ciérrala con 📦' : ''), true);
   }
-  const mark = (step: 'visit' | 'uploaded', on: boolean) => {
-    if (!pf) return;
-    markStep(b.id, pf.key, step, on ? today : null);
-    toast(on ? `✓ ${b.code}: ${step === 'visit' ? 'inspección hecha' : `${what} presentado`}` : `${b.code}: desmarcado`, true);
-  };
   const stop = (ev: { stopPropagation(): void }) => ev.stopPropagation();
 
   return (
-    <div className={`prow3 status-${b.status} ${b.archived ? 'archived' : ''} ${pf?.overdue || inspLate ? 'late' : ''}`} data-tour={data}
+    <div className={`prow3 status-${b.status} ${b.archived ? 'archived' : ''} ${late ? 'late' : ''}`} data-tour={data}
       onClick={() => openEditor(b)} title="Abrir el proyecto">
       <span className="c-code mono">{b.code}</span>
       <span className="c-name" title={b.name}>{b.name}</span>
 
       {active && b.noOpeningDate ? (
         <span className="c-missing" title="El PDF no traía la fecha de apertura: ábrelo para ponerla">📅 Falta la fecha de apertura · clic para ponerla</span>
-      ) : <>
-      {/* Inspección */}
-      {pf ? (
-        <span className={`c-task ${visited ? 'done' : inspLate ? 'overdue' : ''}`} data-tour={data ? 'monthly' : undefined}
-          data-help-title="Inspección" data-help="La visita al proyecto: al menos 7 días antes del informe. Muestra el día programado (🗓) o el último día para hacerla (≤). ✓ cuando la hiciste.">
-          <span className="c-task-txt">
-            {visited ? <b>Hecha</b> : <b>{e?.planned ? '🗓 ' : '≤ '}{shortDate(inspDate!)}</b>}
-            <small>{visited ? (e?.visit ? shortDate(e.visit) : '') : daysText(daysUntil(inspDate!, today))}</small>
-          </span>
-          <button className={`ck ${visited ? 'on' : ''}`} title={visited ? 'Desmarcar inspección' : 'Marcar inspección hecha hoy'} onClick={ev => { stop(ev); mark('visit', !visited); }}><Ic n="check" size={13} /></button>
-        </span>
-      ) : <span className="c-task na">—</span>}
-
-      {/* Informe (or Regencia) */}
-      {pf ? (
-        <span className={`c-task ${pf.overdue ? 'overdue' : ''} ${monthly ? '' : 'reg'}`}
-          data-help-title="Informe" data-help="El Informe Regencial del mes (o la Regencia semestral, en morado) que hay que presentar a SETENA, con su fecha. ✓ cuando lo presentaste.">
-          <span className="c-task-txt">
-            <b>{shortDate(pf.date)}{pf.date.slice(0, 4) !== today.slice(0, 4) ? ` ${pf.date.slice(2, 4)}` : ''}</b>
-            <small>{what} · {daysText(pf.days)}</small>
-          </span>
-          <button className="ck" title={`Marcar ${what} presentado hoy`} onClick={ev => { stop(ev); mark('uploaded', true); }}><Ic n="check" size={13} /></button>
-        </span>
-      ) : <span className="c-task na">{b.archived ? 'Archivada' : '—'}</span>}
-      </>}
+      ) : active ? <>
+        <TaskCell b={b} kind="inspection" c={cols.inspection} />
+        <TaskCell b={b} kind="bitacora" c={cols.bitacora} />
+        <TaskCell b={b} kind="regencia" c={cols.regencia} />
+      </> : <span className="c-task na wide">{b.archived ? 'Archivada' : 'Terminada: sin entregas'}</span>}
 
       <button className={`status-chip status-${b.status}`} title="Cambiar estado" onClick={ev => { stop(ev); setPop(ev.currentTarget); }}
         data-help-title="Estado" data-help="Estado en SETENA. Solicitud de Cierre y Terminada ya no generan entregas.">{STATUSES.find(s => s.id === b.status)?.short}</button>

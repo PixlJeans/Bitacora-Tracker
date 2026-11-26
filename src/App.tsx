@@ -3,10 +3,10 @@
 // delivery calendar. Tabs: Activas · Agenda y rutas · Mes actual · Mes próximo · Regencias · Archivadas.
 // Same architecture as the Cognose calendar: single store → views that only render → shared dialogs.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useAppData, isReady, Undo, mutate, reload } from './lib/store';
+import { useAppData, isReady, Undo, mutate, reload, markAllBefore } from './lib/store';
 import type { Project, Status } from './lib/types';
 import { isActiveProject, isFinished } from './lib/types';
-import { completeIn, nextDue, upcomingRegencias, summary, monthTasks, type RegenciaInfo, sortDate } from './lib/schedule';
+import { pendingBefore, completeIn, nextDue, upcomingRegencias, summary, monthTasks, type RegenciaInfo, sortDate } from './lib/schedule';
 import { matches } from './lib/search';
 import { monthKeyOf, monthNameOf, todayISO } from './lib/dates';
 import { ReminderCards } from './ui/ReminderCards';
@@ -109,6 +109,8 @@ export default function App() {
   // Search: ALWAYS across every project (active and archived), with no hidden filters
   const results = useMemo(() => searching ? d.projects.filter(b => matches(d, b, q)) : [], [d, q, searching]);
 
+  const [askAll, setAskAll] = useState(false);
+  const allBehind = useMemo(() => activeProjects.reduce((n, b) => n + pendingBefore(b, `${mk}-01`).length, 0), [activeProjects, mk]);
   const activeList = useMemo(() => {
     // Priority = DATE of the most urgent pending delivery (Informe Regencial or Regencia): overdue first
     const pf = new Map(activeProjects.map(b => [b.id, nextDue(b)]));
@@ -165,6 +167,9 @@ export default function App() {
         {chip('new', 'Nuevas', r.new, 'status-new')}
         {chip('open', 'Abiertas', r.open, 'status-open')}
         {chip('closing', 'Sol. cierre', r.closing, 'status-closing')}
+        {allBehind > 0 && (askAll
+          ? <span className="catch-up">¿Marcar como hechas las {allBehind} tareas de todos los proyectos anteriores a {monthNameOf(mk).split(' ')[0].toLowerCase()}? <button className="btn sm primary" onClick={() => { const n = markAllBefore(activeProjects.map(b => b.id), `${mk}-01`); setAskAll(false); toast(`✓ ${n} tareas marcadas como hechas`, true); }}>Sí, marcar</button> <button className="dp-link" onClick={() => setAskAll(false)}>no</button></span>
+          : <button className="dp-link" title="Para poner al día lo que ya se hizo antes de usar la app. Cada tarea queda con su fecha; se puede deshacer." onClick={() => setAskAll(true)}>✓ Marcar todo lo anterior a {monthNameOf(mk).split(' ')[0].toLowerCase()} como hecho ({allBehind})</button>)}
         {r.finished > 0 && <button className="dp-link" title="Solicitud de Cierre y Terminadas ya no generan entregas; pasan a Archivadas con todo su historial" onClick={() => archiveFinished()}>📦 Archivar {r.finished} terminada(s)</button>}
       </div>
       {activeList.length ? <><RowHeader />{activeList.map(b => P(b))}</> : emptyData('Ninguna bitácora coincide con el filtro.')}
@@ -245,7 +250,7 @@ export default function App() {
       <main className="project-list">{body}</main>
 
       <footer className="foot">
-        <span>🚗 Inspección: ≤ último día · 🗓 programada &nbsp;·&nbsp; 📤 Informe a SETENA (morado = Regencia) &nbsp;·&nbsp; ✓ para marcar</span>
+        <span>🚗 Inspección y 📋 Bitácora cada mes · 🗂️ Regencia cada 6 meses · todas el día de la apertura · se ve la más antigua que falta · ✓ para marcarla</span>
         <span className="grow" />Clic en un proyecto para abrirlo · ? = ayuda
       </footer>
 

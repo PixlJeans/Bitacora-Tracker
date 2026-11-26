@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react';
 import type { Project } from '../lib/types';
 import { isActiveProject } from '../lib/types';
-import { monthlyDue, regenciaDue, regenciaInMonth, dueInMonth, hasSchedule, monthlyKeysDueIn, completeIn, regenciaSubmitted, regenciaDueDates } from '../lib/schedule';
+import { monthlyDue, regenciaDue, regenciaInMonth, dueInMonth, hasSchedule, monthlyKeysDueIn, completeIn, regenciaSubmitted, regenciaDueDates, inspectionDate } from '../lib/schedule';
 import { shortDate, longDate, fromISO, monthKeyOf, monthName, todayISO } from '../lib/dates';
 import { DeliveryCard } from './Delivery';
 
@@ -31,8 +31,9 @@ export function ProjectCalendar({ b, live: live = false }: { b: Project; onChang
 
   /** What is due in month m: informes (possibly moved there from another month) and a Regencia. */
   const dueIn = (m: string) => {
-    const keys = monthlyKeysDueIn(b, m), reg = regenciaInMonth(b, m);
-    const dates = [...keys.map(k => monthlyDue(b, k)), ...(reg ? [regenciaDue(b, reg)] : [])].sort();
+    const keys = monthlyKeysDueIn(b, m, true), reg = regenciaInMonth(b, m);
+    const dates = [...new Set([...keys.flatMap(k => [monthlyDue(b, k), inspectionDate(b, k)]), ...(reg ? [regenciaDue(b, reg)] : [])]
+      .filter(d => d.slice(0, 7) === m))].sort();
     const pending = keys.filter(k => !completeIn(b, k)).length + (reg && !regenciaSubmitted(b, reg) ? 1 : 0);
     const state = !dates.length ? 'outside' : !pending ? 'done' : m < thisMonth || (m === thisMonth && dates[0] <= today) ? 'overdue' : m === thisMonth ? 'today' : 'future';
     return { keys, reg, dates, state };
@@ -67,7 +68,7 @@ export function ProjectCalendar({ b, live: live = false }: { b: Project; onChang
 
       <div className="pcal-checks">
         {!isActiveProject(b) && <p className="muted sm">{b.archived ? 'Archivada: sin entregas.' : 'Ya terminó: sin entregas.'}</p>}
-        {active && ownMoved && <p className="muted sm pcal-moved">↪ El informe de {monthName(month).toLowerCase()} se movió al {longDate(ownMoved)}.{' '}
+        {active && ownMoved && <p className="muted sm pcal-moved">↪ La inspección y la bitácora de {monthName(month).toLowerCase()} se movieron al {longDate(ownMoved)}.{' '}
           <button type="button" className="dp-link" onClick={() => goTo(ownMoved)}>Ir a ese mes →</button></p>}
         {active && regMoved && <p className="muted sm pcal-moved">↪ La regencia de {monthName(month).toLowerCase()} se movió al {longDate(regMoved)}.{' '}
           <button type="button" className="dp-link" onClick={() => goTo(regMoved)}>Ir a ese mes →</button></p>}

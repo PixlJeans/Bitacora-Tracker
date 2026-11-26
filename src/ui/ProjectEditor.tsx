@@ -4,13 +4,13 @@
 import { useState } from 'react';
 import type { Project, Status, ProjectLocation } from '../lib/types';
 import { STATUSES, isActiveProject, isFinished } from '../lib/types';
-import { codeExists, getData, mutate, labelForStatus, archive, useAppData } from '../lib/store';
+import { codeExists, getData, mutate, labelForStatus, archive, useAppData, markAllBefore } from '../lib/store';
 import { normalizeCode, isValidCode } from '../lib/parser';
-import { trackingStart, regenciaDueDates, regenciaDue, openingFrom } from '../lib/schedule';
+import { nextRegencia, openingFrom, pendingBefore } from '../lib/schedule';
 import { mapLink, parseCoordinates } from '../lib/geo';
 import { gpsComun } from '../lib/exif';
 import { backend } from '../lib/backend';
-import { shortDate, longDate, fromISO, addMonths, todayISO, uid } from '../lib/dates';
+import { shortDate, longDate, fromISO, todayISO, uid, monthName } from '../lib/dates';
 import { ProjectCalendar } from './ProjectCalendar';
 import { ProjectLog } from './ProjectLog';
 import { Ic, openModal, closeModal, confirmDialog, toast } from './core';
@@ -58,7 +58,16 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
   const setLoc = (u: ProjectLocation | null) => { setLocTouched(true); set('location', u); };
 
   const day = fromISO(f.openedOn).getDate();
-  const regencias = regenciaDueDates(view, trackingStart(view), addMonths(today, 13)).slice(0, 3);
+  const nextReg = nextRegencia(view, today);
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const behind = live ? pendingBefore(live, monthStart).length : 0;
+  const [askCatchUp, setAskCatchUp] = useState(false);
+  function catchUp() {
+    if (!b) return;
+    const n = markAllBefore([b.id], monthStart);
+    setAskCatchUp(false);
+    toast(`✓ ${b.code}: ${n} marcadas como hechas, cada una con su fecha`, true);
+  }
 
   function save() {
     const code = normalizeCode(f.code);
@@ -130,7 +139,10 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
         toast(`📅 ${f.code}: apertura ${longDate(o)}; entregas calculadas`, true);
       }} />}
       {isActiveProject(f) && f.noOpeningDate ? null : isActiveProject(f)
-        ? <p className="ed-auto-line muted">📅 Informe Regencial el día <b>{day}</b> de cada mes · Regencia cada 6 meses{regencias.length ? ` (próxima ${shortDate(regenciaDue(view, regencias.find(v => !view.regencias.includes(v)) ?? regencias[0]))})` : ''} · ✏️ cada fecha se puede cambiar</p>
+        ? <div className="ed-auto-line muted">📅 Inspección y bitácora el día <b>{day}</b> de cada mes · Regencia cada 6 meses{nextReg ? ` (${nextReg.due < today ? 'pendiente' : 'próxima'} ${shortDate(nextReg.due)})` : ''} · ✏️ cada fecha se puede mover
+            {b && live && behind > 0 && (askCatchUp
+              ? <span className="catch-up">¿Marcar como hechas las {behind} tareas anteriores a {monthName(fromISO(today)).toLowerCase()}? <button type="button" className="btn sm primary" onClick={catchUp}>Sí, marcar</button> <button type="button" className="dp-link" onClick={() => setAskCatchUp(false)}>no</button></span>
+              : <button type="button" className="dp-link catch-up" onClick={() => setAskCatchUp(true)}>✓ Marcar todo lo anterior a {monthName(fromISO(today)).toLowerCase()} como hecho ({behind})</button>)}</div>
         : <p className="ed-auto-line muted">{f.archived ? 'Archivada: sin entregas.' : 'Ya terminó: no genera entregas. Ciérrala con 📦 Archivar.'}</p>}
 
       <ProjectCalendar b={view} live={!!live} onChange={c => setF(x => ({ ...x, ...c }))} />
