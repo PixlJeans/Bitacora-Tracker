@@ -2,6 +2,8 @@
 // A project (bitácora) ALWAYS has its code + project name together (they never exist apart).
 // Deliveries are AUTOMATIC from the opening date: the user only changes the status.
 
+import type { DocInfo } from './docKind';
+
 export type Status = 'open' | 'new' | 'closing' | 'finished';
 
 export const STATUSES: { id: Status; name: string; short: string }[] = [
@@ -130,6 +132,7 @@ export interface Project {
   setenaStart?: string;     // date of the first entry in the SETENA bitácora (the bottom of its page)
   setenaUrl?: string;       // its page in the SETENA portal
   setena?: SetenaInfo;      // what its SETENA page says (read with «Descargar todo de SETENA»)
+  docs?: Record<string, DocInfo & { placed: boolean }>; // each SETENA PDF (by file name): what it is, read from it
 }
 
 /** A saved overall review. */

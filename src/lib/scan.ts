@@ -15,6 +15,8 @@ import { dueInMonth, hasSchedule, inspectionDate, regenciaDue } from './schedule
 import { readExif } from './exif';
 import { addMonths, todayISO } from './dates';
 import { projectFolder, regenciaKeyNear, setenaTarget } from './folders';
+import { sortDocuments } from './docSort';
+import { KIND_NAME, type DocKind } from './docKind';
 
 const IMG = /\.(jpe?g|png|heic|heif|webp)$/i;
 const DOC = /\.(docx?|pdf|odt|rtf|xlsx?)$/i;
@@ -52,14 +54,28 @@ export async function scanFolders(force = false): Promise<string> {
   let sorted = 0;
   const starts: string[] = [];
   const places: { id: string; lat: number; lng: number }[] = [];
+  const docKinds: Record<string, number> = {};
+  let docsRead = 0, docsMoved = 0;
+  const budget = { left: 30 };
   try {
-    for (const b of getData().projects) {
-      if (b.archived) continue;
+    for (const b0 of getData().projects) {
+      if (b0.archived) continue;
+      let b = b0;
       const scheduled = isActiveProject(b) && hasSchedule(b);
-      if (!scheduled && b.location) continue;
       let files: { path: string; size: number; modified: number }[];
       try { files = await backend.listTree(projectFolder(b)); } catch { continue; }
       if (!files.length) continue;
+      // ---- PDFs from SETENA: read what each one is and put it in its folder (every project, once per file) ----
+      if (budget.left > 0) {
+        const r = await sortDocuments(b, files, budget);
+        if (r.read) {
+          docsRead += r.read; docsMoved += r.moved;
+          for (const [k, n] of Object.entries(r.kinds)) docKinds[k] = (docKinds[k] ?? 0) + n;
+          b = getData().projects.find(x => x.id === b.id) ?? b;
+          if (r.moved) { try { files = await backend.listTree(projectFolder(b)); } catch { continue; } }
+        }
+      }
+      if (!scheduled && b.location) continue;
       // ---- Location: a project without one takes it from its photos' GPS (any folder, even without dates) ----
       if (!b.location) {
         const photos = files.filter(f => /\.jpe?g$/i.test(f.path)).sort((a, c) => c.path.localeCompare(a.path));
@@ -85,6 +101,7 @@ export async function scanFolders(force = false): Promise<string> {
         const m = IN_SETENA.exec(f.path);
         if (!m) continue;
         const name = m[3] ?? m[4];
+        if (/\.pdf$/i.test(name)) continue; // PDFs: sorted by what they say (docSort)
         const target = setenaTarget(b, `${m[1]}-${m[2]}`, name);
         if (target.endsWith('/SETENA') || f.path === `${target}/${name}`) continue;
         if (files.some(x => x.path === `${target}/${name}`)) continue;
@@ -128,7 +145,8 @@ export async function scanFolders(force = false): Promise<string> {
         if (m[3] === 'Fotos' && IMG.test(f.path)) {
           const key = inspectionKeyFor(b, ym);
           if (key && !visits.some(v => v.id === b.id && v.key === key)) byKey.set(key, [...(byKey.get(key) ?? []), f]);
-        } else if (m[3] !== 'Fotos' && DOC.test(f.path)) {
+        } else if (m[3] !== 'Fotos' && DOC.test(f.path) && !(/^\d{4}-\d{2}-\d{2}_.+\.pdf$/i.test(m[4]) && !b.docs?.[m[4]])) {
+          // (a SETENA PDF counts only once it has been read; until then it waits)
           const date = /^(\d{4}-\d{2}-\d{2})_/.exec(m[4])?.[1] ?? `${ym}-15`;
           const key = regenciaKeyNear(b, date);
           const map = m[3] === 'Regencias' ? regDocs : recDocs;
@@ -168,7 +186,9 @@ export async function scanFolders(force = false): Promise<string> {
         visits.push({ id: b.id, key, date: date <= today ? date : today });
       }
     }
-    if (!visits.length && !regs.length && !starts.length && !places.length && !bits.length) return sorted ? `${sorted} archivo(s) de SETENA ordenados en Fotos / Regencias` : '';
+    const docsMsg = docsRead ? `${docsRead} PDF de SETENA leídos (${Object.entries(docKinds).map(([k, n]) => `${n} ${KIND_NAME[k as DocKind]}`).join(', ')})${docsMoved ? `, ${docsMoved} movidos a su carpeta` : ''}` : '';
+    if (!visits.length && !regs.length && !starts.length && !places.length && !bits.length)
+      return [sorted && `${sorted} archivo(s) de SETENA ordenados en Fotos / Regencias`, docsMsg].filter(Boolean).join(' · ');
     mutate(d => {
       for (const v of visits) { const b = d.projects.find(x => x.id === v.id); if (b && !deliveryOf(b, v.key).visit) { applyStep(b, v.key, 'visit', v.date); applyStep(b, v.key, 'photos', v.date); } }
       for (const r of regs) {
@@ -184,7 +204,7 @@ export async function scanFolders(force = false): Promise<string> {
       for (const id of starts) { const b = d.projects.find(x => x.id === id); if (b) applyStep(b, 's:start', 'uploaded', today); }
       for (const p of places) { const b = d.projects.find(x => x.id === p.id); if (b && !b.location) b.location = { lat: p.lat, lng: p.lng, text: '', source: 'photo' }; }
     }, { undo: true });
-    return [sorted && `${sorted} archivo(s) de SETENA ordenados`, bits.length && `${bits.length} bitácora(s) marcadas por SETENA`, visits.length && `${visits.length} inspección(es) marcadas por sus fotos`, regs.length && `${regs.length} regencia(s) / nota(s) de recibido marcadas`,
+    return [docsMsg, sorted && `${sorted} archivo(s) de SETENA ordenados`, bits.length && `${bits.length} bitácora(s) marcadas por SETENA`, visits.length && `${visits.length} inspección(es) marcadas por sus fotos`, regs.length && `${regs.length} regencia(s) / nota(s) de recibido marcadas`,
       starts.length && `${starts.length} carta(s) de inicio`, places.length && `ubicación de ${places.length} proyecto(s) tomada del GPS`].filter(Boolean).join(' · ');
   } finally { busy = false; }
 }

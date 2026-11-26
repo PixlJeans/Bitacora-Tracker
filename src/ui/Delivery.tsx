@@ -13,6 +13,7 @@ import { backend } from '../lib/backend';
 import { Ic, toast } from './core';
 import { Thumb, saveAttachments } from './ProjectLog';
 import { deliveryFolder, monthFolderOf, receiptFolder } from '../lib/folders';
+import { regenciaLabels } from '../lib/docSort';
 
 const DAY = 864e5;
 export const daysUntil = (iso: string, today = todayISO()) => Math.round((fromISO(iso).getTime() - fromISO(today).getTime()) / DAY);
@@ -54,7 +55,7 @@ export function DeliveryCard({ b, itemKey: key }: { b: Project; itemKey: string;
         <b>{monthly ? `📅 ${monthNameOf(key.slice(2))}` : '🗂️ Regencia (semestral)'}</b>
         {!monthly && !e.uploaded && <DateMover b={b} itemKey={key} what="Regencia" date={due} auto={auto} onMove={v => editDelivery(b.id, key, { due: v })} />}
         <span className="grow" />
-        {monthly && <DocsButton b={b} ym={key.slice(2)} />}
+        {monthly && MONTH_DOCS.map(([sub, label]) => <DocsButton key={sub} b={b} ym={key.slice(2)} sub={sub} label={label} />)}
         <FolderButton b={b} itemKey={key} />
       </div>
       {monthly ? <>
@@ -64,6 +65,7 @@ export function DeliveryCard({ b, itemKey: key }: { b: Project; itemKey: string;
           onMove={v => editDelivery(b.id, key, { due: v })} />
         <MonthNote b={b} itemKey={key} />
       </> : <>
+        <RegenciaInfo b={b} itemKey={key} />
         <CheckRow b={b} itemKey={key} step="letter" name="✍️ Elaboración de la regencia" today={today} />
         <CheckRow b={b} itemKey={key} step="uploaded" name="📤 Subir regencia" today={today} date={due} />
         <CheckRow b={b} itemKey={key} step="received" name="🧾 Nota de recibido" today={today}
@@ -124,10 +126,14 @@ export function FolderButton({ b, itemKey: key, folder: given, label: givenLabel
   );
 }
 
-/** «📂 Regencias (2)» on a month: the PDF / Word files of that month (e.g. downloaded from SETENA).
- *  Only shown when that month has some. */
-function DocsButton({ b, ym }: { b: Project; ym: string }) {
-  const folder = monthFolderOf(b, ym, 'Regencias');
+/** Other folders of a month (filled by the SETENA download, sorted by what each PDF is). */
+const MONTH_DOCS: [Parameters<typeof monthFolderOf>[2], string][] = [
+  ['Regencias', '📂 Regencias'], ['Notas de recibido', '🧾 Recibidos'], ['Comunicados SETENA', '📨 SETENA'], ['Cartas', '✉️ Cartas'], ['Documentos', '📄 Otros']
+];
+
+/** «📂 Regencias (2)» on a month: the files of one of its folders. Only shown when it has some. */
+function DocsButton({ b, ym, sub, label }: { b: Project; ym: string; sub: Parameters<typeof monthFolderOf>[2]; label: string }) {
+  const folder = monthFolderOf(b, ym, sub);
   const [n, setN] = useState(0);
   useEffect(() => {
     let live = true;
@@ -140,9 +146,23 @@ function DocsButton({ b, ym }: { b: Project; ym: string }) {
   return (
     <button type="button" className="btn sm folder-btn has" title={`Abrir en el explorador: ${folder.replace(/\//g, '\\')}`}
       onClick={() => backend.openSubfolder(folder).catch(err => toast(String(err)))}>
-      📂 Regencias<b className="folder-n">{n}</b>
+      {label}<b className="folder-n">{n}</b>
     </button>
   );
+}
+
+/** Under a Regencia: which report(s) its folder holds, read from the PDF itself («IRA-I-2024 · Agosto 2023 - Enero 2024»). */
+function RegenciaInfo({ b, itemKey: key }: { b: Project; itemKey: string }) {
+  const folder = deliveryFolder(b, key);
+  const [names, setNames] = useState<string[]>([]);
+  useEffect(() => {
+    let live = true;
+    backend.listFolder(folder).then(l => { if (live) setNames(l); }).catch(() => { /* not on desktop */ });
+    return () => { live = false; };
+  }, [folder]);
+  const labels = regenciaLabels(b, names);
+  if (!labels.length) return null;
+  return <div className="reg-info">📄 {labels.join(' · ')}</div>;
 }
 
 /** Date of a task with «✏️ cambiar»: it can be moved to any date, even another month (the calendar follows it). */

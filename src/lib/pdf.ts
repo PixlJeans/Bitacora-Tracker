@@ -9,10 +9,10 @@ pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
 interface Frag { str: string; x: number; y: number; h: number }
 
-export async function textFromPdf(data: ArrayBuffer): Promise<string> {
+export async function textFromPdf(data: ArrayBuffer, maxPages = Infinity): Promise<string> {
   const doc = await pdfjs.getDocument({ data: new Uint8Array(data) }).promise;
   const pages: string[] = [];
-  for (let p = 1; p <= doc.numPages; p++) {
+  for (let p = 1; p <= Math.min(doc.numPages, maxPages); p++) {
     const page = await doc.getPage(p);
     const tc = await page.getTextContent();
     const fragments: Frag[] = [];
@@ -31,5 +31,6 @@ export async function textFromPdf(data: ArrayBuffer): Promise<string> {
     rows.sort((a, b) => b[0].y - a[0].y);
     pages.push(rows.map(r => r.sort((a, b) => a.x - b.x).map(f => f.str.trim()).join('  ')).join('\n'));
   }
+  void doc.destroy();
   return pages.join('\n\n');
 }

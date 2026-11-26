@@ -47,7 +47,7 @@ export function setenaTarget(b: Project, ym: string, name: string, receipt = fal
 export const isImage = (name: string) => IMG.test(name);
 
 /** Folder of one month of a project (by date), e.g. «…/2026/11 - Noviembre/Documentos». */
-export const monthFolderOf = (b: Pick<Project, 'code' | 'name'>, ym: string, sub: 'Fotos' | 'Regencias' | 'Notas de recibido' | 'Documentos' | 'SETENA') => `${projectFolder(b)}/${monthFolder(ym)}/${sub}`;
+export const monthFolderOf = (b: Pick<Project, 'code' | 'name'>, ym: string, sub: 'Fotos' | 'Regencias' | 'Notas de recibido' | 'Documentos' | 'SETENA' | 'Comunicados SETENA' | 'Cartas') => `${projectFolder(b)}/${monthFolder(ym)}/${sub}`;
 
 const monthFolder = (ym: string) => {
   const [y, m] = ym.split('-');

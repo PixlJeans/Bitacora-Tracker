@@ -1030,3 +1030,5 @@ button.sr-chip{cursor:pointer}
 .setena-line .sl-avance{display:inline-flex;align-items:center;gap:.35rem}
 .setena-line .sl-bar{width:70px;height:6px;border-radius:4px;background:color-mix(in srgb,currentColor 15%,transparent);overflow:hidden;display:inline-block}
 .setena-line .sl-bar i{display:block;height:100%;background:var(--accent,#16a34a)}
+/* The regencia report(s) found in a Regencia's folder */
+.reg-info{font-size:.78rem;margin:-.1rem 0 .35rem;padding:.25rem .6rem;border-radius:8px;background:color-mix(in srgb,#8b5cf6 10%,transparent)}

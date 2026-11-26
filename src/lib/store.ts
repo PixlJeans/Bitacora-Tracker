@@ -112,6 +112,16 @@ export function useAppData(): AppData {
 
 /** Cleans up whatever was read from disk (older versions, missing fields, odd values). */
 const strList = (v: any): string[] => Array.isArray(v) ? v.filter((x: any) => typeof x === 'string').slice(0, 20) : [];
+const KINDS = ['regencia', 'receipt', 'setena', 'letter', 'foreign', 'other', 'notext'];
+function normDocs(o: any): NonNullable<Project['docs']> {
+  const out: NonNullable<Project['docs']> = {};
+  for (const [k, v] of Object.entries(o) as [string, any][]) {
+    if (!v || !KINDS.includes(v.kind)) continue;
+    const s = (x: any) => typeof x === 'string' ? x.slice(0, 60) : undefined;
+    out[k] = JSON.parse(JSON.stringify({ kind: v.kind, final: v.final ? true : undefined, ira: s(v.ira), expediente: s(v.expediente), period: s(v.period), number: s(v.number), placed: !!v.placed }));
+  }
+  return out;
+}
 function normSetena(s: any): SetenaInfo {
   return {
     avance: typeof s.avance === 'number' && s.avance >= 0 && s.avance <= 100 ? s.avance : null,
@@ -216,7 +226,8 @@ export function normalize(raw: any): AppData {
         noOpeningDate: !!b.noOpeningDate,
         ...(isoDate(b.setenaStart) ? { setenaStart: isoDate(b.setenaStart)! } : {}),
         ...(typeof b.setenaUrl === 'string' && b.setenaUrl.startsWith('https://bitacora.setena.go.cr/') ? { setenaUrl: b.setenaUrl } : {}),
-        ...(b.setena && typeof b.setena === 'object' ? { setena: normSetena(b.setena) } : {})
+        ...(b.setena && typeof b.setena === 'object' ? { setena: normSetena(b.setena) } : {}),
+        ...(b.docs && typeof b.docs === 'object' && !Array.isArray(b.docs) ? { docs: normDocs(b.docs) } : {})
       };
       // Older data: projects imported without a date got the import day as their opening date.
       // If nothing was done on them yet, mark the date as unknown so they don't show made-up deliveries.

@@ -8,6 +8,10 @@ import { normalize, applyStep, emptyData, fileLogIntoDeliveries, replaceAll, get
 import { emptyDelivery } from '../src/lib/types';
 import { backend } from '../src/lib/backend';
 import { scanFolders } from '../src/lib/scan';
+import { docReader } from '../src/lib/docSort';
+import { classifyDoc } from '../src/lib/docKind';
+// the PDFs of the scanner tests are regencias of their own project
+docReader.text = async (p: string) => `Informe de Regencia Ambiental IRA-I-2026 Proyecto: X Expediente Administrativo: ${/(D\d-\d+-\d{4})/.exec(p)?.[1]}-SETENA Periodo de Regencia Enero - Junio 2026`;
 import { monthlyKeysDueIn, openingFrom, hasSchedule, agenda, completeIn, monthlyDue, regenciaInMonth, nextDue, nextRegencia, computeReminders, reportTasks, sortDate, pendingOf, inspectionDate, taskColumns, pendingBefore } from '../src/lib/schedule';
 import { readExif, commonDate, gpsComun } from '../src/lib/exif';
 import { groupNearby, distanceKm, routeLink, parseCoordinates, planRoute, routeKm } from '../src/lib/geo';
@@ -353,7 +357,7 @@ console.log('deliveries OK');
   };
   (backend as any).readHead = async () => '';
   await scanFolders(true);
-  assert.deepEqual(moves, ['2026-07-22_aaaaaaaa.pdf → 2026/07 - Julio/Regencias', '2026-02-27_bbbbbbbb.pdf → 2026/02 - Febrero/Regencias', '2026-02-27_cccccccc.jpg → 2026/02 - Febrero/Fotos', '2026-03-05_dddddddd.pdf → 2026/03 - Marzo/Regencias']);
+  assert.deepEqual([...moves].sort(), ['2026-02-27_bbbbbbbb.pdf → 2026/02 - Febrero/Regencias', '2026-02-27_cccccccc.jpg → 2026/02 - Febrero/Fotos', '2026-03-05_dddddddd.pdf → 2026/03 - Marzo/Regencias', '2026-07-22_aaaaaaaa.pdf → 2026/07 - Julio/Regencias']);
   const p = getData().projects[0];
   assert.equal(p.deliveries?.['r:2026-07-10']?.uploaded, '2026-07-22', 'regencia checked after sorting');
   assert.equal(p.deliveries?.['m:2026-02']?.visit, '2026-02-27', 'inspection checked after sorting');
@@ -372,6 +376,62 @@ console.log('deliveries OK');
   // checking «Subir regencia» by hand also checks «Elaboración»
   markStep(p.id, 'r:2027-01-10', 'uploaded', '2027-01-12');
   assert.equal(getData().projects[0].deliveries!['r:2027-01-10'].letter, '2027-01-12');
+}
+// ---- what a SETENA PDF is, from its own first page (texts as pdf.js reads the real ones) ----
+{
+  const reg = classifyDoc('Informe de Regencia Ambiental IRA-I-2024 Proyecto: CONDOMINIO VISTA DEL BOSQUE Propietario: Urbanizadora HJH del Este S.A. Expediente Administrativo: D1-0170-2020-SETENA CARLOS JIMENEZ PEREZ (FIRMA) Periodo de Informe Regencial: Agosto 2023 - Enero 2024 Firmado', 'D1-0170-2020');
+  assert.deepEqual(reg, { kind: 'regencia', ira: 'IRA-I-2024', expediente: 'D1-0170-2020', period: 'Agosto 2023 - Enero 2024' });
+  const fin = classifyDoc('Informe Final Consolidado de Regencia Ambiental IRA-II-2025 Proyecto: PUENTE LA GRAN VÍA Propietario: LAURA UREÑA ALFARO Expediente Administrativo: D1-0848-2022-SETENA Periodo de la Regencia Febrero 2025 - Julio 2025', 'D1-0848-2022');
+  assert.equal(fin.kind, 'regencia'); assert.equal(fin.final, true); assert.equal(fin.period, 'Febrero 2025 - Julio 2025');
+  assert.equal(classifyDoc('Informe de Regencia Ambiental IRA-I-2022 Proyecto: CONDOMINIO ALMAZARA Expediente Administrativo: D1-0550-2020-SETENA Periodo de Regencia Abril - Mayo del 2022', 'D1-0170-2020').kind, 'foreign', 'another project\'s regencia');
+  const rec = classifyDoc('29/2/24, 19:30 Correspondencia 02271-2024 Ministerio de Ambiente y Energía Secretaría Técnica Nacional Ambiental Código: ST-SIG-F-0000 Impreso por: Usuario Externo Formulario Recepción de Correspondencia Tipo Fecha de Ingreso Asunto: Informe de Regencia Ambiental IRA-I-2024', 'D1-0170-2020');
+  assert.deepEqual(rec, { kind: 'receipt', number: '02271-2024' }, 'a receipt quotes the regencia but is a receipt');
+  assert.equal(classifyDoc('Conﬁrmación de Ingreso de Correspondencia Detalle de la correspondencia registrada Información Interna Secuencia Expediente Fecha de Ingreso 04965-2024 D1-13049-2014 22/05/2024', 'D1-13049-2014').kind, 'receipt');
+  assert.equal(classifyDoc('Powered by TCPDF (www.tcpdf.org) Documento de evaluación ambiental Otro Secretaría Técnica Nacional (SETENA), Costa Rica. Número de expediente D1-0206-2022 Tipo de trámite TRAMITE EN LINEA', 'D1-0206-2022').kind, 'receipt');
+  assert.equal(classifyDoc('Página 1 de 2 De: Secretaría Técnica Nacional Ambiental (SETENA) — Departamento de Auditoría y Seguimiento Para: Desarrolladores y Responsables Ambientales Asunto: Seguimiento apertura formal de bitácoras', 'D1-0607-2026').kind, 'setena');
+  assert.equal(classifyDoc('INF-TEC-DT-ASA-0339-2023 23 de junio de 2023 Asunto: Cierre de etapa única Desarrollador y Regente Ambiental a Notificar CONSTRUINMUEBLE del Este', 'D1-0550-2020').kind, 'setena');
+  assert.equal(classifyDoc('Cartago, 07 de agosto del 2024. CS-81-2024-07-08 Señores Secretaría Técnica Nacional Ambiental Ministerio del Ambiente & Energía ATENCIÓN: DEPARTAMENTO DE GARANTÍAS AMBIENTALES REFERENCIA: Exp. D1-0848-2022', 'D1-0848-2022').kind, 'letter');
+  assert.equal(classifyDoc('  \n ', 'D1-0848-2022').kind, 'notext');
+}
+// ---- the scanner moves each SETENA PDF to the folder of what it is, and undoes a check it caused ----
+{
+  const dd = normalize({ projects: [{ id: 'k1', code: 'D1-0007-2025', name: 'KIND', status: 'open', openedOn: '2025-05-10', createdOn: '2025-05-10', noOpeningDate: false,
+    deliveries: { 'r:2026-11-10': { ...emptyDelivery(), letter: '2026-11-09', uploaded: '2026-11-09', due: '2026-11-09' } } }] });
+  replaceAll(dd);
+  const root = 'Proyectos/D1-0007-2025 - KIND';
+  let tree = [
+    { path: `${root}/2026/11 - Noviembre/Regencias/2026-11-09_0ddc7be7.pdf`, size: 1, modified: 0 },   // SETENA notice, taken as a regencia
+    { path: `${root}/2026/07 - Julio/Regencias/2026-07-02_11111111.pdf`, size: 1, modified: 0 },       // a receipt
+    { path: `${root}/2026/07 - Julio/Regencias/2026-07-01_22222222.pdf`, size: 1, modified: 0 }        // the regencia
+  ];
+  const texts: Record<string, string> = {
+    '0ddc7be7': 'De: Secretaría Técnica Nacional Ambiental (SETENA) — Departamento de Auditoría y Seguimiento Para: Desarrolladores',
+    '11111111': 'Correspondencia 07001-2026 Formulario Recepción de Correspondencia Asunto: Informe de Regencia Ambiental IRA-I-2026',
+    '22222222': 'Informe de Regencia Ambiental IRA-I-2026 Proyecto: KIND Expediente Administrativo: D1-0007-2025-SETENA Periodo de Regencia Enero - Junio 2026'
+  };
+  const before = docReader.text;
+  docReader.text = async (p: string) => texts[/_([0-9a-f]{8})\.pdf$/.exec(p)![1]];
+  const moves: string[] = [];
+  (backend as any).listTree = async () => tree;
+  (backend as any).moveAttachment = async (path: string, folder: string) => {
+    moves.push(`${path.split('/').pop()} → ${folder.split('/').slice(-1)[0]}`);
+    tree = tree.map(t => t.path === path ? { ...t, path: `${folder}/${path.split('/').pop()}` } : t);
+    return `${folder}/${path.split('/').pop()}`;
+  };
+  const msg = await scanFolders(true);
+  assert.deepEqual(moves.sort(), ['2026-07-02_11111111.pdf → Notas de recibido', '2026-11-09_0ddc7be7.pdf → Comunicados SETENA']);
+  const p = getData().projects[0];
+  assert.equal(p.docs!['2026-07-01_22222222.pdf'].ira, 'IRA-I-2026');
+  assert.equal(p.deliveries!['r:2026-11-10'].uploaded, null, 'the notice no longer counts as the November regencia');
+  assert.equal(p.deliveries!['r:2026-11-10'].due, null, 'back to its own date');
+  assert.equal(p.deliveries!['r:2026-05-10'].uploaded, '2026-07-01', 'the real regencia is checked');
+  assert.equal(p.deliveries!['r:2026-05-10'].received, '2026-07-02', 'and its receipt');
+  assert(msg.includes('3 PDF de SETENA leídos'), msg);
+  // read once: nothing is read or moved again
+  moves.length = 0;
+  await scanFolders(true);
+  assert.equal(moves.length, 0);
+  docReader.text = before;
 }
 console.log('moved / no-date OK');
 process.exit(0); // store.ts leaves an hourly timer running

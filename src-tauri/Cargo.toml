@@ -1,6 +1,6 @@
 [package]
 name = "bitacora-tracker"
-version = "1.6.26"
+version = "1.6.27"
 description = "Tracking of SETENA environmental logbooks (bitácoras)"
 authors = ["Cognose"]
 edition = "2021"
