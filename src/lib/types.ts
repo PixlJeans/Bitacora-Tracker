@@ -96,6 +96,18 @@ export interface Label {
   color: string; // #rrggbb
 }
 
+/** Summary of a project's page in the SETENA portal. */
+export interface SetenaInfo {
+  avance: number | null;        // the progress % of the consultant's participation (slider on the page)
+  lastEntry: string | null;     // date of the newest entry
+  entries: number;              // how many entries
+  people: string[];             // participants, «NOMBRE (Activo)» / «NOMBRE (Renuncia)»
+  others: string[];             // other people who wrote entries (developer, another consultant…)
+  participationClosed: boolean; // «Participación Cerrada»
+  approvedOn: string | null;    // date SETENA approved the bitácora request (Solicitudes)
+  readAt: string;               // when it was read
+}
+
 export interface Project {
   id: string;
   code: string;        // D1-0170-2020
@@ -117,6 +129,7 @@ export interface Project {
   noOpeningDate?: boolean;  // the opening date is unknown (not in the PDF): no deliveries until it is set
   setenaStart?: string;     // date of the first entry in the SETENA bitácora (the bottom of its page)
   setenaUrl?: string;       // its page in the SETENA portal
+  setena?: SetenaInfo;      // what its SETENA page says (read with «Descargar todo de SETENA»)
 }
 
 /** A saved overall review. */

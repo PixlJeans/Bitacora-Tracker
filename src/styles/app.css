@@ -1025,3 +1025,8 @@ button.sr-chip{cursor:pointer}
 .dl-track span{display:block;height:100%;background:var(--accent);transition:width .4s}
 .setena-start{font-size:.8rem;padding:.15rem .5rem;border-radius:8px;background:color-mix(in srgb,#f59e0b 12%,transparent)}
 .month-note{overflow:hidden;resize:none;line-height:1.45;white-space:pre-wrap}
+/* What SETENA's page says about the project */
+.setena-line{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .8rem;font-size:.8rem;margin:-.2rem 0 .6rem;padding:.4rem .7rem;border-radius:10px;background:color-mix(in srgb,var(--accent,#16a34a) 8%,transparent)}
+.setena-line .sl-avance{display:inline-flex;align-items:center;gap:.35rem}
+.setena-line .sl-bar{width:70px;height:6px;border-radius:4px;background:color-mix(in srgb,currentColor 15%,transparent);overflow:hidden;display:inline-block}
+.setena-line .sl-bar i{display:block;height:100%;background:var(--accent,#16a34a)}

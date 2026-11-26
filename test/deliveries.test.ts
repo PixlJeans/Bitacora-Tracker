@@ -2,6 +2,7 @@
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { applySetena } from '../src/lib/setenaImport';
+import { quietInSetena } from '../src/lib/setenaInfo';
 import { deliveryFolder, folderOf } from '../src/lib/folders';
 import { normalize, applyStep, emptyData, fileLogIntoDeliveries, replaceAll, getData, markStep } from '../src/lib/store';
 import { emptyDelivery } from '../src/lib/types';
@@ -293,6 +294,20 @@ console.log('deliveries OK');
   assert.equal(at('eeeeeeee'), 'Regencias', 'bottom of the page = earlier');
   assert.equal(at('dddddddd'), 'Notas de recibido');
   assert.deepEqual(r.moves.map(m => m.from.split('/').slice(-2).join('/')), ['Regencias/2024-02-29_aaaaaaaa.pdf', 'Regencias/2024-04-02_dddddddd.pdf']);
+  // the page's summary
+  const man2 = { readAt: '2026-11-26T20:00:00Z', requests: [{ code: 'D1-0009-2023', state: 'Rechazada', date: '01/06/2023 10:00 a.m.' }, { code: 'D1-0009-2023', state: 'Aprobada', date: '10/08/2023 09:00 a.m.' }],
+    projects: [{ ...man.projects[0], avance: 55, participationClosed: false, people: ['CARLOS JIMÉNEZ (Activo)', 'FANNY BRENES (Renuncia)'],
+      events: man.projects[0].events.map((e, i) => ({ ...e, author: i === 0 ? 'CARLOS AGUILAR' : 'CARLOS JIMÉNEZ' })) }] };
+  applySetena(dd, man2 as any, '2026-11-26');
+  const si = dd.projects[0].setena!;
+  assert.equal(si.avance, 55);
+  assert.equal(si.lastEntry, '2024-04-02');
+  assert.equal(si.entries, 5);
+  assert.equal(si.approvedOn, '2023-08-10', 'approved request, not the rejected one');
+  assert.deepEqual(si.others, ['CARLOS AGUILAR'], 'other authors, not me');
+  const q = quietInSetena({ ...dd, projects: dd.projects.map(p => ({ ...p, status: 'open' as const })) } as any, '2026-11-26');
+  assert.equal(q.length, 1, 'no entry since April 2024 → listed');
+  assert.equal(normalize(JSON.parse(JSON.stringify(dd))).projects[0].setena!.avance, 55, 'survives saving');
 }
 // ---- location from photos downloaded from SETENA (nothing checked) ----
 {

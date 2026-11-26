@@ -22,8 +22,14 @@
       code: r.cells[0].textContent.trim(), name: r.cells[1].textContent.replace(/\s+/g, ' ').trim(), status: r.cells[2].textContent.trim(), closed: tipo === 0
     })).filter(p => p.url);
   }
-  async function events(url) {
+  // the bitácora page: its entries, plus the header (progress %, people, participation closed)
+  async function events(url, p) {
     const doc = await get(url.replace(/&amp;/g, '&'));
+    const av = (doc.querySelector('#ex15') || { getAttribute: () => '' }).getAttribute('data-slider-value');
+    p.avance = av !== null && av !== '' && !isNaN(+av) ? +av : null;
+    const roles = [...doc.querySelectorAll('h6.letraLinea2')].map(h => h.textContent.replace(/\s+/g, ' ').trim());
+    p.participationClosed = roles.some(r => /Participaci[oó]n Cerrada/i.test(r));
+    p.people = roles.map(r => /^(.+?)\s*\((Activo|Renuncia|Inactivo)[^)]*\)/i.exec(r)).filter(Boolean).map(m => `${m[1]} (${m[2]})`);
     return [...doc.querySelectorAll('li')].filter(l => l.querySelector('.flik-timeline-date')).map(l => {
       const files = new Set();
       l.querySelectorAll('a[href], img[src]').forEach(x => {
@@ -34,8 +40,11 @@
       // «7:45:30 p.m» → seconds of the day (to know which of two entries of the same day came first)
       const tm = /(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([ap])\.?\s*m/i.exec(when);
       const time = tm ? ((+tm[1] % 12) + (tm[4].toLowerCase() === 'p' ? 12 : 0)) * 3600 + +tm[2] * 60 + +(tm[3] || 0) : null;
+      const share = /objeto=(\d+)/.exec(l.innerHTML);
       return {
         date: parseDate(when), time,
+        author: ((l.querySelector('.flik-timeline-title') || {}).textContent || '').trim(),
+        id: share ? share[1] : null,
         text: clean((l.querySelector('.masTexto') || {}).textContent || ''),
         files: [...files]
       };
@@ -77,10 +86,18 @@
       const projects = [...await list(1), ...await list(0)];
       for (let i = 0; i < projects.length; i++) {
         status(`Leyendo ${projects[i].code} (${i + 1} de ${projects.length})…`);
-        try { projects[i].events = await events(projects[i].url); } catch (e) { projects[i].events = []; projects[i].error = String(e); }
+        try { projects[i].events = await events(projects[i].url, projects[i]); } catch (e) { projects[i].events = []; projects[i].error = String(e); }
       }
+      // requests to SETENA (Solicitudes › Ver todas): when each bitácora was approved
+      status('Leyendo las solicitudes…');
+      let requests = [];
+      try {
+        const doc = await get('/Expediente/SolicitudesBitacora');
+        requests = [...doc.querySelectorAll('tr')].map(r => [...r.cells].map(c => c.textContent.replace(/\s+/g, ' ').trim()))
+          .filter(c => c.length >= 5 && /^D\d/.test(c[1])).map(c => ({ code: c[1], state: c[3], date: c[4] }));
+      } catch { /* optional */ }
       const files = projects.reduce((s, p) => s + p.events.reduce((t, e) => t + e.files.length, 0), 0);
-      await send(JSON.stringify({ projects, readAt: new Date().toISOString() }));
+      await send(JSON.stringify({ projects, requests, readAt: new Date().toISOString() }));
       status(`✓ Listo: ${projects.length} bitácoras y ${files} archivos enviados. La app los descarga y los ordena; puedes cerrar esta ventana.`);
     } catch (e) {
       status('No se pudo: ' + (e.message || e)); btn.style.display = '';

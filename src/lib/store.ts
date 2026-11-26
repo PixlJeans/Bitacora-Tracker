@@ -3,7 +3,7 @@
 // persists to disk (with a short delay) and reschedules the native reminders.
 
 import { useSyncExternalStore } from 'react';
-import type { AppData, Attachment, Delivery, EntryType, ImportRow, LogEntry, Project, ProjectLocation, ReminderKind, Settings, Status, Step } from './types';
+import type { AppData, Attachment, Delivery, EntryType, ImportRow, LogEntry, Project, ProjectLocation, ReminderKind, SetenaInfo, Settings, Status, Step } from './types';
 import { DEFAULT_LABELS, emptyDelivery } from './types';
 import { backend, esWeb } from './backend';
 import { computeReminders, deliveryKeyForDate, monthForVisit, pendingBefore } from './schedule';
@@ -111,6 +111,16 @@ export function useAppData(): AppData {
 }
 
 /** Cleans up whatever was read from disk (older versions, missing fields, odd values). */
+const strList = (v: any): string[] => Array.isArray(v) ? v.filter((x: any) => typeof x === 'string').slice(0, 20) : [];
+function normSetena(s: any): SetenaInfo {
+  return {
+    avance: typeof s.avance === 'number' && s.avance >= 0 && s.avance <= 100 ? s.avance : null,
+    lastEntry: isoDate(s.lastEntry), entries: typeof s.entries === 'number' ? s.entries : 0,
+    people: strList(s.people), others: strList(s.others), participationClosed: !!s.participationClosed,
+    approvedOn: isoDate(s.approvedOn), readAt: typeof s.readAt === 'string' ? s.readAt : ''
+  };
+}
+
 export function normalize(raw: any): AppData {
   const d = emptyData();
   if (!raw || typeof raw !== 'object') return d;
@@ -205,7 +215,8 @@ export function normalize(raw: any): AppData {
         createdOn: isoDate(pick(b, 'createdOn', 'creada')) || todayISO(),
         noOpeningDate: !!b.noOpeningDate,
         ...(isoDate(b.setenaStart) ? { setenaStart: isoDate(b.setenaStart)! } : {}),
-        ...(typeof b.setenaUrl === 'string' && b.setenaUrl.startsWith('https://bitacora.setena.go.cr/') ? { setenaUrl: b.setenaUrl } : {})
+        ...(typeof b.setenaUrl === 'string' && b.setenaUrl.startsWith('https://bitacora.setena.go.cr/') ? { setenaUrl: b.setenaUrl } : {}),
+        ...(b.setena && typeof b.setena === 'object' ? { setena: normSetena(b.setena) } : {})
       };
       // Older data: projects imported without a date got the import day as their opening date.
       // If nothing was done on them yet, mark the date as unknown so they don't show made-up deliveries.

@@ -13,6 +13,7 @@ import { backend } from '../lib/backend';
 import { shortDate, longDate, fromISO, todayISO, uid, monthName, monthNameOf, addMonths } from '../lib/dates';
 import { ProjectCalendar } from './ProjectCalendar';
 import { projectFolder } from '../lib/folders';
+import { agoText, daysSince } from '../lib/setenaInfo';
 import { MonthNote } from './Delivery';
 import { Ic, openModal, closeModal, confirmDialog, toast } from './core';
 import { openSettings } from './Settings';
@@ -138,6 +139,7 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
           <button type="button" className="dp-link" onClick={() => setEditFields(true)}>✏️ Editar datos</button>
         </div>
       )}
+      {b && !editFields && view.setena && <SetenaLine b={view} />}
       {(!b || editFields) && <div className="ed-row">
         <div className="ed-f code">
           <label className="modal-label" htmlFor="ed_num">Número</label>
@@ -294,6 +296,26 @@ function MonthNotes({ b, f, setNotes }: { b: Project; f: Project; setNotes: (v: 
           {oldLog.map(e => <p key={e.id} className="mn-old"><b>{shortDate(e.date)}</b> {e.text}</p>)}
         </details>
       )}
+    </div>
+  );
+}
+
+/** One line with what SETENA's page says: progress, newest entry, entries, people. */
+function SetenaLine({ b }: { b: Project }) {
+  const s = b.setena!;
+  const today = todayISO();
+  const old = s.lastEntry ? daysSince(s.lastEntry, today) > 35 : true;
+  const left = s.people.filter(p => /renuncia/i.test(p)).map(p => p.replace(/\s*\(.*$/, ''));
+  return (
+    <div className="setena-line" title={`Leído de SETENA el ${s.readAt.slice(0, 10)}${s.people.length ? ` · Participantes: ${s.people.join(', ')}` : ''}`}>
+      <b>🌐 SETENA</b>
+      {s.avance !== null && <span className="sl-avance"><span className="sl-bar"><i style={{ width: `${s.avance}%` }} /></span> avance {s.avance}%</span>}
+      {s.lastEntry ? <span className={old && b.status === 'open' && !s.participationClosed ? 'red-t' : ''}>última anotación {shortDate(s.lastEntry)} {s.lastEntry.slice(2, 4)} · {agoText(s.lastEntry, today)}</span>
+        : <span className="muted">sin anotaciones{s.approvedOn ? ` · aprobada el ${shortDate(s.approvedOn)} ${s.approvedOn.slice(2, 4)}` : ''}</span>}
+      <span className="muted">{s.entries} anotaciones</span>
+      {s.participationClosed && <span className="sr-chip">participación cerrada</span>}
+      {s.others.length > 0 && <span className="muted">también escriben: {s.others.join(', ')}</span>}
+      {left.length > 0 && <span className="muted">renunció: {left.join(', ')}</span>}
     </div>
   );
 }

@@ -11,6 +11,7 @@ import { backend } from '../lib/backend';
 import { openModal, closeModal, toast, Ic } from './core';
 import { openEditor } from './ProjectEditor';
 import { daysText, daysUntil } from './Delivery';
+import { quietInSetena, agoText } from '../lib/setenaInfo';
 
 export function openStatusReport() {
   openModal(<StatusReport />, 'create-modal editor status-report');
@@ -58,6 +59,7 @@ function StatusReport() {
   const insp = upcoming.filter(t => t.kind === 'inspection');
   const { groups: trips } = groupNearby(insp, d.settings.radiusKm || 15);
   const tripsToShow = trips.filter(g => new Set(g.map(t => t.b.id)).size > 1);
+  const quiet = quietInSetena(d, today);
 
   const done = (t: ReportTask) => {
     const date = t.date <= today ? t.date : today;
@@ -80,6 +82,8 @@ function StatusReport() {
     }
     L.push('', `PENDIENTE DE ANTES (${overdue.length} en ${late.length} proyectos)`);
     for (const p of late) L.push(`  ${p.b.code} ${p.b.name}: ${kindSummary(p.tasks).map(k => k.text.replace(/^\S+ /, '')).join(' · ')}`);
+    if (quiet.length) L.push('', `SIN ANOTAR EN SETENA HACE MÁS DE UN MES (${quiet.length})`,
+      ...quiet.map(({ b, last }) => `  ${b.code} ${b.name}: ${last ? `última ${shortDate(last)} ${last.slice(2, 4)} (${agoText(last, today)})` : 'nunca'}`));
     if (noDate.length) L.push('', 'SIN FECHA DE APERTURA', ...noDate.map(b => `  ${b.code} ${b.name}`));
     return L.join('\n');
   }
@@ -157,6 +161,19 @@ ${noDate.length ? `<h2>Sin fecha de apertura</h2><ul>${noDate.map(b => `<li><b>$
           <span className="sr-late-k">{kindSummary(p.tasks).map(k => <span key={k.k} className={`sr-chip k-${k.k}`}>{k.text}</span>)}</span>
         </div>
       ))}
+
+      {quiet.length > 0 && <>
+        <h3 className="sr-h">🌐 Sin anotar en SETENA hace más de un mes <small className="muted">({quiet.length} abiertas)</small></h3>
+        {quiet.map(({ b, last }) => (
+          <div key={b.id} className="sr-late">
+            <button type="button" className="sr-proj" onClick={() => open(b)}><b className="mono">{b.code}</b> {b.name}</button>
+            <span className="sr-late-k">
+              <span className="sr-chip">{last ? `última ${shortDate(last)} ${last.slice(2, 4)} · ${agoText(last, today)}` : 'nunca'}</span>
+              {b.setena!.avance !== null && <span className="sr-chip">avance {b.setena!.avance}%</span>}
+            </span>
+          </div>
+        ))}
+      </>}
 
       {noDate.length > 0 && <>
         <h3 className="sr-h">📅 Sin fecha de apertura <small className="muted">({noDate.length})</small></h3>

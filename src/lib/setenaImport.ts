@@ -16,9 +16,13 @@ import { emptyDelivery } from './types';
 import { todayISO, uid } from './dates';
 import { isImage, monthFolderOf, setenaTarget } from './folders';
 
-export interface SetenaEvent { date: string; time?: number | null; text: string; files: string[] }
-export interface SetenaProject { code: string; name: string; status: string; closed?: boolean; url?: string; events: SetenaEvent[] }
-export interface SetenaManifest { projects: SetenaProject[]; readAt?: string }
+export interface SetenaEvent { date: string; time?: number | null; text: string; files: string[]; author?: string; id?: string | null }
+export interface SetenaProject {
+  code: string; name: string; status: string; closed?: boolean; url?: string; events: SetenaEvent[];
+  avance?: number | null; people?: string[]; participationClosed?: boolean;
+}
+export interface SetenaRequest { code: string; state: string; date: string }
+export interface SetenaManifest { projects: SetenaProject[]; requests?: SetenaRequest[]; readAt?: string }
 export interface Download { url: string; folder: string; name: string }
 export interface Move { from: string; folder: string }
 
@@ -72,6 +76,21 @@ export function applySetena(d: AppData, m: SetenaManifest, today = todayISO()) {
       if (b.status !== st && !b.archived) { b.status = st; statuses++; }
     }
     if (start) b.setenaStart = start;
+    // the page's summary: progress, newest entry, people, approval of the request
+    const me = (sp.people ?? [])[0]?.replace(/\s*\(.*$/, '').trim().toUpperCase();
+    const approved = (m.requests ?? []).filter(r => r.code.trim().toUpperCase() === code && /aprobad/i.test(r.state))
+      .map(r => /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(r.date)).filter(Boolean)
+      .map(x => `${x![3]}-${x![2].padStart(2, '0')}-${x![1].padStart(2, '0')}`).sort();
+    b.setena = {
+      avance: typeof sp.avance === 'number' ? sp.avance : null,
+      lastEntry: events.length ? events[events.length - 1].date : null,
+      entries: events.length,
+      people: (sp.people ?? []).slice(0, 20),
+      others: [...new Set(events.map(e => (e.author ?? '').trim()).filter(a => a && a.toUpperCase() !== me))].slice(0, 20),
+      participationClosed: !!sp.participationClosed,
+      approvedOn: approved[approved.length - 1] ?? null,
+      readAt: m.readAt ?? today
+    };
     if (sp.url) { const u = new URL(sp.url.replace(/&amp;/g, '&'), 'https://bitacora.setena.go.cr/').href; if (u.startsWith('https://bitacora.setena.go.cr/')) b.setenaUrl = u; }
     for (const e of events) {
       const ym = e.date.slice(0, 7);
