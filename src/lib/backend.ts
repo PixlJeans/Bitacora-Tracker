@@ -36,6 +36,8 @@ export interface Backend {
   openSubfolder(folder: string): Promise<void>;
   /** Files in a folder of the data folder (what the user put there from the file explorer). */
   listFolder(folder: string): Promise<string[]>;
+  /** Moves all the files of one folder to another (a date moved to another month). */
+  moveFolderFiles(from: string, to: string): Promise<number>;
   readB64(path: string): Promise<string>;
   openAttachment(path: string): Promise<void>;
   deleteAttachment(path: string): Promise<void>;
@@ -127,6 +129,7 @@ const tauri: Backend = {
   async moveAttachment(path, folder) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<string>('move_attachment', { path, folder }); },
   async openSubfolder(folder) { const { invoke } = await import('@tauri-apps/api/core'); await invoke('open_folder', { folder }); },
   async listFolder(folder) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<string[]>('list_folder', { folder }); },
+  async moveFolderFiles(from, to) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<number>('move_folder_files', { from, to }); },
   async readB64(path) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<string>('read_file_b64', { path }); },
   async openAttachment(path) { const { invoke } = await import('@tauri-apps/api/core'); await invoke('open_attachment', { path }); },
   async deleteAttachment(path) { const { invoke } = await import('@tauri-apps/api/core'); await invoke('delete_attachment', { path }); },
@@ -194,6 +197,7 @@ const web: Backend = {
   async moveAttachment(path) { return path; },
   async openSubfolder() { /* solo escritorio */ },
   async listFolder() { return []; },
+  async moveFolderFiles() { return 0; },
   async saveAttachment(code, name, data, thumb, folder) {
     const path = `${folder ?? `proyectos/${code}`}/${Date.now().toString(36)}_${name}`;
     memory.set(path, data); if (thumb) memory.set(path + '.mini.jpg', thumb);
@@ -268,6 +272,7 @@ const server: Backend = {
   async moveAttachment(path) { return path; },
   async openSubfolder() { /* solo escritorio */ },
   async listFolder() { return []; },
+  async moveFolderFiles() { return 0; },
   async saveAttachment(code, name, data, thumb) {
     const r = await api<{ path: string; thumb: string | null }>('upload', { code, name, data, thumb: thumb ?? null });
     return { path: r.path, thumb: r.thumb };

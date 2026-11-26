@@ -357,6 +357,42 @@ fn move_attachment(path: String, folder: String, state: State<'_, AppState>) -> 
     Ok(rel_string(&base, &to))
 }
 
+/// Moves every file of one folder of the data folder to another (when an inspection or Regencia is moved
+/// to another month). Removes the old folder, and its month / year folders, if they end up empty.
+#[tauri::command]
+fn move_folder_files(from: String, to: String, state: State<'_, AppState>) -> Result<u32, String> {
+    let base = data_dir(&state)?;
+    let src = base.join(clean_folder(&from));
+    let dst = base.join(clean_folder(&to));
+    if src == dst || !src.is_dir() {
+        return Ok(0);
+    }
+    fs::create_dir_all(&dst).map_err(|e| e.to_string())?;
+    let mut n = 0;
+    for e in fs::read_dir(&src).map_err(|e| e.to_string())?.flatten() {
+        let p = e.path();
+        if !p.is_file() {
+            continue;
+        }
+        let name = e.file_name().to_string_lossy().to_string();
+        let target = dst.join(free_name(&dst, &name));
+        if fs::rename(&p, &target).is_err() {
+            fs::copy(&p, &target).map_err(|e| e.to_string())?;
+            let _ = fs::remove_file(&p);
+        }
+        n += 1;
+    }
+    // clean up empty folders: …/Regencias → …/11 - Noviembre → …/2026 (never above the project folder)
+    let mut dir = Some(src.as_path());
+    for _ in 0..3 {
+        match dir {
+            Some(d) if d.starts_with(&base) && fs::remove_dir(d).is_ok() => dir = d.parent(),
+            _ => break,
+        }
+    }
+    Ok(n)
+}
+
 /// Names of the files in a folder of the data folder (no subfolders, no hidden files); empty if it doesn't exist.
 #[tauri::command]
 fn list_folder(folder: String, state: State<'_, AppState>) -> Result<Vec<String>, String> {
@@ -616,6 +652,7 @@ pub fn run() {
             move_attachment,
             open_folder,
             list_folder,
+            move_folder_files,
             open_setena,
             open_map,
             phone::phone_start,

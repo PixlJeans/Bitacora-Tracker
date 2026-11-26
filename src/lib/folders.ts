@@ -3,6 +3,7 @@
 //   Proyectos/<Código - Nombre>/<Año>/<MM - Mes>/Fotos/        ← photos of that month's Inspección
 //   Proyectos/<Código - Nombre>/<Año>/<MM - Mes>/Regencias/    ← the Regencia documents (Word / PDF)
 import type { Project } from './types';
+import { inspectionDate, regenciaDue } from './schedule';
 
 const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
@@ -19,10 +20,11 @@ const monthFolder = (ym: string) => {
   return `${y}/${m} - ${MONTHS[Number(m) - 1]}`;
 };
 
-/** Folder of a delivery's files: 'm:YYYY-MM' → Fotos, 'r:YYYY-MM-DD' → Regencias, 's:start' → Inicio de obras. */
-export function deliveryFolder(b: Pick<Project, 'code' | 'name'>, key: string): string {
-  if (key.startsWith('m:')) return `${projectFolder(b)}/${monthFolder(key.slice(2, 9))}/Fotos`;
-  if (key.startsWith('r:')) return `${projectFolder(b)}/${monthFolder(key.slice(2, 9))}/Regencias`;
+/** Folder of a delivery's files, in the month of its (possibly moved) date:
+ *  'm:YYYY-MM' → <month of the inspection>/Fotos · 'r:YYYY-MM-DD' → <month of the Regencia>/Regencias · 's:start' → Inicio de obras. */
+export function deliveryFolder(b: Project, key: string): string {
+  if (key.startsWith('m:')) return `${projectFolder(b)}/${monthFolder(inspectionDate(b, key.slice(2)).slice(0, 7))}/Fotos`;
+  if (key.startsWith('r:')) return `${projectFolder(b)}/${monthFolder(regenciaDue(b, key.slice(2)).slice(0, 7))}/Regencias`;
   return `${projectFolder(b)}/Inicio de obras`;
 }
 

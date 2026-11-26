@@ -174,10 +174,13 @@ console.log('deliveries OK');
 }
 // ---- folders on disk ----
 {
-  const pr = { code: 'D1-0170-2020', name: 'CONDOMINIO: VISTA DEL BOSQUE' };
+  const pr = normalize({ projects: [{ id: 'f', code: 'D1-0170-2020', name: 'CONDOMINIO: VISTA DEL BOSQUE', status: 'open', openedOn: '2020-01-15', createdOn: '2020-01-15', noOpeningDate: false,
+    deliveries: { 'r:2026-07-15': { due: '2026-08-02' }, 'm:2026-12': { planned: '2027-01-03' } } }] }).projects[0];
   assert.equal(deliveryFolder(pr, 'm:2026-11'), 'Proyectos/D1-0170-2020 - CONDOMINIO- VISTA DEL BOSQUE/2026/11 - Noviembre/Fotos');
   assert.equal(deliveryFolder(pr, 'r:2027-01-15'), 'Proyectos/D1-0170-2020 - CONDOMINIO- VISTA DEL BOSQUE/2027/01 - Enero/Regencias');
   assert.equal(deliveryFolder(pr, 's:start'), 'Proyectos/D1-0170-2020 - CONDOMINIO- VISTA DEL BOSQUE/Inicio de obras');
+  assert.equal(deliveryFolder(pr, 'r:2026-07-15'), 'Proyectos/D1-0170-2020 - CONDOMINIO- VISTA DEL BOSQUE/2026/08 - Agosto/Regencias', 'moved Regencia → its new month');
+  assert.equal(deliveryFolder(pr, 'm:2026-12'), 'Proyectos/D1-0170-2020 - CONDOMINIO- VISTA DEL BOSQUE/2027/01 - Enero/Fotos', 'moved inspection → its new month');
   assert.equal(folderOf('a/b/c.jpg'), 'a/b');
 }
 // ---- Informe de estado ----

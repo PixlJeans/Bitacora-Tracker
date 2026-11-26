@@ -8,7 +8,7 @@ import type { Project, Step } from '../lib/types';
 import { MONTHLY_NAME, SEMIANNUAL_NAME, STEPS } from '../lib/types';
 import { inspectionDate, monthlyDue, monthlyDueAuto, regenciaDue } from '../lib/schedule';
 import { shortDate, longDate, fromISO, monthNameOf, todayISO } from '../lib/dates';
-import { addDeliveryFiles, editDelivery, deliveryOf, markStep, removeDeliveryFile } from '../lib/store';
+import { addDeliveryFiles, editDelivery, deliveryOf, getData, markStep, relocateFiles, removeDeliveryFile } from '../lib/store';
 import { backend } from '../lib/backend';
 import { Ic, toast } from './core';
 import { Thumb, saveAttachments } from './ProjectLog';
@@ -120,15 +120,20 @@ export function FolderButton({ b, itemKey: key }: { b: Project; itemKey: string 
 }
 
 /** Date of a task with «✏️ cambiar»: it can be moved to any date, even another month (the calendar follows it). */
-function DateMover({ b, what, date, auto, onMove }: { b: Project; itemKey: string; what: string; date: string; auto: string; onMove: (v: string | null) => void }) {
+function DateMover({ b, itemKey: key, what, date, auto, onMove }: { b: Project; itemKey: string; what: string; date: string; auto: string; onMove: (v: string | null) => void }) {
   const today = todayISO();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(date);
   const days = daysUntil(date, today);
   const moveTo = (v: string) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
+    const before = deliveryFolder(b, key);
     onMove(v === auto ? null : v);
     setEditing(false);
+    // Its files follow it to the folder of the new month
+    const after = getData().projects.find(x => x.id === b.id);
+    if (after && deliveryFolder(after, key) !== before)
+      void relocateFiles().then(() => backend.moveFolderFiles(before, deliveryFolder(after, key))).catch(() => { /* not on desktop */ });
     toast(`${b.code}: ${what} ${v === auto ? 'en su fecha automática' : 'movida'} al ${longDate(v)}`, true);
     if (v.slice(0, 7) !== date.slice(0, 7)) window.dispatchEvent(new CustomEvent('bt-goto-month', { detail: v.slice(0, 7) }));
   };
