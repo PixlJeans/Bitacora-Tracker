@@ -112,6 +112,7 @@ export interface Project {
   deliveries?: Record<string, Delivery>;
   lastUpdated: string | null;
   createdOn: string;        // YYYY-MM-DD (added to the app)
+  noOpeningDate?: boolean;  // the opening date is unknown (not in the PDF): no deliveries until it is set
 }
 
 /** A saved overall review. */
@@ -155,6 +156,7 @@ export interface ImportRow {
   doubts: string[];
   existingId: string | null;
   result: 'pending' | 'imported' | 'skipped';
+  noDate?: boolean;   // the PDF did not have the opening date
 }
 
 /** Import in progress: stored in the data so it can be PAUSED and resumed another day. */

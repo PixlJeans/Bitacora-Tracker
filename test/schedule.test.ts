@@ -3,7 +3,7 @@ import { normalize } from '../src/lib/store';
 import assert from 'node:assert';
 
 // Opened Jan 15 2026 → monthly on the 15th of each month; Regencia Jul 15 2026 (reminders from Jun 15)
-const base = { createdOn: '2026-01-15', uploads: [], visits: [], regencias: [] };
+const base = { createdOn: '2026-01-15', uploads: [], visits: [], regencias: [], noOpeningDate: false };
 const d = normalize({
   projects: [
     { ...base, id: 'a', code: 'D1-0170-2026', name: 'VISTA DEL BOSQUE', status: 'open', openedOn: '2026-01-15' },

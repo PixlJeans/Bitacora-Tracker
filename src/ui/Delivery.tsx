@@ -48,7 +48,18 @@ export function DeliveryCard({ b, itemKey: key, isOpen = false }: { b: Project; 
   const done = isMonthly(key) ? !!(e.visit && e.uploaded) : !!e.uploaded;
   const days = daysUntil(due, today);
   const [showLetter, setShowLetter] = useState(!e.uploaded);
-  const [editingDate, setEditingDate] = useState(false);
+  const [editingDate, setEditingDateRaw] = useState(false);
+  const [draft, setDraft] = useState('');
+  const setEditingDate = (on: boolean) => { setDraft(due); setEditingDateRaw(on); };
+  /** Moves the informe / regencia to another date — any month. The calendar follows it to its new month. */
+  const moveTo = (v: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
+    editDelivery(b.id, key, { due: v === auto ? null : v });
+    setEditingDateRaw(false);
+    const other = v.slice(0, 7) !== due.slice(0, 7);
+    toast(`${b.code}: ${isMonthly(key) ? 'informe' : 'regencia'} ${v === auto ? 'en su fecha automática' : 'movido'} al ${longDate(v)}`, true);
+    if (other) window.dispatchEvent(new CustomEvent('bt-goto-month', { detail: v.slice(0, 7) }));
+  };
   const lateVisit = !!e.planned && e.planned > inspBy;
 
   const step = (p: Step, date: string | null) => {
@@ -105,10 +116,12 @@ export function DeliveryCard({ b, itemKey: key, isOpen = false }: { b: Project; 
           <div className="ent-row sub">
             {e.uploaded ? doneOn('uploaded') : editingDate ? (
               <span className="ent-date-edit">
-                <input type="date" className="modal-input sm" value={due} autoFocus
-                  onChange={ev => { const v = ev.target.value; if (v) { editDelivery(b.id, key, { due: v === auto ? null : v }); toast(`${b.code}: fecha del informe ${shortDate(v)}`, true); } }} />
-                {adjusted && <button type="button" className="dp-link" onClick={() => { editDelivery(b.id, key, { due: null }); setEditingDate(false); toast(`${b.code}: fecha automática ${shortDate(auto)}`, true); }}>automática</button>}
-                <button type="button" className="dp-link" onClick={() => setEditingDate(false)}>listo</button>
+                <input type="date" className="modal-input sm" value={draft} autoFocus
+                  onChange={ev => setDraft(ev.target.value)}
+                  onKeyDown={ev => { if (ev.key === 'Enter') moveTo(draft); if (ev.key === 'Escape') setEditingDate(false); }} />
+                <button type="button" className="btn sm primary" disabled={!draft || draft === due} onClick={() => moveTo(draft)}>Mover</button>
+                {adjusted && <button type="button" className="dp-link" onClick={() => moveTo(auto)}>automática ({shortDate(auto)})</button>}
+                <button type="button" className="dp-link" onClick={() => setEditingDate(false)}>cancelar</button>
               </span>
             ) : (
               <span className="ent-date-edit">

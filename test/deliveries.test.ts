@@ -1,7 +1,7 @@
 // Tests: adjustable dates, sorting by date, EXIF reader and grouping by distance
 import assert from 'node:assert';
 import { normalize, applyStep, emptyData, fileLogIntoDeliveries } from '../src/lib/store';
-import { agenda, completeIn, monthlyDue, regenciaInMonth, nextDue, nextRegencia, computeReminders, inspectionDeadline, sortDate, pendingOf } from '../src/lib/schedule';
+import { monthlyKeysDueIn, openingFrom, hasSchedule, agenda, completeIn, monthlyDue, regenciaInMonth, nextDue, nextRegencia, computeReminders, inspectionDeadline, sortDate, pendingOf } from '../src/lib/schedule';
 import { readExif, commonDate, gpsComun } from '../src/lib/exif';
 import { groupNearby, distanceKm, routeLink, parseCoordinates } from '../src/lib/geo';
 
@@ -133,4 +133,26 @@ assert.deepEqual(L.entries.map(e => e.id), ['e2', 'e3'], 'empty photo-only entry
 assert.equal(L.entries[1].attachments.length, 1, 'observation keeps its file');
 assert.equal(fileLogIntoDeliveries(lg), 0, 'running again moves nothing');
 console.log('deliveries OK');
+// ---- Informe moved to another month; unknown opening date ----
+{
+  const dd = normalize({ projects: [
+    { id: 'm', code: 'D1-0001-2025', name: 'MOVIDO', status: 'open', openedOn: '2025-11-10', createdOn: '2026-11-01', uploads: [], visits: [], regencias: [],
+      deliveries: { 'm:2026-12': { due: '2027-01-04' } } },
+    { id: 'n', code: 'D1-0002-2025', name: 'SIN FECHA', status: 'open', openedOn: '2026-11-25', createdOn: '2026-11-25', uploads: [], visits: [], regencias: [] }
+  ] });
+  const [m, n] = dd.projects;
+  assert.deepEqual(monthlyKeysDueIn(m, '2026-12'), [], 'December informe moved out');
+  assert.deepEqual(monthlyKeysDueIn(m, '2027-01'), ['2026-12', '2027-01'], 'January shows both');
+  assert.equal(monthlyKeysDueIn(m, '2027-03').length, 1, 'future months have an informe');
+  assert.equal(n.noOpeningDate, true, 'imported with the import day as opening → unknown');
+  assert.equal(hasSchedule(n), false);
+  assert.equal(nextDue(n, '2026-11-25'), null, 'no made-up deliveries');
+  assert.equal(m.noOpeningDate, false);
+  // next informe Dec 10 2026, next regencia May 10 2027 → opened on the 10th, regencias in May/Nov
+  const o = openingFrom('2026-12-10', '2027-05-10', 'D1-0001-2025', '2026-11-25');
+  assert.equal(o.slice(8), '10'); assert(['05', '11'].includes(o.slice(5, 7)) && o.startsWith('2025'), o);
+  const rm = computeReminders({ ...dd, projects: [m] } as any, new Date('2026-12-20T12:00:00').getTime()).find(r => r.key === 'm:m:2026-12');
+  assert(rm && new Date(rm.at).toISOString().startsWith('2027-01-0'), 'reminder follows the moved date');
+}
+console.log('moved / no-date OK');
 process.exit(0); // store.ts leaves an hourly timer running

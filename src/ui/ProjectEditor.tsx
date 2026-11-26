@@ -6,11 +6,11 @@ import type { Project, Status, ProjectLocation } from '../lib/types';
 import { STATUSES, isActiveProject, isFinished } from '../lib/types';
 import { codeExists, getData, mutate, labelForStatus, archive, useAppData } from '../lib/store';
 import { normalizeCode, isValidCode } from '../lib/parser';
-import { trackingStart, regenciaDueDates, regenciaDue } from '../lib/schedule';
+import { trackingStart, regenciaDueDates, regenciaDue, openingFrom } from '../lib/schedule';
 import { mapLink, parseCoordinates } from '../lib/geo';
 import { gpsComun } from '../lib/exif';
 import { backend } from '../lib/backend';
-import { shortDate, fromISO, addMonths, todayISO, uid } from '../lib/dates';
+import { shortDate, longDate, fromISO, addMonths, todayISO, uid } from '../lib/dates';
 import { ProjectCalendar } from './ProjectCalendar';
 import { ProjectLog } from './ProjectLog';
 import { Ic, openModal, closeModal, confirmDialog, toast } from './core';
@@ -114,7 +114,7 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
         </div>
         <div className="ed-f">
           <label className="modal-label" htmlFor="ed_ap">Apertura</label>
-          <input id="ed_ap" type="date" className="modal-input" value={f.openedOn} onChange={e => e.target.value && set('openedOn', e.target.value)} />
+          <input id="ed_ap" type="date" className="modal-input" value={f.openedOn} onChange={e => e.target.value && setF(x => ({ ...x, openedOn: e.target.value, noOpeningDate: false }))} />
         </div>
         <div className="ed-f">
           <label className="modal-label" htmlFor="ed_st">Estado</label>
@@ -124,7 +124,12 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
         </div>
       </div>
 
-      {isActiveProject(f)
+      {isActiveProject(f) && f.noOpeningDate && <MissingOpening f={f} onSet={o => {
+        setF(x => ({ ...x, openedOn: o, noOpeningDate: false }));
+        if (b) mutate(dd => { const x = dd.projects.find(y => y.id === b.id); if (x) { x.openedOn = o; x.noOpeningDate = false; } });
+        toast(`📅 ${f.code}: apertura ${longDate(o)}; entregas calculadas`, true);
+      }} />}
+      {isActiveProject(f) && f.noOpeningDate ? null : isActiveProject(f)
         ? <p className="ed-auto-line muted">📅 Informe Regencial el día <b>{day}</b> de cada mes · Regencia cada 6 meses{regencias.length ? ` (próxima ${shortDate(regenciaDue(view, regencias.find(v => !view.regencias.includes(v)) ?? regencias[0]))})` : ''} · ✏️ cada fecha se puede cambiar</p>
         : <p className="ed-auto-line muted">{f.archived ? 'Archivada: sin entregas.' : 'Ya terminó: no genera entregas. Ciérrala con 📦 Archivar.'}</p>}
 
@@ -198,6 +203,29 @@ function LocationField({ b, onChange }: { b: Project; onChange: (u: ProjectLocat
       {u && <input className="modal-input" placeholder="Dirección o referencia (opcional): 200 m norte de la iglesia de…" value={u.text}
         onChange={e => onChange({ ...u, text: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} />}
       {err && <p className="ed-hint warn">{err}</p>}
+    </div>
+  );
+}
+
+/** Box for projects whose opening date is unknown: set it directly, or work it out from the
+ *  next Informe Regencial (gives the day of the month) and the next Regencia (gives the months). */
+function MissingOpening({ f, onSet }: { f: Project; onSet: (opening: string) => void }) {
+  const [opening, setOpening] = useState('');
+  const [inf, setInf] = useState('');
+  const [reg, setReg] = useState('');
+  const calc = inf && reg ? openingFrom(inf, reg, f.code) : '';
+  return (
+    <div className="ed-missing">
+      <b>📅 Falta la fecha de apertura</b> <span className="muted">— no venía en el PDF. Sin ella no se calculan el informe ni la regencia.</span>
+      <div className="ed-missing-row">
+        <label>Apertura <input type="date" className="modal-input sm" value={opening} onChange={e => setOpening(e.target.value)} /></label>
+        <button type="button" className="btn sm primary" disabled={!opening} onClick={() => onSet(opening)}>Usar</button>
+        <span className="muted">o si no la sabes:</span>
+        <label>Próximo informe <input type="date" className="modal-input sm" value={inf} onChange={e => setInf(e.target.value)} /></label>
+        <label>Próxima regencia <input type="date" className="modal-input sm" value={reg} onChange={e => setReg(e.target.value)} /></label>
+        <button type="button" className="btn sm primary" disabled={!calc} onClick={() => onSet(calc)} title={calc ? `Apertura calculada: ${longDate(calc)}` : ''}>Calcular</button>
+        <button type="button" className="dp-link" onClick={() => onSet(f.openedOn)}>La de arriba ({shortDate(f.openedOn)}) es correcta</button>
+      </div>
     </div>
   );
 }

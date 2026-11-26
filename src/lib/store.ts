@@ -178,7 +178,7 @@ export function normalize(raw: any): AppData {
       seen.add(id);
       const regencias = pick(b, 'regencias', 'informes');
       const entries = pick(b, 'entries', 'anotaciones');
-      return {
+      const x: Project = {
         id,
         code: String(pick(b, 'code', 'numero')).toUpperCase().trim(),
         name: String(pick(b, 'name', 'nombre') || '').trim() || 'PROYECTO SIN NOMBRE',
@@ -195,8 +195,14 @@ export function normalize(raw: any): AppData {
         location: normLocation(pick(b, 'location', 'ubicacion')),
         deliveries: normDeliveries(pick(b, 'deliveries', 'entregas')),
         lastUpdated: pick(b, 'lastUpdated', 'ultimaActualizacion') || null,
-        createdOn: isoDate(pick(b, 'createdOn', 'creada')) || todayISO()
+        createdOn: isoDate(pick(b, 'createdOn', 'creada')) || todayISO(),
+        noOpeningDate: !!b.noOpeningDate
       };
+      // Older data: projects imported without a date got the import day as their opening date.
+      // If nothing was done on them yet, mark the date as unknown so they don't show made-up deliveries.
+      if (b.noOpeningDate === undefined && x.openedOn === x.createdOn && !x.visits.length && !x.uploads.length
+        && !x.regencias.length && !Object.keys(x.deliveries ?? {}).length) x.noOpeningDate = true;
+      return x;
     });
   return d;
 }

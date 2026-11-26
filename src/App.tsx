@@ -25,7 +25,7 @@ import { toCsv } from './lib/csv';
 
 type View = 'active' | 'agenda' | 'month' | 'nextMonth' | 'regencias' | 'archive';
 type SortOrder = 'nextDue' | 'code' | 'name' | 'openedOn';
-type StatusFilter = 'all' | Status | 'overdue';
+type StatusFilter = 'all' | Status | 'overdue' | 'nodate';
 
 const LS_VIEW = 'bt_vista';
 
@@ -114,7 +114,7 @@ export default function App() {
     const pf = new Map(activeProjects.map(b => [b.id, nextDue(b)]));
     const prox = (b: Project) => { const x = pf.get(b.id); return x ? sortDate(x) : '9999'; };
     const l = activeProjects.filter(b =>
-      (filter === 'all' || (filter === 'overdue' ? !!pf.get(b.id)?.overdue : b.status === filter)) && (!labelFilter || b.labelId === labelFilter));
+      (filter === 'all' || (filter === 'overdue' ? !!pf.get(b.id)?.overdue : filter === 'nodate' ? !!b.noOpeningDate : b.status === filter)) && (!labelFilter || b.labelId === labelFilter));
     const cmp: Record<SortOrder, (a: Project, b: Project) => number> = {
       nextDue: (a, b) => (isActiveProject(a) ? 0 : 1) - (isActiveProject(b) ? 0 : 1) || prox(a).localeCompare(prox(b)) || a.code.localeCompare(b.code),
       code: (a, b) => a.code.localeCompare(b.code),
@@ -161,6 +161,7 @@ export default function App() {
       <div className="filters simple" data-help-title="Filtros" data-help="Muestra solo las vencidas, las abiertas o las que ya terminaron. Clic otra vez para quitar el filtro. La lista siempre va por fecha: lo más urgente arriba.">
         {chip('all', 'Todas', activeProjects.length)}
         {chip('overdue', 'Vencidas', activeProjects.filter(b => nextDue(b)?.overdue).length, 'warn')}
+        {activeProjects.some(b => b.noOpeningDate) && chip('nodate', 'Sin fecha', activeProjects.filter(b => b.noOpeningDate).length, 'warn')}
         {chip('new', 'Nuevas', r.new, 'status-new')}
         {chip('open', 'Abiertas', r.open, 'status-open')}
         {chip('closing', 'Sol. cierre', r.closing, 'status-closing')}
@@ -173,7 +174,7 @@ export default function App() {
   } else if (view === 'month' || view === 'nextMonth') {
     const m = view === 'month' ? mk : nextMk;
     const t = monthTasks(d, m);
-    const doneCount = t.filter(x => completeIn(x.b, m)).length;
+    const doneCount = t.filter(x => completeIn(x.b, x.mk)).length;
     const withRegencia = t.filter(x => x.regencia).length;
     body = <>
       <div className="month-summary">
@@ -182,7 +183,7 @@ export default function App() {
         <div><b>{withRegencia}</b><span>con Regencia</span></div>
       </div>
       {t.length > 0 && <RowHeader />}
-      {t.length ? [...t].sort((a, c) => Number(completeIn(a.b, m)) - Number(completeIn(c.b, m)) || a.date.localeCompare(c.date)).map(x => P(x.b, { type: 'month', mk: m }))
+      {t.length ? [...t].sort((a, c) => Number(completeIn(a.b, a.mk)) - Number(completeIn(c.b, c.mk)) || a.date.localeCompare(c.date)).map(x => P(x.b, { type: 'month', mk: m }))
         : emptyData('No hay entregas este mes.')}
     </>;
   } else if (view === 'regencias') {

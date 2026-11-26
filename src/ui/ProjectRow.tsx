@@ -53,6 +53,9 @@ export function ProjectRow({ d: _d, b, data }: { d: AppData; b: Project; mode?: 
       <span className="c-code mono">{b.code}</span>
       <span className="c-name" title={b.name}>{b.name}</span>
 
+      {active && b.noOpeningDate ? (
+        <span className="c-missing" title="El PDF no traía la fecha de apertura: ábrelo para ponerla">📅 Falta la fecha de apertura · clic para ponerla</span>
+      ) : <>
       {/* Inspección */}
       {pf ? (
         <span className={`c-task ${visited ? 'done' : inspLate ? 'overdue' : ''}`} data-tour={data ? 'monthly' : undefined}
@@ -76,6 +79,7 @@ export function ProjectRow({ d: _d, b, data }: { d: AppData; b: Project; mode?: 
           <button className="ck" title={`Marcar ${what} presentado hoy`} onClick={ev => { stop(ev); mark('uploaded', true); }}><Ic n="check" size={13} /></button>
         </span>
       ) : <span className="c-task na">{b.archived ? 'Archivada' : '—'}</span>}
+      </>}
 
       <button className={`status-chip status-${b.status}`} title="Cambiar estado" onClick={ev => { stop(ev); setPop(ev.currentTarget); }}
         data-help-title="Estado" data-help="Estado en SETENA. Solicitud de Cierre y Terminada ya no generan entregas.">{STATUSES.find(s => s.id === b.status)?.short}</button>

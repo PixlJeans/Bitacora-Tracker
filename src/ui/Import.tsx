@@ -22,13 +22,14 @@ function applyRow(d: AppData, f: ImportRow): 'new' | 'updated' {
   const code = normalizeCode(f.code), name = f.name.trim().replace(/\s+/g, ' ');
   const b = d.projects.find(x => x.code === code);
   if (b) {
-    Object.assign(b, { name: name, status: f.status, openedOn: f.openedOn, labelId: f.labelId });
+    Object.assign(b, { name: name, status: f.status, labelId: f.labelId });
+    if (!f.noDate) { b.openedOn = f.openedOn; b.noOpeningDate = false; }
     return 'updated';
   }
   const isNew: Project = {
     id: uid(), code: code, name: name, status: f.status, labelId: f.labelId, openedOn: f.openedOn,
     notes: '', uploads: [], visits: [], regencias: [], entries: [], archived: false, archivedOn: null,
-    lastUpdated: null, createdOn: todayISO()
+    lastUpdated: null, createdOn: todayISO(), noOpeningDate: !!f.noDate
   };
   d.projects.push(isNew);
   return 'new';
@@ -91,14 +92,14 @@ function Import({ initial: initial }: { initial?: File }) {
   const logout = () => mutate(dd => { dd.importSession = null; }, { undo: false });
 
   function startOneByOne() {
-    const fs = rows.map(f => ({ ...f, openedOn: f.openedOn || defaultOpenedOn }));
+    const fs = rows.map(f => ({ ...f, noDate: f.noDate ?? !f.openedOn, openedOn: f.openedOn || defaultOpenedOn }));
     setRows(fs); setI(0); setStep('one');
     saveSession(fs, 0);
   }
 
   function importAll(from = 0) {
     const fs = rows.map((f, k) => (k < from || f.result !== 'pending') ? f
-      : { ...f, openedOn: f.openedOn || defaultOpenedOn });
+      : { ...f, noDate: f.noDate ?? !f.openedOn, openedOn: f.openedOn || defaultOpenedOn });
     const lists = fs.map((f, k) => ({ f, k })).filter(({ f, k }) => k >= from && f.result === 'pending' && valid(f));
     mutate(dd => {
       lists.forEach(({ f }) => applyRow(dd, f));
@@ -247,7 +248,7 @@ function Import({ initial: initial }: { initial?: File }) {
           </div>
           <div>
             <label className="one-l">Fecha de apertura</label>
-            <input type="date" className="modal-input" value={f.openedOn} onChange={e => upd({ openedOn: e.target.value })} />
+            <input type="date" className="modal-input" value={f.openedOn} onChange={e => upd({ openedOn: e.target.value, noDate: false })} />
             {due && <small className="one-hint">Informe Regencial el día {fromISO(f.openedOn).getDate()} de cada mes · 1.ª Regencia {longDate(due)} (avisos desde {shortDate(reminderFrom(due))})</small>}
           </div>
           <div>
