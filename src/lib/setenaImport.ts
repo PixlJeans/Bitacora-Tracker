@@ -1,8 +1,8 @@
 // ===== Everything from the SETENA bitácora portal, without guessing =====
 // The «Descargar de SETENA» window reads every bitácora (active and closed) and each entry: date, text and files.
 // Here it is copied as it is, by the DATE of each entry:
-//  · every file → Proyectos/<Código - Nombre>/<Año>/<MM - Mes>/Fotos (photos), …/Regencias (a document in the same
-//    month as a Regencia) or …/Documentos (named with that date); without opening date: …/<MM - Mes>/SETENA;
+//  · every file → Proyectos/<Código - Nombre>/<Año>/<MM - Mes>/Fotos (photos) or …/Regencias (PDF / Word),
+//    named with that date; without opening date: …/<MM - Mes>/SETENA;
 //  · every entry's text → that month's notes («SETENA 12/09/2023: …»);
 //  · the start of the project = its first SETENA entry (the bottom of its page): it fills the opening date of
 //    projects that don't have one (a date you entered is never changed);

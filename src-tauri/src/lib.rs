@@ -262,7 +262,15 @@ fn open_data_folder(state: State<'_, AppState>) -> Result<(), String> {
 
 #[cfg(target_os = "windows")]
 fn open_in_system<S: AsRef<OsStr>>(target: S) -> Result<(), String> {
-    std::process::Command::new("explorer").arg(target).spawn().map(|_| ()).map_err(|e| e.to_string())
+    // Web links (Google Maps, SETENA) go to the default browser through the URL handler: `explorer` does not
+    // open links with «?» / «&» reliably. Folders and files still open with the explorer.
+    let t = target.as_ref();
+    let is_link = t.to_string_lossy().starts_with("http://") || t.to_string_lossy().starts_with("https://");
+    if is_link {
+        std::process::Command::new("rundll32").arg("url.dll,FileProtocolHandler").arg(t).spawn().map(|_| ()).map_err(|e| e.to_string())
+    } else {
+        std::process::Command::new("explorer").arg(t).spawn().map(|_| ()).map_err(|e| e.to_string())
+    }
 }
 
 #[cfg(target_os = "macos")]

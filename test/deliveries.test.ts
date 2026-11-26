@@ -265,8 +265,8 @@ console.log('deliveries OK');
   const f = (n: string) => r.downloads.find(x => x.name.includes(n))!;
   assert.equal(f('76aad41f').folder, 'Proyectos/D1-0170-2020 - CONDOMINIO VISTA DEL BOSQUE/2023/08 - Agosto/Fotos');
   assert.equal(f('76aad41f').name, '2023-08-28_76aad41f.jpg');
-  assert.equal(f('553a394a').folder, 'Proyectos/D1-0170-2020 - CONDOMINIO VISTA DEL BOSQUE/2024/02 - Febrero/Documentos', 'Regencia due Jan 14: other month');
-  assert.equal(f('473fa0af').folder, 'Proyectos/D1-0607-2026 - AMPLIACION DE BODEGA/2026/11 - Noviembre/Documentos');
+  assert.equal(f('553a394a').folder, 'Proyectos/D1-0170-2020 - CONDOMINIO VISTA DEL BOSQUE/2024/02 - Febrero/Regencias', 'documents always go to their month\'s Regencias');
+  assert.equal(f('473fa0af').folder, 'Proyectos/D1-0607-2026 - AMPLIACION DE BODEGA/2026/11 - Noviembre/Regencias');
   assert.equal(f('solicitudcierre').folder, 'Proyectos/D1-0550-2020 - Condominio Almazara/2026/04 - Abril/SETENA');
   assert.equal(r.downloads.length, 7);
   // running it again changes nothing
@@ -304,8 +304,10 @@ console.log('deliveries OK');
   const root = 'Proyectos/D1-0003-2025 - SORT';
   let tree = [
     { path: `${root}/2026/07 - Julio/SETENA/2026-07-22_aaaaaaaa.pdf`, size: 1, modified: 0 },     // Regencia due Jul 10 → Regencias
-    { path: `${root}/2026/02 - Febrero/SETENA/2026-02-27_bbbbbbbb.pdf`, size: 1, modified: 0 },  // no Regencia that month → Documentos
-    { path: `${root}/2026/02 - Febrero/SETENA/2026-02-27_cccccccc.jpg`, size: 1, modified: 0 }   // photo → Fotos
+    { path: `${root}/2026/02 - Febrero/SETENA/2026-02-27_bbbbbbbb.pdf`, size: 1, modified: 0 },  // no Regencia that month → still Regencias (not checked)
+    { path: `${root}/2026/02 - Febrero/SETENA/2026-02-27_cccccccc.jpg`, size: 1, modified: 0 },  // photo → Fotos
+    { path: `${root}/2026/03 - Marzo/Documentos/2026-03-05_dddddddd.pdf`, size: 1, modified: 0 },  // old Documentos → Regencias
+    { path: `${root}/2026/03 - Marzo/Documentos/mi carta.pdf`, size: 1, modified: 0 }             // the user's own file: untouched
   ];
   const moves: string[] = [];
   (backend as any).listTree = async () => tree;
@@ -316,7 +318,7 @@ console.log('deliveries OK');
   };
   (backend as any).readHead = async () => '';
   await scanFolders(true);
-  assert.deepEqual(moves, ['2026-07-22_aaaaaaaa.pdf → 2026/07 - Julio/Regencias', '2026-02-27_bbbbbbbb.pdf → 2026/02 - Febrero/Documentos', '2026-02-27_cccccccc.jpg → 2026/02 - Febrero/Fotos']);
+  assert.deepEqual(moves, ['2026-07-22_aaaaaaaa.pdf → 2026/07 - Julio/Regencias', '2026-02-27_bbbbbbbb.pdf → 2026/02 - Febrero/Regencias', '2026-02-27_cccccccc.jpg → 2026/02 - Febrero/Fotos', '2026-03-05_dddddddd.pdf → 2026/03 - Marzo/Regencias']);
   const p = getData().projects[0];
   assert.equal(p.deliveries?.['r:2026-07-10']?.uploaded, '2026-07-22', 'regencia checked after sorting');
   assert.equal(p.deliveries?.['m:2026-02']?.visit, '2026-02-27', 'inspection checked after sorting');

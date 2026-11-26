@@ -24,12 +24,11 @@ export function regenciaKeyFor(b: Project, ym: string): string | null {
 
 const IMG = /\.(jpe?g|png|gif|webp|heic|heif)$/i;
 /** Where a file from SETENA goes, by the month of its entry (no guessing):
- *  photos → that month's Fotos · documents → that month's Regencias if a Regencia falls in that same month,
- *  otherwise that month's Documentos. While the project has no opening date: the month's SETENA folder. */
+ *  photos → that month's Fotos · documents (PDF / Word: regencias, notas de recibido…) → that month's Regencias.
+ *  While the project has no opening date: the month's SETENA folder. */
 export function setenaTarget(b: Project, ym: string, name: string): string {
   if (!hasSchedule(b)) return monthFolderOf(b, ym, 'SETENA');
-  if (IMG.test(name)) return monthFolderOf(b, ym, 'Fotos');
-  return monthFolderOf(b, ym, regenciaKeyFor(b, ym) ? 'Regencias' : 'Documentos');
+  return monthFolderOf(b, ym, IMG.test(name) ? 'Fotos' : 'Regencias');
 }
 
 /** Folder of one month of a project (by date), e.g. «…/2026/11 - Noviembre/Documentos». */

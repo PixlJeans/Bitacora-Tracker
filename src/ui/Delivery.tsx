@@ -12,7 +12,7 @@ import { addDeliveryFiles, editDelivery, deliveryOf, getData, markStep, relocate
 import { backend } from '../lib/backend';
 import { Ic, toast } from './core';
 import { Thumb, saveAttachments } from './ProjectLog';
-import { deliveryFolder } from '../lib/folders';
+import { deliveryFolder, monthFolderOf } from '../lib/folders';
 
 const DAY = 864e5;
 export const daysUntil = (iso: string, today = todayISO()) => Math.round((fromISO(iso).getTime() - fromISO(today).getTime()) / DAY);
@@ -54,6 +54,7 @@ export function DeliveryCard({ b, itemKey: key }: { b: Project; itemKey: string;
         <b>{monthly ? `📅 ${monthNameOf(key.slice(2))}` : '🗂️ Regencia (semestral)'}</b>
         {!monthly && !e.uploaded && <DateMover b={b} itemKey={key} what="Regencia" date={due} auto={auto} onMove={v => editDelivery(b.id, key, { due: v })} />}
         <span className="grow" />
+        {monthly && <DocsButton b={b} ym={key.slice(2)} />}
         <FolderButton b={b} itemKey={key} />
       </div>
       {monthly ? <>
@@ -117,6 +118,27 @@ export function FolderButton({ b, itemKey: key }: { b: Project; itemKey: string 
     <button type="button" className={`btn sm folder-btn ${n ? 'has' : ''}`} title={`Abrir en el explorador: ${folder.replace(/\//g, '\\')}`}
       onClick={() => backend.openSubfolder(folder).catch(err => toast(String(err)))}>
       📂 {label}{n !== null ? <b className="folder-n">{n}</b> : null}
+    </button>
+  );
+}
+
+/** «📂 Regencias (2)» on a month: the PDF / Word files of that month (e.g. downloaded from SETENA).
+ *  Only shown when that month has some. */
+function DocsButton({ b, ym }: { b: Project; ym: string }) {
+  const folder = monthFolderOf(b, ym, 'Regencias');
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    let live = true;
+    const read = () => backend.listFolder(folder).then(l => { if (live) setN(l.length); }).catch(() => { /* not on desktop */ });
+    read();
+    window.addEventListener('focus', read);
+    return () => { live = false; window.removeEventListener('focus', read); };
+  }, [folder]);
+  if (!n) return null;
+  return (
+    <button type="button" className="btn sm folder-btn has" title={`Abrir en el explorador: ${folder.replace(/\//g, '\\')}`}
+      onClick={() => backend.openSubfolder(folder).catch(err => toast(String(err)))}>
+      📂 Regencias<b className="folder-n">{n}</b>
     </button>
   );
 }

@@ -19,7 +19,8 @@ const DOC = /\.(docx?|pdf|odt|rtf|xlsx?)$/i;
 const MONTH_DIR = /\/(\d{4})\/(\d{2}) - [^/]+\/(Fotos|Regencias)\/[^/]+$/;
 /** A file downloaded from SETENA: …/<Año>/<MM - Mes>/SETENA/<YYYY-MM-DD>_… (the date of its SETENA entry). */
 const SETENA_FILE = /\/(\d{4})\/(\d{2}) - [^/]+\/(?:SETENA|Fotos|Regencias|Documentos)\/(\d{4}-\d{2}-\d{2})_[0-9a-f]{8}\.[a-z0-9]{2,5}$/i;
-const IN_SETENA = /\/(\d{4})\/(\d{2}) - [^/]+\/SETENA\/([^/]+)$/;
+// files still waiting to be sorted: in the month's SETENA folder, or SETENA documents left in the old «Documentos» folder
+const IN_SETENA = /\/(\d{4})\/(\d{2}) - [^/]+\/(?:SETENA\/([^/]+)|Documentos\/(\d{4}-\d{2}-\d{2}_[0-9a-f]{8}\.[a-z0-9]{2,5}))$/i;
 
 function b64ToBuf(b64: string): ArrayBuffer {
   const bin = atob(b64), u = new Uint8Array(bin.length);
@@ -76,14 +77,15 @@ export async function scanFolders(force = false): Promise<string> {
         }
       }
       if (!scheduled) continue;
-      // Files downloaded from SETENA: from the month's SETENA folder to that month's Fotos / Regencias / Documentos
+      // Files downloaded from SETENA: from the month's SETENA (or old Documentos) folder to that month's Fotos / Regencias
       let movedAny = false;
       for (const f of files) {
         const m = IN_SETENA.exec(f.path);
         if (!m) continue;
-        const target = setenaTarget(b, `${m[1]}-${m[2]}`, m[3]);
-        if (target.endsWith('/SETENA')) continue;
-        if (files.some(x => x.path === `${target}/${m[3]}`)) continue;
+        const name = m[3] ?? m[4];
+        const target = setenaTarget(b, `${m[1]}-${m[2]}`, name);
+        if (target.endsWith('/SETENA') || f.path === `${target}/${name}`) continue;
+        if (files.some(x => x.path === `${target}/${name}`)) continue;
         try { await backend.moveAttachment(f.path, target); movedAny = true; sorted++; } catch { /* in use: next time */ }
       }
       if (movedAny) { try { files = await backend.listTree(projectFolder(b)); } catch { continue; } }
@@ -149,7 +151,7 @@ export async function scanFolders(force = false): Promise<string> {
         visits.push({ id: b.id, key, date: date <= today ? date : today });
       }
     }
-    if (!visits.length && !regs.length && !starts.length && !places.length && !bits.length) return sorted ? `${sorted} archivo(s) de SETENA ordenados en Fotos / Regencias / Documentos` : '';
+    if (!visits.length && !regs.length && !starts.length && !places.length && !bits.length) return sorted ? `${sorted} archivo(s) de SETENA ordenados en Fotos / Regencias` : '';
     mutate(d => {
       for (const v of visits) { const b = d.projects.find(x => x.id === v.id); if (b && !deliveryOf(b, v.key).visit) { applyStep(b, v.key, 'visit', v.date); applyStep(b, v.key, 'photos', v.date); } }
       for (const r of regs) { const b = d.projects.find(x => x.id === r.id); if (b && !deliveryOf(b, r.key).uploaded) { if (!deliveryOf(b, r.key).letter) applyStep(b, r.key, 'letter', r.date ?? today); applyStep(b, r.key, 'uploaded', r.date ?? today); } }
