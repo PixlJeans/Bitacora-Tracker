@@ -390,6 +390,11 @@ export function markStep(id: string, key: string, step: Step, date: string | nul
     const b = d.projects.find(x => x.id === id);
     if (!b) return;
     applyStep(b, key, step, date);
+    // a Regencia uploaded was elaborated; with its nota de recibido it was also uploaded
+    if (date && key.startsWith('r:')) {
+      if ((step === 'uploaded' || step === 'received') && !deliveryOf(b, key).letter) applyStep(b, key, 'letter', date);
+      if (step === 'received' && !deliveryOf(b, key).uploaded) applyStep(b, key, 'uploaded', date);
+    }
     clearSnoozed(d, id);
   });
 }

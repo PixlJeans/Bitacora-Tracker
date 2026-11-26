@@ -2,21 +2,23 @@
 // Reads Proyectos/<Código - Nombre>/<Año>/<MM - Mes>/Fotos|Regencias and …/Inicio de obras:
 //  · photos in a month's Fotos folder → that month's Inspección is checked, on the date the photo was taken
 //    (EXIF), and a project without location takes it from the photos' GPS;
-//  · a document in a Regencias folder → that Regencia is «elaborada» and «subida»;
+//  · a document in a Regencias folder → the closest Regencia (±6 months) is «elaborada» and «subida»; if it was
+//    uploaded in another month, the Regencia moves to that date so its card shows its files;
+//  · a document in a «Notas de recibido» folder → the closest Regencia also gets its nota de recibido;
 //  · a document in Inicio de obras → the Carta de Inicio de obras is checked.
 // Only the first bytes of each photo are read (the EXIF), and only when something is still unchecked.
 import type { Project } from './types';
 import { isActiveProject } from './types';
 import { backend, esWeb } from './backend';
 import { getData, mutate, applyStep, deliveryOf } from './store';
-import { dueInMonth, hasSchedule, inspectionDate } from './schedule';
+import { dueInMonth, hasSchedule, inspectionDate, regenciaDue } from './schedule';
 import { readExif } from './exif';
 import { addMonths, todayISO } from './dates';
-import { projectFolder, regenciaKeyFor, setenaTarget } from './folders';
+import { projectFolder, regenciaKeyNear, setenaTarget } from './folders';
 
 const IMG = /\.(jpe?g|png|heic|heif|webp)$/i;
 const DOC = /\.(docx?|pdf|odt|rtf|xlsx?)$/i;
-const MONTH_DIR = /\/(\d{4})\/(\d{2}) - [^/]+\/(Fotos|Regencias)\/[^/]+$/;
+const MONTH_DIR = /\/(\d{4})\/(\d{2}) - [^/]+\/(Fotos|Regencias|Notas de recibido)\/([^/]+)$/;
 /** A file downloaded from SETENA: …/<Año>/<MM - Mes>/SETENA/<YYYY-MM-DD>_… (the date of its SETENA entry). */
 const SETENA_FILE = /\/(\d{4})\/(\d{2}) - [^/]+\/(?:SETENA|Fotos|Regencias|Documentos)\/(\d{4}-\d{2}-\d{2})_[0-9a-f]{8}\.[a-z0-9]{2,5}$/i;
 // files still waiting to be sorted: in the month's SETENA folder, or SETENA documents left in the old «Documentos» folder
@@ -45,7 +47,7 @@ export async function scanFolders(force = false): Promise<string> {
   busy = true; last = Date.now();
   const today = todayISO();
   const visits: { id: string; key: string; date: string }[] = [];
-  const regs: { id: string; key: string; date?: string }[] = [];
+  const regs: { id: string; key: string; date: string; move?: string; received?: boolean }[] = [];
   const bits: { id: string; key: string; date: string }[] = [];
   let sorted = 0;
   const starts: string[] = [];
@@ -95,7 +97,7 @@ export async function scanFolders(force = false): Promise<string> {
         const x = l.find(y => y.key === key);
         if (!x) l.push({ key, date }); else if (date < x.date) x.date = date;
       };
-      const sBits: { key: string; date: string }[] = [], sVisits: { key: string; date: string }[] = [], sRegs: { key: string; date: string }[] = [];
+      const sBits: { key: string; date: string }[] = [], sVisits: { key: string; date: string }[] = [];
       for (const f of files) {
         const m = SETENA_FILE.exec(f.path);
         if (!m) continue;
@@ -104,8 +106,6 @@ export async function scanFolders(force = false): Promise<string> {
         if (dueInMonth(b, ym)) earliest(sBits, `m:${ym}`, date);
         // photos = that month's inspection
         if (IMG.test(f.path)) { const k = inspectionKeyFor(b, ym); if (k) earliest(sVisits, k, date); }
-        // a document in the same month as a Regencia = that Regencia elaborated and uploaded
-        else if (DOC.test(f.path)) { const k = regenciaKeyFor(b, ym); if (k) earliest(sRegs, k, date); }
       }
       // entries with text only (no files) are in that month's notes: «SETENA dd/mm/yyyy: …»
       for (const [k, e] of Object.entries(b.deliveries ?? {})) {
@@ -117,7 +117,8 @@ export async function scanFolders(force = false): Promise<string> {
       }
       for (const x of sBits) if (!deliveryOf(b, x.key).uploaded) bits.push({ id: b.id, ...x });
       for (const x of sVisits) if (!deliveryOf(b, x.key).visit) visits.push({ id: b.id, key: x.key, date: x.date <= today ? x.date : today });
-      for (const x of sRegs) if (!deliveryOf(b, x.key).uploaded) regs.push({ id: b.id, key: x.key, date: x.date });
+      // Regencia documents and notas de recibido, each to the closest Regencia (date: from the SETENA name, else the folder month)
+      const regDocs = new Map<string, string[]>(), recDocs = new Map<string, string[]>();
 
       for (const f of files) {
         if (/\/Inicio de obras\/[^/]+$/.test(f.path) && DOC.test(f.path) && !deliveryOf(b, 's:start').uploaded && !starts.includes(b.id)) { starts.push(b.id); continue; }
@@ -127,10 +128,26 @@ export async function scanFolders(force = false): Promise<string> {
         if (m[3] === 'Fotos' && IMG.test(f.path)) {
           const key = inspectionKeyFor(b, ym);
           if (key && !visits.some(v => v.id === b.id && v.key === key)) byKey.set(key, [...(byKey.get(key) ?? []), f]);
-        } else if (m[3] === 'Regencias' && DOC.test(f.path)) {
-          const key = regenciaKeyFor(b, ym);
-          if (key && !deliveryOf(b, key).uploaded && !regs.some(r => r.id === b.id && r.key === key)) regs.push({ id: b.id, key });
+        } else if (m[3] !== 'Fotos' && DOC.test(f.path)) {
+          const date = /^(\d{4}-\d{2}-\d{2})_/.exec(m[4])?.[1] ?? `${ym}-15`;
+          const key = regenciaKeyNear(b, date);
+          const map = m[3] === 'Regencias' ? regDocs : recDocs;
+          if (key) map.set(key, [...(map.get(key) ?? []), date]);
         }
+      }
+      for (const [key, dates] of regDocs) {
+        const e = deliveryOf(b, key);
+        if (e.uploaded) continue;
+        // the document closest to the due date; the Regencia moves there when it is in another month
+        const due = regenciaDue(b, key.slice(2)), t = (x: string) => Math.abs(Date.parse(x) - Date.parse(due));
+        const date = [...dates].sort((a, c) => t(a) - t(c))[0];
+        const real = date <= today ? date : today;
+        regs.push({ id: b.id, key, date: real, move: !e.due && date.slice(0, 7) !== due.slice(0, 7) ? date : undefined });
+      }
+      for (const [key, dates] of recDocs) {
+        if (deliveryOf(b, key).received) continue;
+        const date = [...dates].sort()[0];
+        regs.push({ id: b.id, key, date: date <= today ? date : today, received: true });
       }
       // Photos: read the EXIF date only where the inspection is still unchecked
       for (const [key, photos] of byKey) {
@@ -154,12 +171,20 @@ export async function scanFolders(force = false): Promise<string> {
     if (!visits.length && !regs.length && !starts.length && !places.length && !bits.length) return sorted ? `${sorted} archivo(s) de SETENA ordenados en Fotos / Regencias` : '';
     mutate(d => {
       for (const v of visits) { const b = d.projects.find(x => x.id === v.id); if (b && !deliveryOf(b, v.key).visit) { applyStep(b, v.key, 'visit', v.date); applyStep(b, v.key, 'photos', v.date); } }
-      for (const r of regs) { const b = d.projects.find(x => x.id === r.id); if (b && !deliveryOf(b, r.key).uploaded) { if (!deliveryOf(b, r.key).letter) applyStep(b, r.key, 'letter', r.date ?? today); applyStep(b, r.key, 'uploaded', r.date ?? today); } }
+      for (const r of regs) {
+        const b = d.projects.find(x => x.id === r.id);
+        if (!b) continue;
+        if (r.move && !deliveryOf(b, r.key).due) { b.deliveries = b.deliveries ?? {}; b.deliveries[r.key] = { ...deliveryOf(b, r.key), due: r.move }; }
+        // uploaded ⇒ elaborated; nota de recibido ⇒ uploaded and elaborated
+        if (!deliveryOf(b, r.key).letter) applyStep(b, r.key, 'letter', r.date);
+        if (!deliveryOf(b, r.key).uploaded) applyStep(b, r.key, 'uploaded', r.date);
+        if (r.received && !deliveryOf(b, r.key).received) applyStep(b, r.key, 'received', r.date);
+      }
       for (const x of bits) { const b = d.projects.find(y => y.id === x.id); if (b && !deliveryOf(b, x.key).uploaded) applyStep(b, x.key, 'uploaded', x.date <= today ? x.date : today); }
       for (const id of starts) { const b = d.projects.find(x => x.id === id); if (b) applyStep(b, 's:start', 'uploaded', today); }
       for (const p of places) { const b = d.projects.find(x => x.id === p.id); if (b && !b.location) b.location = { lat: p.lat, lng: p.lng, text: '', source: 'photo' }; }
     }, { undo: true });
-    return [sorted && `${sorted} archivo(s) de SETENA ordenados`, bits.length && `${bits.length} bitácora(s) marcadas por SETENA`, visits.length && `${visits.length} inspección(es) marcadas por sus fotos`, regs.length && `${regs.length} regencia(s) encontradas`,
+    return [sorted && `${sorted} archivo(s) de SETENA ordenados`, bits.length && `${bits.length} bitácora(s) marcadas por SETENA`, visits.length && `${visits.length} inspección(es) marcadas por sus fotos`, regs.length && `${regs.length} regencia(s) / nota(s) de recibido marcadas`,
       starts.length && `${starts.length} carta(s) de inicio`, places.length && `ubicación de ${places.length} proyecto(s) tomada del GPS`].filter(Boolean).join(' · ');
   } finally { busy = false; }
 }

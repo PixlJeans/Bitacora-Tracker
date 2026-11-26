@@ -3,7 +3,7 @@
 // Regencia: ✍️ Elaboración (a check) and 📤 Subir (attach the Word / PDF). Dates movable to any month.
 // Files are saved in Proyectos/<Código - Nombre>/<Año>/<MM - Mes>/Fotos|Regencias.
 // Everything is saved to the data immediately.
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { Project, Step } from '../lib/types';
 import { MONTHLY_NAME, SEMIANNUAL_NAME, STEPS } from '../lib/types';
 import { inspectionDate, monthlyDue, monthlyDueAuto, regenciaDue } from '../lib/schedule';
@@ -12,7 +12,7 @@ import { addDeliveryFiles, editDelivery, deliveryOf, getData, markStep, relocate
 import { backend } from '../lib/backend';
 import { Ic, toast } from './core';
 import { Thumb, saveAttachments } from './ProjectLog';
-import { deliveryFolder, monthFolderOf } from '../lib/folders';
+import { deliveryFolder, monthFolderOf, receiptFolder } from '../lib/folders';
 
 const DAY = 864e5;
 export const daysUntil = (iso: string, today = todayISO()) => Math.round((fromISO(iso).getTime() - fromISO(today).getTime()) / DAY);
@@ -66,7 +66,8 @@ export function DeliveryCard({ b, itemKey: key }: { b: Project; itemKey: string;
       </> : <>
         <CheckRow b={b} itemKey={key} step="letter" name="✍️ Elaboración de la regencia" today={today} />
         <CheckRow b={b} itemKey={key} step="uploaded" name="📤 Subir regencia" today={today} date={due} />
-        <CheckRow b={b} itemKey={key} step="received" name="🧾 Nota de recibido" today={today} />
+        <CheckRow b={b} itemKey={key} step="received" name="🧾 Nota de recibido" today={today}
+          extra={<FolderButton b={b} itemKey={key} folder={receiptFolder(b, key)} label="Notas de recibido" />} />
         <MonthNote b={b} itemKey={key} />
       </>}
     </div>
@@ -74,8 +75,8 @@ export function DeliveryCard({ b, itemKey: key }: { b: Project; itemKey: string;
 }
 
 /** One line of the checklist: big checkbox · name · its date (movable) or the day it was done. */
-export function CheckRow({ b, itemKey: key, step, name, date, auto, today, onMove }: {
-  b: Project; itemKey: string; step: Step; name: string; today: string; date?: string; auto?: string; onMove?: (v: string | null) => void;
+export function CheckRow({ b, itemKey: key, step, name, date, auto, today, onMove, extra }: {
+  b: Project; itemKey: string; step: Step; name: string; today: string; date?: string; auto?: string; onMove?: (v: string | null) => void; extra?: ReactNode;
 }) {
   const e = deliveryOf(b, key);
   const on = !!e[step];
@@ -96,6 +97,7 @@ export function CheckRow({ b, itemKey: key, step, name, date, auto, today, onMov
           <input type="date" className="ent-step-date" value={e[step]!} title="Fecha en que se hizo (editable)" onChange={ev => ev.target.value && markStep(b.id, key, step, ev.target.value)} /></span>
           : date && onMove && auto ? <DateMover b={b} itemKey={key} what={name.replace(/^\S+\s/, '')} date={date} auto={auto} onMove={onMove} />
           : date ? <small className={date < today ? 'red-t' : 'muted'}>{longDate(date)} · {daysText(daysUntil(date, today))}</small> : null}
+        {extra}
       </span>
     </div>
   );
@@ -103,8 +105,8 @@ export function CheckRow({ b, itemKey: key, step, name, date, auto, today, onMov
 
 /** «📂 Fotos (3)»: opens the folder in the file explorer, where the files are added, opened and deleted.
  *  The count is read from the folder itself (refreshed when coming back to the app). */
-export function FolderButton({ b, itemKey: key }: { b: Project; itemKey: string }) {
-  const folder = deliveryFolder(b, key);
+export function FolderButton({ b, itemKey: key, folder: given, label: givenLabel }: { b: Project; itemKey: string; folder?: string; label?: string }) {
+  const folder = given ?? deliveryFolder(b, key);
   const [n, setN] = useState<number | null>(null);
   useEffect(() => {
     let live = true;
@@ -113,7 +115,7 @@ export function FolderButton({ b, itemKey: key }: { b: Project; itemKey: string 
     window.addEventListener('focus', read);
     return () => { live = false; window.removeEventListener('focus', read); };
   }, [folder]);
-  const label = key.startsWith('m:') ? 'Fotos' : key.startsWith('r:') ? 'Regencias' : 'Inicio de obras';
+  const label = givenLabel ?? (key.startsWith('m:') ? 'Fotos' : key.startsWith('r:') ? 'Regencias' : 'Inicio de obras');
   return (
     <button type="button" className={`btn sm folder-btn ${n ? 'has' : ''}`} title={`Abrir en el explorador: ${folder.replace(/\//g, '\\')}`}
       onClick={() => backend.openSubfolder(folder).catch(err => toast(String(err)))}>
@@ -157,7 +159,10 @@ function DateMover({ b, itemKey: key, what, date, auto, onMove }: { b: Project; 
     // Its files follow it to the folder of the new month
     const after = getData().projects.find(x => x.id === b.id);
     if (after && deliveryFolder(after, key) !== before)
-      void relocateFiles().then(() => backend.moveFolderFiles(before, deliveryFolder(after, key))).catch(() => { /* not on desktop */ });
+      void relocateFiles().then(async () => {
+        await backend.moveFolderFiles(before, deliveryFolder(after, key));
+        if (key.startsWith('r:')) await backend.moveFolderFiles(receiptFolder(b, key), receiptFolder(after, key));
+      }).catch(() => { /* not on desktop */ });
     toast(`${b.code}: ${what} ${v === auto ? 'en su fecha automática' : 'movida'} al ${longDate(v)}`, true);
     if (v.slice(0, 7) !== date.slice(0, 7)) window.dispatchEvent(new CustomEvent('bt-goto-month', { detail: v.slice(0, 7) }));
   };

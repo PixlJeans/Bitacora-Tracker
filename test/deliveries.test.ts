@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { applySetena } from '../src/lib/setenaImport';
 import { deliveryFolder, folderOf } from '../src/lib/folders';
-import { normalize, applyStep, emptyData, fileLogIntoDeliveries, replaceAll, getData } from '../src/lib/store';
+import { normalize, applyStep, emptyData, fileLogIntoDeliveries, replaceAll, getData, markStep } from '../src/lib/store';
 import { emptyDelivery } from '../src/lib/types';
 import { backend } from '../src/lib/backend';
 import { scanFolders } from '../src/lib/scan';
@@ -282,8 +282,8 @@ console.log('deliveries OK');
   const b64 = Buffer.from(new Uint8Array(photo)).toString('base64');
   (backend as any).listTree = async () => [
     { path: 'Proyectos/D1-0002-2025 - GPS/2026/11 - Noviembre/SETENA/2026-11-04_abcdef01.jpg', size: 10, modified: 0 },
-    { path: 'Proyectos/D1-0002-2025 - GPS/2026/07 - Julio/SETENA/2026-07-22_def01234.pdf', size: 10, modified: 0 },     // Regencia due Jul 10 → same month
-    { path: 'Proyectos/D1-0002-2025 - GPS/2026/02 - Febrero/SETENA/2026-02-27_0a1b2c3d.pdf', size: 10, modified: 0 }    // Regencia due Jan 10 → other month: not checked
+    { path: 'Proyectos/D1-0002-2025 - GPS/2026/07 - Julio/Regencias/2026-07-22_def01234.pdf', size: 10, modified: 0 },  // Regencia due Jul 10 → same month
+    { path: 'Proyectos/D1-0002-2025 - GPS/2026/02 - Febrero/Regencias/2026-02-27_0a1b2c3d.pdf', size: 10, modified: 0 } // Regencia due Jan 10 → the closest one
   ];
   getData().projects[0].deliveries = { 'm:2026-03': { ...emptyDelivery(), notes: 'SETENA 05/03/2026: Avance de obra' } } as any;
   (backend as any).readHead = async () => b64;
@@ -294,7 +294,7 @@ console.log('deliveries OK');
   assert.equal(p.deliveries?.['m:2026-11']?.uploaded, '2026-11-04', 'SETENA entry → that month\'s bitácora');
   assert(msg.includes('ubicación'), msg);
   assert.equal(p.deliveries?.['r:2026-07-10']?.uploaded, '2026-07-22', 'PDF in the Regencia\'s month');
-  assert.equal(p.deliveries?.['r:2026-01-10']?.uploaded ?? null, null, 'PDF in another month: not matched');
+  assert.equal(p.deliveries?.['r:2026-01-10']?.uploaded, '2026-02-27', 'PDF in another month → closest Regencia');
   assert.equal(p.deliveries?.['m:2026-03']?.uploaded, '2026-03-05', 'text-only SETENA entry → bitácora');
 }
 // ---- SETENA files sorted by the month of their entry ----
@@ -323,6 +323,20 @@ console.log('deliveries OK');
   assert.equal(p.deliveries?.['r:2026-07-10']?.uploaded, '2026-07-22', 'regencia checked after sorting');
   assert.equal(p.deliveries?.['m:2026-02']?.visit, '2026-02-27', 'inspection checked after sorting');
   assert.equal(p.deliveries?.['m:2026-02']?.uploaded, '2026-02-27', 'bitácora checked');
+  assert.equal(p.deliveries?.['r:2026-07-10']?.letter, '2026-07-22', 'uploaded ⇒ elaborated');
+  // documents in other months go to the closest Regencia (Jan 10): the one nearest its due date, and it moves there
+  assert.equal(p.deliveries?.['r:2026-01-10']?.uploaded, '2026-02-27', 'closest regencia checked');
+  assert.equal(p.deliveries?.['r:2026-01-10']?.due, '2026-02-27', 'regencia moved to the month of its document');
+  assert.equal(p.deliveries?.['r:2025-07-10']?.uploaded ?? null, null, 'a regencia without documents stays unchecked');
+  // a nota de recibido in its folder checks «Nota de recibido» of the closest Regencia
+  tree = [...tree, { path: `${root}/2025/08 - Agosto/Notas de recibido/recibido.pdf`, size: 1, modified: 0 }];
+  await scanFolders(true);
+  const q = getData().projects[0].deliveries!['r:2025-07-10'];
+  assert.equal(q.received, '2025-08-15');
+  assert(q.uploaded && q.letter, 'receipt ⇒ uploaded and elaborated');
+  // checking «Subir regencia» by hand also checks «Elaboración»
+  markStep(p.id, 'r:2027-01-10', 'uploaded', '2027-01-12');
+  assert.equal(getData().projects[0].deliveries!['r:2027-01-10'].letter, '2027-01-12');
 }
 console.log('moved / no-date OK');
 process.exit(0); // store.ts leaves an hourly timer running
