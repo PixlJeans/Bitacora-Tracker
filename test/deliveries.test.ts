@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { applySetena } from '../src/lib/setenaImport';
 import { deliveryFolder, folderOf } from '../src/lib/folders';
 import { normalize, applyStep, emptyData, fileLogIntoDeliveries, replaceAll, getData } from '../src/lib/store';
+import { emptyDelivery } from '../src/lib/types';
 import { backend } from '../src/lib/backend';
 import { scanFolders } from '../src/lib/scan';
 import { monthlyKeysDueIn, openingFrom, hasSchedule, agenda, completeIn, monthlyDue, regenciaInMonth, nextDue, nextRegencia, computeReminders, reportTasks, sortDate, pendingOf, inspectionDate, taskColumns, pendingBefore } from '../src/lib/schedule';
@@ -276,13 +277,47 @@ console.log('deliveries OK');
   replaceAll(dd);
   const photo = jpegWithExif('2026:11:04 09:00:00', [9, 56, 1.2], 'N', [84, 4, 30], 'W');
   const b64 = Buffer.from(new Uint8Array(photo)).toString('base64');
-  (backend as any).listTree = async () => [{ path: 'Proyectos/D1-0002-2025 - GPS/2026/11 - Noviembre/SETENA/2026-11-04_abc.jpg', size: 10, modified: 0 }];
+  (backend as any).listTree = async () => [
+    { path: 'Proyectos/D1-0002-2025 - GPS/2026/11 - Noviembre/SETENA/2026-11-04_abcdef01.jpg', size: 10, modified: 0 },
+    { path: 'Proyectos/D1-0002-2025 - GPS/2026/07 - Julio/SETENA/2026-07-22_def01234.pdf', size: 10, modified: 0 },     // Regencia due Jul 10 → same month
+    { path: 'Proyectos/D1-0002-2025 - GPS/2026/02 - Febrero/SETENA/2026-02-27_0a1b2c3d.pdf', size: 10, modified: 0 }    // Regencia due Jan 10 → other month: not checked
+  ];
+  getData().projects[0].deliveries = { 'm:2026-03': { ...emptyDelivery(), notes: 'SETENA 05/03/2026: Avance de obra' } } as any;
   (backend as any).readHead = async () => b64;
   const msg = await scanFolders(true);
   const p = getData().projects[0];
   assert(p.location && Math.abs(p.location.lng + 84.075) < 0.001, 'location from SETENA photo GPS');
-  assert(!p.deliveries?.['m:2026-11']?.visit, 'no inspection checked from SETENA photos');
+  assert.equal(p.deliveries?.['m:2026-11']?.visit, '2026-11-04', 'SETENA photos → that month\'s inspection, on the entry date');
+  assert.equal(p.deliveries?.['m:2026-11']?.uploaded, '2026-11-04', 'SETENA entry → that month\'s bitácora');
   assert(msg.includes('ubicación'), msg);
+  assert.equal(p.deliveries?.['r:2026-07-10']?.uploaded, '2026-07-22', 'PDF in the Regencia\'s month');
+  assert.equal(p.deliveries?.['r:2026-01-10']?.uploaded ?? null, null, 'PDF in another month: not matched');
+  assert.equal(p.deliveries?.['m:2026-03']?.uploaded, '2026-03-05', 'text-only SETENA entry → bitácora');
+}
+// ---- SETENA files sorted by the month of their entry ----
+{
+  const dd = normalize({ projects: [{ id: 's3', code: 'D1-0003-2025', name: 'SORT', status: 'open', openedOn: '2025-01-10', createdOn: '2025-01-10', noOpeningDate: false }] });
+  replaceAll(dd);
+  const root = 'Proyectos/D1-0003-2025 - SORT';
+  let tree = [
+    { path: `${root}/2026/07 - Julio/SETENA/2026-07-22_aaaaaaaa.pdf`, size: 1, modified: 0 },     // Regencia due Jul 10 → Regencias
+    { path: `${root}/2026/02 - Febrero/SETENA/2026-02-27_bbbbbbbb.pdf`, size: 1, modified: 0 },  // no Regencia that month → Documentos
+    { path: `${root}/2026/02 - Febrero/SETENA/2026-02-27_cccccccc.jpg`, size: 1, modified: 0 }   // photo → Fotos
+  ];
+  const moves: string[] = [];
+  (backend as any).listTree = async () => tree;
+  (backend as any).moveAttachment = async (path: string, folder: string) => {
+    moves.push(`${path.split('/').pop()} → ${folder.slice(root.length + 1)}`);
+    tree = tree.map(t => t.path === path ? { ...t, path: `${folder}/${path.split('/').pop()}` } : t);
+    return `${folder}/${path.split('/').pop()}`;
+  };
+  (backend as any).readHead = async () => '';
+  await scanFolders(true);
+  assert.deepEqual(moves, ['2026-07-22_aaaaaaaa.pdf → 2026/07 - Julio/Regencias', '2026-02-27_bbbbbbbb.pdf → 2026/02 - Febrero/Documentos', '2026-02-27_cccccccc.jpg → 2026/02 - Febrero/Fotos']);
+  const p = getData().projects[0];
+  assert.equal(p.deliveries?.['r:2026-07-10']?.uploaded, '2026-07-22', 'regencia checked after sorting');
+  assert.equal(p.deliveries?.['m:2026-02']?.visit, '2026-02-27', 'inspection checked after sorting');
+  assert.equal(p.deliveries?.['m:2026-02']?.uploaded, '2026-02-27', 'bitácora checked');
 }
 console.log('moved / no-date OK');
 process.exit(0); // store.ts leaves an hourly timer running

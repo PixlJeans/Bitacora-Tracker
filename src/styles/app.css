@@ -1020,3 +1020,6 @@ button.sr-chip{cursor:pointer}
 .phone-grid .qr svg{width:100%;height:auto;display:block}
 .phone-steps{margin:0;padding-left:1.2rem;display:flex;flex-direction:column;gap:.55rem;font-size:.9rem}
 .phone-modal .modal-actions{display:flex;margin-top:1rem}
+.dl-bar{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+.dl-track{flex:1;min-width:120px;height:8px;border-radius:99px;background:var(--border);overflow:hidden}
+.dl-track span{display:block;height:100%;background:var(--accent);transition:width .4s}

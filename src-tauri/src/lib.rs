@@ -360,6 +360,10 @@ fn move_attachment(path: String, folder: String, state: State<'_, AppState>) -> 
         fs::copy(&from, &to).map_err(|e| e.to_string())?;
         let _ = fs::remove_file(&from);
     }
+    // the old folder goes away if it is now empty (e.g. a month's SETENA folder once sorted)
+    if let Some(old) = from.parent() {
+        let _ = fs::remove_dir(old);
+    }
     Ok(rel_string(&base, &to))
 }
 

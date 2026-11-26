@@ -2,8 +2,9 @@
 // button; the crawl reads every project (active and closed) and each event: date, text and files.
 // The result goes back to the app in chunks through a navigation the app intercepts (no extra permissions).
 (function () {
-  if (location.hostname !== 'bitacora.setena.go.cr' || window.__btSetena) return;
+  if (!/(^|\.)setena\.go\.cr$/.test(location.hostname) || window.__btSetena) return;
   window.__btSetena = true;
+  const onPortal = location.hostname === 'bitacora.setena.go.cr' && !/login|sso/i.test(location.pathname);
   const MES = { enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6, julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10, noviembre: 11, diciembre: 12 };
   const parseDate = t => {
     const m = /(\d{1,2})\/([A-Za-zÁÉÍÓÚáéíóúñ]+)\/(\d{4})/.exec(t || '');
@@ -57,7 +58,12 @@
   box.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:999999;background:#16a34a;color:#fff;padding:14px 16px;border-radius:14px;font:600 14px system-ui;box-shadow:0 6px 24px rgba(0,0,0,.35);max-width:320px';
   box.innerHTML = '<div style="margin-bottom:8px">🌿 Bitácora Tracker</div><button id="btGo" style="all:unset;cursor:pointer;background:#fff;color:#166534;padding:8px 12px;border-radius:10px">📥 Descargar todo a la app</button><div id="btMsg" style="margin-top:8px;font-weight:400;font-size:12px"></div>';
   const status = t => { box.querySelector('#btMsg').textContent = t; };
-  const start = () => document.body.appendChild(box);
+  const start = () => {
+    if (!document.body || document.getElementById('btBox')) return;
+    box.id = 'btBox';
+    document.body.appendChild(box);
+    if (!onPortal) { box.querySelector('#btGo').style.display = 'none'; status('1. Inicia sesión con tu usuario de SETENA. 2. Cuando veas tus bitácoras, aquí aparece el botón «Descargar todo a la app».'); }
+  };
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
   box.querySelector('#btGo').onclick = async () => {
     const btn = box.querySelector('#btGo');

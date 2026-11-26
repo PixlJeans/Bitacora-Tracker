@@ -1,7 +1,8 @@
 // ===== Everything from the SETENA bitácora portal, without guessing =====
 // The «Descargar de SETENA» window reads every bitácora (active and closed) and each entry: date, text and files.
 // Here it is copied as it is, by the DATE of each entry:
-//  · every file → Proyectos/<Código - Nombre>/<Año>/<MM - Mes>/SETENA/  (named with that date);
+//  · every file → Proyectos/<Código - Nombre>/<Año>/<MM - Mes>/Fotos (photos), …/Regencias (a document in the same
+//    month as a Regencia) or …/Documentos (named with that date); without opening date: …/<MM - Mes>/SETENA;
 //  · every entry's text → that month's notes («SETENA 12/09/2023: …»);
 //  · a bitácora that isn't in the app is created (with no opening date, to be filled in);
 //  · the status is copied from SETENA (Nueva / Abierta / Solicitud de Cierre; closed → Terminada).
@@ -10,7 +11,7 @@
 import type { AppData, Project, Status } from './types';
 import { emptyDelivery } from './types';
 import { todayISO, uid } from './dates';
-import { monthFolderOf } from './folders';
+import { setenaTarget } from './folders';
 
 export interface SetenaEvent { date: string; text: string; files: string[] }
 export interface SetenaProject { code: string; name: string; status: string; closed?: boolean; events: SetenaEvent[] }
@@ -74,7 +75,8 @@ export function applySetena(d: AppData, m: SetenaManifest, today = todayISO()) {
       for (const url of e.files) {
         if (!/^https:\/\/bitacora\.setena\.go\.cr\/documents\//i.test(url) || seen.has(url)) continue;
         seen.add(url);
-        downloads.push({ url, folder: monthFolderOf(b, ym, 'SETENA'), name: fileName(url, e.date) });
+        const name = fileName(url, e.date);
+        downloads.push({ url, folder: setenaTarget(b, ym, name), name });
       }
     }
   }

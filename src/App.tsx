@@ -42,6 +42,7 @@ export default function App() {
   const [q, setQ] = useState('');
   const [dropAll, setDropAll] = useState(false);
   const [menu, setMenu] = useState<HTMLElement | null>(null);
+  const [dl, setDl] = useState<{ done: number; total: number; saved: number; skipped: number; failed: number } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const setView = (v: View) => { setViewRaw(v); setQ(''); try { localStorage.setItem(LS_VIEW, v); } catch { /* opcional */ } };
 
@@ -71,11 +72,13 @@ export default function App() {
       const res = r as ReturnType<typeof applySetena> | null;
       if (!res) return;
       toast(`📥 SETENA: ${res.summary || 'sin cambios'} · descargando ${res.downloads.length} archivo(s)…`, true);
+      // The app never replaces a file: it skips the ones downloaded before (even if renamed, moved or deleted)
+      // and any name already in the project's folder; it only brings what's missing.
       if (res.downloads.length) backend.downloadFiles(res.downloads).catch(e => toast(String(e)));
     });
     backend.onDownload(p => {
-      if (p.finished) toast(`📥 Descarga lista: ${p.saved} nuevos, ${p.skipped} ya estaban${p.failed ? `, ${p.failed} no se pudieron` : ''}. Están en la carpeta de cada proyecto.`);
-      else if (p.done % 50 === 0) toast(`📥 Descargando ${p.done} de ${p.total}…`);
+      setDl(p.finished ? null : p);
+      if (p.finished) toast(`📥 Descarga lista: ${p.saved} nuevos, ${p.skipped} ya los tenías (no se tocaron)${p.failed ? `, ${p.failed} no se pudieron` : ''}. Están en las carpetas de cada mes.`);
     });
   }, []);
   // Friday summary: open «Rutas» on next week
@@ -300,6 +303,11 @@ export default function App() {
         </div>
       </div>
 
+      {dl && (
+        <div className="info-bar dl-bar">📥 Descargando de SETENA: <b>{dl.done}</b> de {dl.total} archivos
+          <span className="dl-track"><span style={{ width: `${Math.round(dl.done / Math.max(1, dl.total) * 100)}%` }} /></span>
+          <small className="muted">{dl.saved} nuevos · {dl.skipped} ya estaban{dl.failed ? ` · ${dl.failed} con error` : ''} · puedes seguir usando la app</small></div>
+      )}
       {paused && !searching && (
         <div className="info-bar paused-bar"><Ic n="clock" /> Importación en pausa · {paused.file} · {paused.doneCount} de {paused.total} revisadas
           <button className="btn primary sm" onClick={() => openImport()}>▶ Continuar</button></div>

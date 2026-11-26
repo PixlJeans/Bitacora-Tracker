@@ -7,11 +7,12 @@
 //    bitacora.setena.go.cr/documents/…) are downloaded with the system's curl into the right folders,
 //    skipping the ones already there.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
 use base64::{engine::general_purpose::URL_SAFE, Engine as _};
 use serde::{Deserialize, Serialize};
+use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 use crate::{clean_folder, data_dir, safe_name, AppState};
@@ -72,6 +73,12 @@ pub async fn setena_open(app: AppHandle) -> Result<(), String> {
         .title("SETENA · Bitácora Digital — Descargar a Bitácora Tracker")
         .inner_size(1100.0, 800.0)
         .initialization_script(SCRIPT)
+        // and again when each page finishes loading (in case the start script didn't run on that page)
+        .on_page_load(|w, payload| {
+            if matches!(payload.event(), PageLoadEvent::Finished) {
+                let _ = w.eval(SCRIPT);
+            }
+        })
         .on_navigation(move |url| {
             if url.host_str() != Some("bt-tracker.invalid") {
                 return true;
@@ -121,7 +128,29 @@ fn curl(url: &str, to: &std::path::Path) -> bool {
     matches!(cmd.status(), Ok(s) if s.success())
 }
 
+/// Every file name under a folder (any depth): to know what is already there, wherever it was moved.
+fn names_under(dir: &std::path::Path) -> HashSet<String> {
+    let mut out = HashSet::new();
+    let mut stack = vec![(dir.to_path_buf(), 0u8)];
+    while let Some((d, depth)) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&d) else { continue };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                if depth < 6 {
+                    stack.push((p, depth + 1));
+                }
+            } else {
+                out.insert(e.file_name().to_string_lossy().to_lowercase());
+            }
+        }
+    }
+    out
+}
+
 /// Downloads the files into their folders (in the background); progress in the event «download-progress».
+/// Never replaces anything: a file is skipped if it was downloaded before (list kept in <data>/.setena/descargados.txt,
+/// so a file you renamed, moved or deleted doesn't come back) or if a file with its name is anywhere in the project.
 #[tauri::command]
 pub fn download_files(app: AppHandle, items: Vec<Download>, state: State<'_, SetenaState>) -> Result<usize, String> {
     {
@@ -134,20 +163,50 @@ pub fn download_files(app: AppHandle, items: Vec<Download>, state: State<'_, Set
     let base = data_dir(&app.state::<AppState>())?;
     let total = items.len();
     std::thread::spawn(move || {
+        let ledger_file = base.join(".setena").join("descargados.txt");
+        let mut ledger: HashSet<String> = std::fs::read_to_string(&ledger_file)
+            .unwrap_or_default()
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect();
+        let mut new_lines: Vec<String> = Vec::new();
+        let mut known: HashMap<std::path::PathBuf, HashSet<String>> = HashMap::new();
+        let save_ledger = |lines: &mut Vec<String>| {
+            if lines.is_empty() {
+                return;
+            }
+            let _ = std::fs::create_dir_all(base.join(".setena"));
+            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&ledger_file) {
+                use std::io::Write;
+                let _ = f.write_all((lines.join("\n") + "\n").as_bytes());
+            }
+            lines.clear();
+        };
         let mut p = Progress { done: 0, total, saved: 0, skipped: 0, failed: 0, finished: false };
         for it in items {
             p.done += 1;
             let ok_url = it.url.starts_with("https://bitacora.setena.go.cr/documents/") && !it.url.contains("..");
             let dir = base.join(clean_folder(&it.folder));
-            let to = dir.join(safe_name(&it.name));
+            let name = safe_name(&it.name);
+            let to = dir.join(&name);
+            // the project's own folder (Proyectos/<Código - Nombre>): every name already in it
+            let project = base.join(clean_folder(&it.folder.split('/').take(2).collect::<Vec<_>>().join("/")));
+            let names = known.entry(project.clone()).or_insert_with(|| names_under(&project));
             if !ok_url {
                 p.failed += 1;
-            } else if to.exists() {
+            } else if ledger.contains(&it.url) || to.exists() || names.contains(&name.to_lowercase()) {
                 p.skipped += 1;
+                if ledger.insert(it.url.clone()) {
+                    new_lines.push(it.url.clone());
+                }
             } else if std::fs::create_dir_all(&dir).is_ok() {
-                let part = dir.join(format!("{}.descargando", safe_name(&it.name)));
-                if curl(&it.url, &part) && std::fs::rename(&part, &to).is_ok() {
+                let part = dir.join(format!("{name}.descargando"));
+                if curl(&it.url, &part) && !to.exists() && std::fs::rename(&part, &to).is_ok() {
                     p.saved += 1;
+                    names.insert(name.to_lowercase());
+                    ledger.insert(it.url.clone());
+                    new_lines.push(it.url.clone());
                 } else {
                     let _ = std::fs::remove_file(&part);
                     p.failed += 1;
@@ -156,9 +215,11 @@ pub fn download_files(app: AppHandle, items: Vec<Download>, state: State<'_, Set
                 p.failed += 1;
             }
             if p.done % 5 == 0 || p.done == total {
+                save_ledger(&mut new_lines);
                 let _ = app.emit("download-progress", p.clone());
             }
         }
+        save_ledger(&mut new_lines);
         p.finished = true;
         let _ = app.emit("download-progress", p.clone());
         if let Ok(mut busy) = app.state::<SetenaState>().downloading.lock() {
