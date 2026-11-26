@@ -20,6 +20,16 @@ const PORTS: [u16; 6] = [47810, 47811, 47812, 47813, 47814, 47815];
 pub struct PhoneServer {
     info: Mutex<Option<PhoneInfo>>,
     projects: Mutex<String>,
+    tasks: Mutex<String>,
+}
+
+/// A checkbox ticked on the phone (event «phone-check» for the frontend).
+#[derive(Clone, Serialize, Deserialize)]
+struct Check {
+    id: String,
+    key: String,
+    step: String,
+    done: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -165,6 +175,24 @@ fn serve(app: AppHandle, server: tiny_http::Server, token: String) {
                 let list = app.state::<PhoneServer>().projects.lock().map(|g| g.clone()).unwrap_or_default();
                 respond(req, 200, "application/json; charset=utf-8", if list.is_empty() { "[]".into() } else { list });
             }
+            (tiny_http::Method::Get, "/tasks") => {
+                let list = app.state::<PhoneServer>().tasks.lock().map(|g| g.clone()).unwrap_or_default();
+                respond(req, 200, "application/json; charset=utf-8", if list.is_empty() { "{\"tasks\":[]}".into() } else { list });
+            }
+            (tiny_http::Method::Post, "/check") => {
+                let mut body = String::new();
+                if let Err(e) = req.as_reader().read_to_string(&mut body) {
+                    respond(req, 400, "text/plain; charset=utf-8", e.to_string());
+                    continue;
+                }
+                match serde_json::from_str::<Check>(&body) {
+                    Ok(c) => {
+                        let _ = app.emit("phone-check", &c);
+                        respond(req, 200, "application/json", "{\"ok\":true}".into());
+                    }
+                    Err(e) => respond(req, 400, "text/plain; charset=utf-8", e.to_string()),
+                }
+            }
             (tiny_http::Method::Post, "/upload") => {
                 let mut body = String::new();
                 if let Err(e) = req.as_reader().read_to_string(&mut body) {
@@ -200,7 +228,16 @@ pub fn phone_start(app: AppHandle, phone: State<'_, PhoneServer>) -> Result<Phon
         }
     }
     let (server, port) = chosen.ok_or_else(|| "No se pudo abrir el puerto para el celular.".to_string())?;
-    let token = random_key();
+    // The same key every time (saved in the data folder), so the phone can keep the page as a shortcut
+    let key_file = data_dir(&app.state::<AppState>())?.join("telefono.clave");
+    let token = match std::fs::read_to_string(&key_file) {
+        Ok(k) if k.trim().len() >= 16 => k.trim().to_string(),
+        _ => {
+            let k = random_key();
+            let _ = std::fs::write(&key_file, &k);
+            k
+        }
+    };
     let url = format!("http://{ip}:{port}/?t={token}");
     let svg = qr_svg(&url)?;
     let h = app.clone();
@@ -208,6 +245,14 @@ pub fn phone_start(app: AppHandle, phone: State<'_, PhoneServer>) -> Result<Phon
     let i = PhoneInfo { url, svg };
     *info = Some(i.clone());
     Ok(i)
+}
+
+/// The task list the phone sees (checkboxes); sent by the frontend whenever the data changes.
+#[tauri::command]
+pub fn phone_tasks(json: String, phone: State<'_, PhoneServer>) -> Result<(), String> {
+    let mut g = phone.tasks.lock().map_err(|e| e.to_string())?;
+    *g = json;
+    Ok(())
 }
 
 /// The project list the phone sees ({code, name}); sent by the frontend.

@@ -1,10 +1,14 @@
 // Tests: adjustable dates, sorting by date, EXIF reader and grouping by distance
 import assert from 'node:assert';
+import { readFileSync } from 'node:fs';
+import { applySetena } from '../src/lib/setenaImport';
 import { deliveryFolder, folderOf } from '../src/lib/folders';
-import { normalize, applyStep, emptyData, fileLogIntoDeliveries } from '../src/lib/store';
+import { normalize, applyStep, emptyData, fileLogIntoDeliveries, replaceAll, getData } from '../src/lib/store';
+import { backend } from '../src/lib/backend';
+import { scanFolders } from '../src/lib/scan';
 import { monthlyKeysDueIn, openingFrom, hasSchedule, agenda, completeIn, monthlyDue, regenciaInMonth, nextDue, nextRegencia, computeReminders, reportTasks, sortDate, pendingOf, inspectionDate, taskColumns, pendingBefore } from '../src/lib/schedule';
 import { readExif, commonDate, gpsComun } from '../src/lib/exif';
-import { groupNearby, distanceKm, routeLink, parseCoordinates } from '../src/lib/geo';
+import { groupNearby, distanceKm, routeLink, parseCoordinates, planRoute, routeKm } from '../src/lib/geo';
 
 // ---------- fechas ajustables ----------
 const base = { createdOn: '2026-01-15', uploads: [], visits: [], regencias: [] };
@@ -193,6 +197,81 @@ console.log('deliveries OK');
   assert.deepEqual(r.upcoming.map(t => t.kind), ['inspection', 'bitacora', 'regElab', 'regUpload'], 'Nov 28: inspection, bitácora and the Regencia');
   assert.equal(r.overdue.filter(t => t.kind === 'bitacora').length, 5, 'Jun … Oct');
   assert.deepEqual(r.noDate.map(b => b.id), ['z']);
+}
+// ---- routes ----
+{
+  const P = (id: string, lat: number, lng: number) => ({ b: { id, location: { lat, lng } } as any });
+  const home = { lat: 0, lng: 0 };
+  const r = planRoute([P('far', 0, 3), P('near', 0, 1), P('mid', 0, 2)], home, true);
+  assert.deepEqual(r.map(x => x.b.id), ['near', 'mid', 'far'], 'nearest first from home');
+  const u = routeLink(r.map(x => x.b.location), home, true);
+  assert(u.includes('origin=0%2C0') && u.includes('destination=0%2C0') && u.includes('waypoints=0%2C1%7C0%2C2%7C0%2C3'), u);
+  const u2 = routeLink([{ lat: 1, lng: 1 }, { lat: 2, lng: 2 }], home, false);
+  assert(u2.includes('destination=2%2C2') && u2.includes('waypoints=1%2C1'), u2);
+  assert(Math.abs(routeKm([{ lat: 0, lng: 1 }], home, true) - 2 * distanceKm(home, { lat: 0, lng: 1 })) < 1e-9);
+}
+// ---- folders scanned by hand ----
+{
+  const dd = normalize({ projects: [{ id: 's1', code: 'D1-0001-2025', name: 'SCAN', status: 'open', openedOn: '2025-01-10', createdOn: '2025-01-10', noOpeningDate: false,
+    deliveries: { 'm:2026-10': { planned: '2026-11-03' } } }] });
+  replaceAll(dd);
+  const root = 'Proyectos/D1-0001-2025 - SCAN';
+  const photo = jpegWithExif('2026:11:04 09:00:00', [9, 56, 1.2], 'N', [84, 4, 30], 'W');
+  const b64 = Buffer.from(new Uint8Array(photo)).toString('base64');
+  (backend as any).listTree = async () => [
+    { path: `${root}/2026/11 - Noviembre/Fotos/a.jpg`, size: 10, modified: 0 },       // the moved October inspection (now Nov 3)
+    { path: `${root}/2026/09 - Septiembre/Fotos/b.jpg`, size: 10, modified: 0 },      // September
+    { path: `${root}/2026/07 - Julio/Regencias/regencia.docx`, size: 10, modified: 0 },
+    { path: `${root}/Inicio de obras/inicio.pdf`, size: 10, modified: 0 }
+  ];
+  (backend as any).readHead = async () => b64;
+  const msg = await scanFolders(true);
+  const p = getData().projects[0];
+  assert(msg.includes('2 inspección'), msg);
+  assert.equal(p.deliveries!['m:2026-10'].visit, '2026-11-04', 'moved inspection found in November, photo date');
+  assert.equal(p.deliveries!['m:2026-09'].visit, '2026-09-10', 'photo far from the month → inspection date');
+  assert(p.deliveries!['r:2026-07-10'].uploaded && p.deliveries!['r:2026-07-10'].letter, 'regencia document');
+  assert(p.deliveries!['s:start'].uploaded, 'inicio de obras');
+  assert(p.location && Math.abs(p.location.lat - 9.9337) < 0.001, 'location from GPS');
+}
+// ---- Friday summary ----
+{
+  const dd = normalize({ projects: [{ id: 'w1', code: 'D1-0001-2026', name: 'W', status: 'open', openedOn: '2026-01-01', createdOn: '2026-01-01', noOpeningDate: false }] });
+  const rem = computeReminders(dd, new Date(2026, 10, 25, 10).getTime()).filter(r => r.kind === 'weekly');   // Wed Nov 25
+  assert.equal(rem.length, 2);
+  assert.equal(rem[0].key, 'w:2026-11-27', 'this Friday');
+  assert(rem[0].title.includes('1 inspección'), rem[0].title);   // Tue Dec 1
+}
+// ---- SETENA portal → projects ----
+{
+  const raw = JSON.parse(readFileSync(new URL('./fixtures/setena-sample.json', import.meta.url), 'utf8').replaceAll('~/', 'https://bitacora.setena.go.cr/documents/'));
+  const dd = normalize({ projects: [
+    { id: 'v', code: 'D1-0170-2020', name: 'CONDOMINIO VISTA DEL BOSQUE', status: 'open', openedOn: '2026-11-25', createdOn: '2026-11-25' },   // imported without date
+    { id: 'a', code: 'D1-0550-2020', name: 'Condominio Almazara', status: 'open', openedOn: '2021-03-02', createdOn: '2026-11-20', noOpeningDate: false }
+  ] });
+  const r = applySetena(dd, raw, '2026-11-26');
+  const v = dd.projects.find(p => p.code === 'D1-0170-2020')!;
+  assert.equal(v.openedOn, '2022-01-14', 'opening = first event');
+  assert.equal(v.noOpeningDate, false);
+  assert.equal(v.deliveries!['m:2023-08'].uploaded, '2023-08-28', 'event → Llenado de bitácora');
+  assert.equal(v.deliveries!['m:2023-08'].visit, '2023-08-28', 'photos → Inspección');
+  assert(v.deliveries!['m:2023-08'].notes!.includes('SETENA 28/08/2023: El proyecto'), 'text → notes');
+  assert.equal(v.deliveries!['r:2024-01-14'].uploaded, '2024-02-29', 'report PDF → nearest Regencia');
+  const nw = dd.projects.find(p => p.code === 'D1-0607-2026')!;
+  assert(nw, 'new project created'); assert.equal(nw.openedOn, '2026-11-09');
+  assert.equal(nw.deliveries!['s:start'].uploaded, '2026-11-09', 'first PDF → Carta de Inicio de obras');
+  assert.equal(dd.projects.find(p => p.code === 'D1-0550-2020')!.status, 'closing', 'status from SETENA');
+  const f = (n: string) => r.downloads.find(x => x.name.includes(n))!;
+  assert.equal(f('76aad41f').folder, 'Proyectos/D1-0170-2020 - CONDOMINIO VISTA DEL BOSQUE/2023/08 - Agosto/Fotos');
+  assert.equal(f('76aad41f').name, '2023-08-28_76aad41f.jpg');
+  assert.equal(f('553a394a').folder, 'Proyectos/D1-0170-2020 - CONDOMINIO VISTA DEL BOSQUE/2024/01 - Enero/Regencias');
+  assert.equal(f('473fa0af').folder, 'Proyectos/D1-0607-2026 - AMPLIACION DE BODEGA/Inicio de obras');
+  assert.equal(f('solicitudcierre').folder, 'Proyectos/D1-0550-2020 - Condominio Almazara/Cierre');
+  assert.equal(r.downloads.length, 7);
+  // running it again changes nothing
+  const before = JSON.stringify(dd);
+  applySetena(dd, raw, '2026-11-26');
+  assert.equal(JSON.stringify(dd), before, 'idempotent');
 }
 console.log('moved / no-date OK');
 process.exit(0); // store.ts leaves an hourly timer running

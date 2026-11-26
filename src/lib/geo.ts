@@ -34,11 +34,47 @@ export function parseCoordinates(txt: string): Point | null {
 export const mapLink = (p: Point) => `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`;
 
 /** Google Maps route from the current location through the points in order (max. 10). */
-export function routeLink(points: Point[]): string {
-  const l = points.slice(0, 10).map(p => `${p.lat},${p.lng}`);
-  const destination = l[l.length - 1];
-  const stops = l.slice(0, -1).join('|');
-  return `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${encodeURIComponent(destination)}${stops ? `&waypoints=${encodeURIComponent(stops)}` : ''}`;
+export function routeLink(points: Point[], origin?: Point | null, back = false): string {
+  const ll = (p: Point) => `${p.lat},${p.lng}`;
+  // Google Maps takes up to 9 stops in between
+  const stops = points.slice(0, back && origin ? 9 : 10).map(ll);
+  const destination = back && origin ? ll(origin) : stops.pop()!;
+  return `https://www.google.com/maps/dir/?api=1&travelmode=driving${origin ? `&origin=${encodeURIComponent(ll(origin))}` : ''}`
+    + `&destination=${encodeURIComponent(destination)}${stops.length ? `&waypoints=${encodeURIComponent(stops.join('|'))}` : ''}`;
+}
+
+/** Nearest-neighbour order starting from `start` (home), then 2-opt to remove crossings. */
+export function planRoute<T extends { b: Project }>(l: T[], start?: Point | null, back = false): T[] {
+  const pts = l.filter(x => x.b.location);
+  if (pts.length < 2) return pts;
+  const remaining = [...pts], out: T[] = [];
+  let cur: Point = start ?? remaining[0].b.location!;
+  if (!start) out.push(remaining.shift()!);
+  while (remaining.length) {
+    let k = 0, best = Infinity;
+    remaining.forEach((x, i) => { const dd = distanceKm(cur, x.b.location!); if (dd < best) { best = dd; k = i; } });
+    const nx = remaining.splice(k, 1)[0]; out.push(nx); cur = nx.b.location!;
+  }
+  // 2-opt
+  const len = (r: T[]) => routeKm(r.map(x => x.b.location!), start, back);
+  let improved = true;
+  for (let guard = 0; improved && guard < 50; guard++) {
+    improved = false;
+    for (let i = 0; i < out.length - 1; i++)
+      for (let j = i + 1; j < out.length; j++) {
+        const cand = [...out.slice(0, i), ...out.slice(i, j + 1).reverse(), ...out.slice(j + 1)];
+        if (len(cand) + 1e-9 < len(out)) { out.splice(0, out.length, ...cand); improved = true; }
+      }
+  }
+  return out;
+}
+
+/** Straight-line length of a route (km), from `start` and back to it if asked. */
+export function routeKm(points: Point[], start?: Point | null, back = false): number {
+  const all = [...(start ? [start] : []), ...points, ...(start && back ? [start] : [])];
+  let t = 0;
+  for (let i = 1; i < all.length; i++) t += distanceKm(all[i - 1], all[i]);
+  return t;
 }
 
 /** Orders the stops: starts with the first (most urgent) and then always goes to the nearest one. */

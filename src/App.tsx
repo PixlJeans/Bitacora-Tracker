@@ -6,9 +6,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAppData, isReady, Undo, mutate, reload, markAllBefore } from './lib/store';
 import type { Project, Status } from './lib/types';
 import { isActiveProject, isFinished } from './lib/types';
-import { reportTasks, pendingBefore, completeIn, nextDue, upcomingRegencias, summary, monthTasks, type RegenciaInfo, sortDate } from './lib/schedule';
+import { reportTasks, REPORT_LABEL, pendingBefore, completeIn, nextDue, upcomingRegencias, summary, monthTasks, type RegenciaInfo, sortDate } from './lib/schedule';
 import { matches } from './lib/search';
-import { addDays, monthKeyOf, monthNameOf, todayISO } from './lib/dates';
+import { addDays, monthKeyOf, monthNameOf, shortDate, todayISO } from './lib/dates';
 import { SettingsPanel, applyAppearance, toggleSettings } from './ui/Settings';
 import { Ic, Popover, ModalHost, ToastHost, hasModal, toast } from './ui/core';
 import { openEditor } from './ui/ProjectEditor';
@@ -17,10 +17,13 @@ import { RowHeader, ProjectRow, type Mode } from './ui/ProjectRow';
 import { openReview } from './ui/Review';
 import { Tutorial, openTutorial } from './ui/Tutorial';
 import { Help } from './ui/Help';
-import { Agenda } from './ui/Agenda';
 import { listenToPhone } from './ui/ProjectLog';
 import { openStatusReport } from './ui/StatusReport';
 import { TasksView } from './ui/Tasks';
+import { RoutesView } from './ui/Routes';
+import { openPhone } from './ui/Phone';
+import { scanFolders } from './lib/scan';
+import { applySetena } from './lib/setenaImport';
 import { backend, esWeb } from './lib/backend';
 import { toCsv } from './lib/csv';
 
@@ -60,11 +63,54 @@ export default function App() {
     window.addEventListener('bt:remote', remoto); window.addEventListener('bt:conflict', conflict); window.addEventListener('bt:session', session);
     return () => { window.removeEventListener('bt:remote', remoto); window.removeEventListener('bt:conflict', conflict); window.removeEventListener('bt:session', session); };
   }, []);
+  // «Descargar de SETENA»: the portal window sends what it read → match it to the projects → download the files
+  useEffect(() => {
+    backend.onSetena(json => {
+      let r: ReturnType<typeof applySetena> | null = null;
+      try { const m = JSON.parse(json); mutate(dd => { r = applySetena(dd, m); }); } catch (e) { toast('No se pudo leer lo que envió SETENA: ' + String(e)); return; }
+      const res = r as ReturnType<typeof applySetena> | null;
+      if (!res) return;
+      toast(`📥 SETENA: ${res.summary || 'sin cambios'} · descargando ${res.downloads.length} archivo(s)…`, true);
+      if (res.downloads.length) backend.downloadFiles(res.downloads).catch(e => toast(String(e)));
+    });
+    backend.onDownload(p => {
+      if (p.finished) toast(`📥 Descarga lista: ${p.saved} nuevos, ${p.skipped} ya estaban${p.failed ? `, ${p.failed} no se pudieron` : ''}. Están en la carpeta de cada proyecto.`);
+      else if (p.done % 50 === 0) toast(`📥 Descargando ${p.done} de ${p.total}…`);
+    });
+  }, []);
+  // Friday summary: open «Rutas» on next week
+  useEffect(() => {
+    backend.onReminder(list => {
+      if (!list.some(r => r.kind === 'weekly')) return;
+      setView('agenda');
+      const now = todayISO(), wd = new Date(now + 'T12:00').getDay();
+      setTimeout(() => window.dispatchEvent(new CustomEvent('bt-routes-week', { detail: addDays(now, ((8 - wd) % 7) || 7) })), 50);
+    });
+  }, []); // eslint-disable-line
+  // Photos / documents put in the project folders by hand: check what they show (on start and when coming back)
+  useEffect(() => {
+    const run = (force = false) => scanFolders(force).then(m => { if (m) toast(`📂 ${m}`, true); }).catch(() => { /* not on desktop */ });
+    const t = setTimeout(() => run(true), 4000);
+    const f = () => run();
+    window.addEventListener('focus', f);
+    return () => { clearTimeout(t); window.removeEventListener('focus', f); };
+  }, []);
   // Photos and notes arriving from the phone
   useEffect(() => { listenToPhone(); }, []);
   // The phone page needs the list of active projects to choose where the photos go
   const phoneList = useMemo(() => JSON.stringify(d.projects.filter(b => isActiveProject(b)).map(b => ({ code: b.code, name: b.name }))), [d.projects]);
   useEffect(() => { backend.phoneProjects(phoneList).catch(() => { /* sin servidor del celular */ }); }, [phoneList]);
+  // …and the tasks with their checkboxes (phone page «Tareas»)
+  const phoneTasks = useMemo(() => {
+    const now = todayISO(), t = reportTasks(d, now, addDays(now, 30));
+    const W = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+    return JSON.stringify({ tasks: [...t.overdue, ...t.upcoming].slice(0, 500).map(x => ({
+      id: x.b.id, code: x.b.code, name: x.b.name, kind: x.kind, key: x.key, step: x.step, date: x.date,
+      label: REPORT_LABEL[x.kind] + (x.kind === 'inspection' || x.kind === 'bitacora' ? ` · ${monthNameOf(x.month).split(' ')[0].toLowerCase()}` : ''),
+      dateText: `${W[new Date(x.date + 'T12:00').getDay()]} ${shortDate(x.date)}`
+    })) });
+  }, [d]);
+  useEffect(() => { backend.phoneTasks(phoneTasks).catch(() => { /* sin servidor del celular */ }); }, [phoneTasks]);
   useEffect(() => { if (!d.settings.tutorialSeen) { const t = setTimeout(openTutorial, 700); return () => clearTimeout(t); } }, [d.settings.tutorialSeen]);
   useEffect(() => {
     const f = (e: Event) => {
@@ -180,7 +226,7 @@ export default function App() {
       {activeList.length ? <><RowHeader />{activeList.map(b => P(b))}</> : emptyData('Ninguna bitácora coincide con el filtro.')}
     </>;
   } else if (view === 'agenda') {
-    body = <Agenda d={d} />;
+    body = <RoutesView d={d} />;
   } else if (view === 'month' || view === 'nextMonth') {
     const m = view === 'month' ? mk : nextMk;
     const t = monthTasks(d, m);
@@ -225,8 +271,10 @@ export default function App() {
           {paused && <button className="btn paused" onClick={() => openImport()} title="Continuar importación"><Ic n="upload" /> Continuar <b>{paused.doneCount}/{paused.total}</b></button>}
           <button className="btn" data-help-title="Informe de estado" data-help="Qué hay que hacer los próximos días y todo lo que quedó pendiente. Se puede copiar o guardar para imprimir." onClick={() => openStatusReport()} title="Informe de estado (E)">📊 Informe</button>
           <button className="btn primary" data-tour="new" data-help-title="Nueva bitácora" data-help="Crea una bitácora a mano: número, nombre, fecha de apertura y estado. Las tareas se calculan solas." onClick={() => openEditor()} title="Nueva bitácora (N)"><Ic n="plus" /> Nueva</button>
+          <button className="btn" onClick={() => openPhone()} title="Usar en el celular por Wi-Fi">📱 Celular</button>
           <button className="btn icon-only" data-tour="import" title="Más: importar PDF, exportar, resumen" onClick={e => setMenu(e.currentTarget)}>⋯</button>
           {menu && <Popover anchor={menu} onClose={() => setMenu(null)} width={230}><>
+            <button className="pop-opt" onClick={() => { setMenu(null); backend.setenaOpen().catch(e => toast(String(e))); }}>📥 Descargar todo de SETENA</button>
             <button className="pop-opt" onClick={() => { setMenu(null); openImport(); }}><Ic n="upload" /> Importar PDF de SETENA</button>
             <button className="pop-opt" onClick={async () => { setMenu(null); if (await backend.saveFile(`bitacoras-${today}.csv`, toCsv(d), 'csv', 'CSV (Excel)')) toast('CSV exportado'); }}><Ic n="download" /> Exportar a Excel (CSV)</button>
             <button className="pop-opt" onClick={() => { setMenu(null); openReview(); }}><Ic n="review" /> Resumen general</button>

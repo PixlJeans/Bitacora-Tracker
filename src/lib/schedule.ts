@@ -364,6 +364,25 @@ export function computeReminders(d: AppData, now = Date.now()): Reminder[] {
     }
   }
 
+  // Friday: what comes next week (to plan the routes)
+  for (let k = 0; k < 2; k++) {
+    const wd = base.getDay();
+    const fri = addDays(today, ((5 - wd + 7) % 7) + 7 * k);
+    const mon = addDays(fri, 3), sun = addDays(fri, 9);
+    const r = reportTasks(d, fri, sun);
+    const next = r.upcoming.filter(t => t.date >= mon);
+    const insp = next.filter(t => t.kind === 'inspection').length;
+    const bit = next.filter(t => t.kind === 'bitacora').length;
+    const reg = new Set(next.filter(t => t.kind === 'regElab' || t.kind === 'regUpload').map(t => t.key)).size;
+    const late = r.overdue.length;
+    out.push({
+      key: `w:${fri}`, at: msAt(fri, time), until: msAt(fri, '23:59') + 2 * DAY,
+      title: `📅 Próxima semana: ${insp} inspección(es)${reg ? `, ${reg} regencia(s)` : ''}`,
+      body: [`${shortDate(mon)} – ${shortDate(sun)}: ${insp} inspecciones, ${bit} bitácoras${reg ? `, ${reg} regencias` : ''}.`, late ? `Atrasadas: ${late}.` : '', 'Abre «Rutas» para planear el recorrido.'].filter(Boolean).join(' '),
+      kind: 'weekly', ref: ''
+    });
+  }
+
   for (const p of d.snoozed) {
     if (p.at < now - DAY) continue;
     out.push({ key: `${p.key}@${p.at}`, at: p.at, until: p.at + DAY, title: p.title, body: p.body, kind: p.kind, ref: p.ref });

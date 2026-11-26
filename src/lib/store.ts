@@ -19,7 +19,9 @@ export const DEFAULT_SETTINGS: Settings = {
   textSize: 100,
   csvSeparator: ';',
   tutorialSeen: false,
-  radiusKm: 15
+  radiusKm: 15,
+  home: null,
+  roundTrip: true
 };
 
 // ---------- Loading saved data ----------
@@ -125,7 +127,9 @@ export function normalize(raw: any): AppData {
     textSize: Number(pick(s, 'textSize', 'tamano')) || DEFAULT_SETTINGS.textSize,
     csvSeparator: pick(s, 'csvSeparator', 'separadorCsv') === ',' ? ',' : ';',
     tutorialSeen: !!pick(s, 'tutorialSeen', 'tutorialVisto'),
-    radiusKm: Number(pick(s, 'radiusKm', 'radioKm')) > 0 ? Number(pick(s, 'radiusKm', 'radioKm')) : DEFAULT_SETTINGS.radiusKm
+    radiusKm: Number(pick(s, 'radiusKm', 'radioKm')) > 0 ? Number(pick(s, 'radiusKm', 'radioKm')) : DEFAULT_SETTINGS.radiusKm,
+    home: s.home && Number.isFinite(Number(s.home.lat)) && Number.isFinite(Number(s.home.lng)) ? { lat: Number(s.home.lat), lng: Number(s.home.lng), text: String(s.home.text || '') } : null,
+    roundTrip: s.roundTrip ?? true
   };
 
   // Progress labels (v1 called them priorities: Urgente / Pendiente próximo / Al día)

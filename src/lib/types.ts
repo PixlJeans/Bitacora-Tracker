@@ -146,6 +146,8 @@ export interface Settings {
   csvSeparator: ';' | ',';
   tutorialSeen: boolean;
   radiusKm: number;           // distance to group nearby projects on the same day
+  home: { lat: number; lng: number; text: string } | null;  // where the routes start (and end)
+  roundTrip: boolean;         // the route goes back to the start point
 }
 
 /** A PDF row inside an import reviewed one by one. */
@@ -179,7 +181,7 @@ export interface AppData {
   settings: Settings;
 }
 
-export type ReminderKind = 'monthly' | 'regencia' | 'semiannual' | 'group' | 'test' | 'visit';
+export type ReminderKind = 'monthly' | 'regencia' | 'semiannual' | 'group' | 'test' | 'visit' | 'weekly';
 
 /** What the native process (Rust) fires as a system notification. */
 export interface Reminder {

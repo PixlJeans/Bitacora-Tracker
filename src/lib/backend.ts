@@ -38,6 +38,17 @@ export interface Backend {
   listFolder(folder: string): Promise<string[]>;
   /** Moves all the files of one folder to another (a date moved to another month). */
   moveFolderFiles(from: string, to: string): Promise<number>;
+  /** Every file under a folder (path relative to the data folder, size, modified ms). */
+  listTree(folder: string): Promise<{ path: string; size: number; modified: number }[]>;
+  /** First `max` bytes of a file, base64 (photo EXIF). */
+  readHead(path: string, max: number): Promise<string>;
+  /** Opens the SETENA portal window («Descargar de SETENA»). */
+  setenaOpen(): Promise<void>;
+  /** What the portal window read (JSON). */
+  onSetena(cb: (json: string) => void): void;
+  /** Downloads files into folders of the data folder (background); returns how many. */
+  downloadFiles(items: { url: string; folder: string; name: string }[]): Promise<number>;
+  onDownload(cb: (p: { done: number; total: number; saved: number; skipped: number; failed: number; finished: boolean }) => void): void;
   readB64(path: string): Promise<string>;
   openAttachment(path: string): Promise<void>;
   deleteAttachment(path: string): Promise<void>;
@@ -49,6 +60,10 @@ export interface Backend {
   phoneStart(): Promise<{ url: string; svg: string }>;
   phoneProjects(json: string): Promise<void>;
   onPhone(cb: (r: PhoneUpload) => void): void;
+  /** Tasks shown on the phone page (checkboxes). */
+  phoneTasks(json: string): Promise<void>;
+  /** A checkbox ticked on the phone. */
+  onPhoneCheck(cb: (c: { id: string; key: string; step: string; done: boolean }) => void): void;
 }
 
 export interface PhoneUpload {
@@ -130,6 +145,12 @@ const tauri: Backend = {
   async openSubfolder(folder) { const { invoke } = await import('@tauri-apps/api/core'); await invoke('open_folder', { folder }); },
   async listFolder(folder) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<string[]>('list_folder', { folder }); },
   async moveFolderFiles(from, to) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<number>('move_folder_files', { from, to }); },
+  async listTree(folder) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<{ path: string; size: number; modified: number }[]>('list_tree', { folder }); },
+  async readHead(path, max) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<string>('read_head', { path, max }); },
+  async setenaOpen() { const { invoke } = await import('@tauri-apps/api/core'); await invoke('setena_open'); },
+  onSetena(cb) { import('@tauri-apps/api/event').then(({ listen }) => listen<string>('setena-manifest', e => cb(e.payload))); },
+  async downloadFiles(items) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<number>('download_files', { items }); },
+  onDownload(cb) { import('@tauri-apps/api/event').then(({ listen }) => listen<{ done: number; total: number; saved: number; skipped: number; failed: number; finished: boolean }>('download-progress', e => cb(e.payload))); },
   async readB64(path) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<string>('read_file_b64', { path }); },
   async openAttachment(path) { const { invoke } = await import('@tauri-apps/api/core'); await invoke('open_attachment', { path }); },
   async deleteAttachment(path) { const { invoke } = await import('@tauri-apps/api/core'); await invoke('delete_attachment', { path }); },
@@ -138,7 +159,9 @@ const tauri: Backend = {
   async openMap(url) { const { invoke } = await import('@tauri-apps/api/core'); await invoke('open_map', { url }); },
   async phoneStart() { const { invoke } = await import('@tauri-apps/api/core'); return invoke<{ url: string; svg: string }>('phone_start'); },
   async phoneProjects(json) { const { invoke } = await import('@tauri-apps/api/core'); await invoke('phone_projects', { json }); },
-  onPhone(cb) { import('@tauri-apps/api/event').then(({ listen }) => listen<PhoneUpload>('phone-upload', e => cb(e.payload))); }
+  onPhone(cb) { import('@tauri-apps/api/event').then(({ listen }) => listen<PhoneUpload>('phone-upload', e => cb(e.payload))); },
+  async phoneTasks(json) { const { invoke } = await import('@tauri-apps/api/core'); await invoke('phone_tasks', { json }); },
+  onPhoneCheck(cb) { import('@tauri-apps/api/event').then(({ listen }) => listen<{ id: string; key: string; step: string; done: boolean }>('phone-check', e => cb(e.payload))); }
 };
 
 // ---------------- Navegador (desarrollo / vista previa) ----------------
@@ -198,6 +221,12 @@ const web: Backend = {
   async openSubfolder() { /* solo escritorio */ },
   async listFolder() { return []; },
   async moveFolderFiles() { return 0; },
+  async listTree() { return []; },
+  async readHead() { return ''; },
+  async setenaOpen() { window.open('https://bitacora.setena.go.cr/', '_blank'); },
+  onSetena() { /* solo escritorio */ },
+  async downloadFiles() { return 0; },
+  onDownload() { /* solo escritorio */ },
   async saveAttachment(code, name, data, thumb, folder) {
     const path = `${folder ?? `proyectos/${code}`}/${Date.now().toString(36)}_${name}`;
     memory.set(path, data); if (thumb) memory.set(path + '.mini.jpg', thumb);
@@ -211,7 +240,9 @@ const web: Backend = {
   async openMap(url) { window.open(url, '_blank', 'noopener'); },
   async phoneStart() { throw new Error('Las fotos desde el celular funcionan en la app de escritorio instalada.'); },
   async phoneProjects() { /* solo escritorio */ },
-  onPhone() { /* solo escritorio */ }
+  onPhone() { /* solo escritorio */ },
+  async phoneTasks() { /* solo escritorio */ },
+  onPhoneCheck() { /* solo escritorio */ }
 };
 
 // ---------------- Web publicada (servidor PHP) ----------------
@@ -273,6 +304,12 @@ const server: Backend = {
   async openSubfolder() { /* solo escritorio */ },
   async listFolder() { return []; },
   async moveFolderFiles() { return 0; },
+  async listTree() { return []; },
+  async readHead() { return ''; },
+  async setenaOpen() { window.open('https://bitacora.setena.go.cr/', '_blank'); },
+  onSetena() { /* solo escritorio */ },
+  async downloadFiles() { return 0; },
+  onDownload() { /* solo escritorio */ },
   async saveAttachment(code, name, data, thumb) {
     const r = await api<{ path: string; thumb: string | null }>('upload', { code, name, data, thumb: thumb ?? null });
     return { path: r.path, thumb: r.thumb };
@@ -287,7 +324,9 @@ const server: Backend = {
   async openProjectFolder() { /* en la web los archivos se ven en cada anotación */ },
   async phoneStart() { return { url: location.href.split('#')[0].split('?')[0], svg: '' }; },
   async phoneProjects() { /* no hace falta: el celular entra a la misma página */ },
-  onPhone() { /* no hace falta */ }
+  onPhone() { /* no hace falta */ },
+  async phoneTasks() { /* no hace falta */ },
+  onPhoneCheck() { /* no hace falta */ }
 };
 export const fileUrl = fileUrlOf;
 

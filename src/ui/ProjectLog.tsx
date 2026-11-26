@@ -4,12 +4,12 @@
 // Photos and PDFs are saved in <data folder>/proyectos/<code>/.
 // From the phone: QR on the same Wi-Fi network → photos arrive by themselves as a new entry.
 import { useEffect, useRef, useState } from 'react';
-import type { LogEntry, Attachment, Project, EntryType, ProjectLocation } from '../lib/types';
+import type { LogEntry, Attachment, Project, EntryType, ProjectLocation, Step } from '../lib/types';
 import { ENTRY_TYPES, isActiveProject } from '../lib/types';
 import { backend, esTauri, esWeb } from '../lib/backend';
-import { getData, markRegencia, mutate, organizeFiles, recordVisit, useAppData } from '../lib/store';
-import { nextRegencia } from '../lib/schedule';
-import { shortDate, longDate, monthNameOf, todayISO, uid } from '../lib/dates';
+import { getData, markRegencia, markStep, mutate, organizeFiles, recordVisit, useAppData } from '../lib/store';
+import { nextRegencia, reportTasks, REPORT_LABEL } from '../lib/schedule';
+import { addDays, shortDate, longDate, monthNameOf, todayISO, uid } from '../lib/dates';
 import { photoInfo, commonDate, gpsComun, type PhotoInfo } from '../lib/exif';
 import { distanceKm, kmTxt, mapLink } from '../lib/geo';
 import { Ic, toast } from './core';
@@ -92,6 +92,16 @@ let listening = false;
 export function listenToPhone() {
   if (listening) return;
   listening = true;
+  // A checkbox ticked on the phone: done on the task's own date (or today if it is in the future)
+  backend.onPhoneCheck(c => {
+    const today = todayISO();
+    const t = reportTasks(getData(), today, addDays(today, 60));
+    const task = [...t.overdue, ...t.upcoming].find(x => x.b.id === c.id && x.key === c.key && x.step === c.step);
+    const date = task && task.date <= today ? task.date : today;
+    markStep(c.id, c.key, c.step as Step, c.done ? date : null);
+    const b = getData().projects.find(x => x.id === c.id);
+    toast(`📱 ${b?.code ?? ''}: ${task ? REPORT_LABEL[task.kind].replace(/^\S+\s/, '') : c.step} ${c.done ? 'hecha' : 'desmarcada'}`, true);
+  });
   backend.onPhone(r => {
     const d = getData();
     const b = d.projects.find(x => x.code === r.code);
@@ -115,7 +125,21 @@ export function listenToPhone() {
     const gps = gpsComun(photos.map(f => ({ date: f.takenOn ?? null, time: null, lat: f.lat ?? null, lng: f.lng ?? null })));
     const hadLocation = !!b.location;
     const month = recordVisit(b.id, an?.date || r.date || todayISO(), gps, { undo: false });
-    organizeFiles(); // the photos go into the month they belong to
+    // The note from the phone goes into that month's notes
+    if (month && an?.text.trim()) {
+      const note = an.text.trim();
+      mutate(dd => {
+        const x = dd.projects.find(y => y.id === b.id);
+        if (!x) return;
+        const key = `m:${month}`;
+        x.deliveries = x.deliveries ?? {};
+        const e = x.deliveries[key] ?? { planned: null, due: null, visit: null, photos: null, letter: null, uploaded: null, received: null, letterText: '', files: [] };
+        x.deliveries[key] = { ...e, notes: [e.notes, `📱 ${note}`].filter(Boolean).join('\n') };
+        const en = x.entries.find(a => a.batch === r.batch);
+        if (en) en.text = '';
+      }, { undo: false });
+    }
+    organizeFiles(); // the photos go into the month they belong to (and into its Fotos folder)
     const far = gps && b.location ? distanceKm(gps, b.location) : 0;
     toast(`📱 ${r.total} foto(s) recibida(s) en ${r.code}` + (month ? ` · visita y fotos marcadas (${monthNameOf(month)})` : '') +
       (gps && !hadLocation ? ' · ubicación del proyecto tomada del GPS' : '') + (far > 2 ? ` · ⚠️ las fotos se tomaron a ${kmTxt(far)} del proyecto: ¿es el proyecto correcto?` : ''));

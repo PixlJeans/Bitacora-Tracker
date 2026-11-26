@@ -3,7 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Bitácora Tracker · Fotos</title>
+<title>Bitácora Tracker</title>
+<meta name="theme-color" content="#16a34a">
+<meta name="mobile-web-app-capable" content="yes">
 <style>
   :root{--bg:#121212;--card:#1e1e1e;--text:#eee;--muted:#999;--accent:#4ade80;--border:#333;--danger:#ef4444}
   @media (prefers-color-scheme: light){:root{--bg:#f5f5f5;--card:#fff;--text:#1a1a1a;--muted:#666;--border:#ddd;--accent:#16a34a}}
@@ -29,11 +31,37 @@
   .msg.ok{display:block;background:rgba(74,222,128,.15);color:var(--accent)}
   .msg.err{display:block;background:rgba(239,68,68,.15);color:var(--danger)}
   .proj{font-size:.8rem;color:var(--muted);margin-top:.3rem}
+  .tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0 0 1rem;background:var(--card);padding:4px;border-radius:14px;border:1px solid var(--border)}
+  .tabs button{padding:.7rem;border:none;border-radius:10px;background:none;color:var(--muted);font-size:1rem;font-weight:700}
+  .tabs button.on{background:var(--accent);color:#111}
+  .page{display:none}.page.on{display:block}
+  h2{font-size:.95rem;margin:1.1rem 0 .5rem;display:flex;gap:.4rem;align-items:center}
+  h2 .n{font-size:.75rem;background:var(--border);border-radius:99px;padding:0 .5rem}
+  h2.late .n{background:var(--danger);color:#fff}
+  .task{display:flex;align-items:center;gap:.7rem;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:.75rem .8rem;margin-bottom:.45rem;transition:opacity .3s}
+  .task.late{border-left:4px solid var(--danger)}
+  .task.done{opacity:.35}
+  .box{flex:0 0 30px;height:30px;border-radius:8px;border:2px solid var(--muted);display:grid;place-items:center;font-size:1.1rem;font-weight:900;color:#fff}
+  .task.done .box{background:var(--accent);border-color:var(--accent)}
+  .tt{flex:1;min-width:0}
+  .tt b{display:block;font-size:.95rem}
+  .tt span{display:block;font-size:.8rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tt small{font-size:.75rem;color:var(--muted)}
+  .task.late .tt small{color:var(--danger)}
+  .cam{flex:0 0 auto;border:1px solid var(--border);background:var(--bg);color:var(--text);border-radius:10px;padding:.55rem .65rem;font-size:1.1rem}
+  .more{width:100%;padding:.7rem;border:none;background:none;color:var(--accent);font-weight:700;font-size:.9rem}
+  .empty{color:var(--muted);font-size:.9rem;padding:.3rem 0}
 </style>
 </head>
 <body>
-  <h1>🌿 Fotos para la bitácora</h1>
-  <p class="sub">Se guardan directo en la computadora, en la carpeta del proyecto, como anotación «por subir a SETENA».</p>
+  <h1>🌿 Bitácora Tracker</h1>
+  <p class="sub">Conectado a la computadora por Wi-Fi. Guarda esta página en la pantalla de inicio.</p>
+  <div class="tabs"><button id="tabTasks" class="on">✅ Tareas</button><button id="tabPhotos">📷 Fotos</button></div>
+
+  <div class="page on" id="pageTasks"><div id="taskList"><p class="empty">Cargando…</p></div></div>
+
+  <div class="page" id="pagePhotos">
+  <p class="sub">Se guardan en la carpeta Fotos del mes del proyecto y marcan la inspección.</p>
 
   <label for="search">Proyecto</label>
   <input id="search" placeholder="Buscar número o nombre…" autocomplete="off">
@@ -54,8 +82,9 @@
   <input id="inGal" type="file" accept="image/*" multiple hidden>
   <div class="photos" id="photos"></div>
   <div class="msg" id="msg"></div>
+  </div>
 
-  <div class="bar"><button class="btn primary" id="send">Enviar a la computadora</button></div>
+  <div class="bar" id="sendBar" style="display:none"><button class="btn primary" id="send">Enviar a la computadora</button></div>
 
 <script>
 const T = new URLSearchParams(location.search).get('t');
@@ -165,6 +194,57 @@ $('camera').onclick = () => $('inCam').click();
 $('gallery').onclick = () => $('inGal').click();
 $('inCam').onchange = e => { addPhotos([...e.target.files]); e.target.value = ''; };
 $('inGal').onchange = e => { addPhotos([...e.target.files]); e.target.value = ''; };
+
+// ---------- tabs ----------
+function show(tab) {
+  $('tabTasks').className = tab === 'tasks' ? 'on' : ''; $('tabPhotos').className = tab === 'photos' ? 'on' : '';
+  $('pageTasks').className = 'page' + (tab === 'tasks' ? ' on' : ''); $('pagePhotos').className = 'page' + (tab === 'photos' ? ' on' : '');
+  $('sendBar').style.display = tab === 'photos' ? '' : 'none';
+  if (tab === 'tasks') loadTasks();
+}
+$('tabTasks').onclick = () => show('tasks');
+$('tabPhotos').onclick = () => show('photos');
+
+// ---------- tasks (checkboxes) ----------
+let tasks = [], showAllLate = false;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+async function loadTasks() {
+  try { const r = await fetch('/tasks?t=' + T); const j = await r.json(); tasks = j.tasks || []; renderTasks(); }
+  catch (e) { $('taskList').innerHTML = '<p class="empty">No se pudo conectar con la computadora. Revisa que la app esté abierta y en el mismo Wi-Fi.</p>'; }
+}
+function renderTasks() {
+  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+  const week = new Date(Date.now() + 6 * 864e5 - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+  const late = tasks.filter(t => t.date < today), now = tasks.filter(t => t.date >= today && t.date <= week), later = tasks.filter(t => t.date > week);
+  const row = t => `<div class="task ${t.date < today ? 'late' : ''}" data-i="${tasks.indexOf(t)}"><div class="box"></div>
+    <div class="tt"><b>${esc(t.label)}</b><span>${esc(t.code)} · ${esc(t.name)}</span><small>${esc(t.dateText)}</small></div>
+    ${t.kind === 'inspection' ? `<button class="cam" data-code="${esc(t.code)}" data-date="${esc(t.date)}">📷</button>` : ''}</div>`;
+  const sec = (title, cls, l, limit) => `<h2 class="${cls}">${title} <span class="n">${l.length}</span></h2>` +
+    (l.length ? (limit ? l.slice(0, limit) : l).map(row).join('') + (limit && l.length > limit ? `<button class="more" id="moreLate">Ver ${l.length - limit} más</button>` : '') : '<p class="empty">Nada.</p>');
+  $('taskList').innerHTML = sec('⚠️ Atrasadas', 'late', late, showAllLate ? 0 : 8) + sec('📅 Esta semana', '', now) + sec('🗓️ Próximas', '', later);
+  if ($('moreLate')) $('moreLate').onclick = () => { showAllLate = true; renderTasks(); };
+  document.querySelectorAll('.task').forEach(el => {
+    el.onclick = async ev => {
+      if (ev.target.closest('.cam')) return;
+      const t = tasks[+el.dataset.i];
+      if (el.classList.contains('done')) return;
+      el.classList.add('done'); el.querySelector('.box').textContent = '✓';
+      try {
+        const r = await fetch('/check?t=' + T, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: t.id, key: t.key, step: t.step, done: true }) });
+        if (!r.ok) throw new Error();
+        setTimeout(loadTasks, 900);
+      } catch (e) { el.classList.remove('done'); el.querySelector('.box').textContent = ''; alert('No se pudo guardar. ¿Sigue abierta la app en la computadora?'); }
+    };
+  });
+  document.querySelectorAll('.cam').forEach(b => {
+    b.onclick = () => {
+      $('search').value = ''; renderProjects(); $('project').value = b.dataset.code;
+      show('photos'); $('inCam').click();
+    };
+  });
+}
+loadTasks();
+setInterval(() => { if ($('pageTasks').classList.contains('on') && !document.hidden) loadTasks(); }, 30000);
 
 $('send').onclick = async () => {
   const code = $('project').value;

@@ -15,6 +15,7 @@
 // versions so existing data keeps working; they are also what the user sees in Documents.
 
 mod phone;
+mod setena;
 
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -170,17 +171,22 @@ fn check_reminders(app: &AppHandle) {
         }
     }
 
+    // The Friday summary always goes on its own
+    for a in due.iter().filter(|a| a.kind == "weekly") {
+        notify(app, &a.title, &a.body);
+    }
+    let rest: Vec<&Reminder> = due.iter().filter(|a| a.kind != "weekly").collect();
     // Many at once (e.g. on the first day of the month): a single grouped notification.
-    if due.len() > 3 {
-        let monthly = due.iter().filter(|a| a.kind == "monthly").count();
-        let list: Vec<String> = due.iter().take(4).map(|a| a.title.clone()).collect();
+    if rest.len() > 3 {
+        let monthly = rest.iter().filter(|a| a.kind == "monthly").count();
+        let list: Vec<String> = rest.iter().take(4).map(|a| a.title.clone()).collect();
         notify(
             app,
-            &format!("📋 {} avisos de bitácoras ({} informes regenciales)", due.len(), monthly),
+            &format!("📋 {} avisos ({} bitácoras)", rest.len(), monthly),
             &list.join("\n"),
         );
     } else {
-        for a in &due {
+        for a in &rest {
             notify(app, &a.title, &a.body);
         }
     }
@@ -288,7 +294,7 @@ pub(crate) fn folder_name(s: &str) -> String {
 }
 
 /// Relative folder (e.g. «Proyectos/D1-0170-2020 - CONDOMINIO/2026/11 - Noviembre/Fotos»), each part cleaned.
-fn clean_folder(rel: &str) -> PathBuf {
+pub(crate) fn clean_folder(rel: &str) -> PathBuf {
     rel.split(['/', '\\']).filter(|p| !p.trim().is_empty() && *p != "..").map(folder_name).collect()
 }
 
@@ -391,6 +397,51 @@ fn move_folder_files(from: String, to: String, state: State<'_, AppState>) -> Re
         }
     }
     Ok(n)
+}
+
+#[derive(Serialize)]
+struct TreeFile {
+    path: String,
+    size: u64,
+    modified: u64,
+}
+
+/// Every file under a folder of the data folder (up to 4 levels deep), with its path relative to the data folder.
+#[tauri::command]
+fn list_tree(folder: String, state: State<'_, AppState>) -> Result<Vec<TreeFile>, String> {
+    let base = data_dir(&state)?;
+    let root = base.join(clean_folder(&folder));
+    let mut out = Vec::new();
+    let mut stack = vec![(root, 0u8)];
+    while let Some((dir, depth)) = stack.pop() {
+        let Ok(rd) = fs::read_dir(&dir) else { continue };
+        for e in rd.flatten() {
+            let p = e.path();
+            let name = e.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') || name.starts_with("~$") {
+                continue;
+            }
+            if p.is_dir() {
+                if depth < 4 {
+                    stack.push((p, depth + 1));
+                }
+            } else if let Ok(m) = e.metadata() {
+                let modified = m.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_millis() as u64).unwrap_or(0);
+                out.push(TreeFile { path: rel_string(&base, &p), size: m.len(), modified });
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// The first bytes of a file (base64): enough to read a photo's EXIF date and GPS without loading it all.
+#[tauri::command]
+fn read_head(path: String, max: u64, state: State<'_, AppState>) -> Result<String, String> {
+    use std::io::Read;
+    let p = inside_path(&data_dir(&state)?, &path)?;
+    let mut buf = Vec::new();
+    fs::File::open(p).map_err(|e| e.to_string())?.take(max.min(1_048_576)).read_to_end(&mut buf).map_err(|e| e.to_string())?;
+    Ok(STANDARD.encode(buf))
 }
 
 /// Names of the files in a folder of the data folder (no subfolders, no hidden files); empty if it doesn't exist.
@@ -575,6 +626,7 @@ pub fn run() {
                 let _ = fs::copy(dir.join(DATA_FILE), data.join(DATA_FILE));
             }
             app.manage(phone::PhoneServer::default());
+            app.manage(setena::SetenaState::default());
             app.manage(AppState {
                 data: Mutex::new(data),
                 dir,
@@ -653,10 +705,15 @@ pub fn run() {
             open_folder,
             list_folder,
             move_folder_files,
+            list_tree,
+            read_head,
             open_setena,
             open_map,
             phone::phone_start,
-            phone::phone_projects
+            phone::phone_projects,
+            phone::phone_tasks,
+            setena::setena_open,
+            setena::download_files
         ])
         .build(tauri::generate_context!())
         .expect("error while starting Bitácora Tracker")

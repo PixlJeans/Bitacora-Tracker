@@ -986,3 +986,37 @@ button.sr-chip{cursor:pointer}
 .mn-old{font-size:.82rem;margin:.3rem 0}
 .ed-location{min-height:300px;padding-top:.3rem}
 @media (max-width:760px){.mn-row{grid-template-columns:1fr}}
+/* ===== Rutas semanales ===== */
+.routes{display:flex;flex-direction:column;gap:.8rem;padding-bottom:4rem}
+.rt-bar{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;justify-content:space-between}
+.rt-week{display:flex;align-items:center;gap:.5rem;font-size:.95rem}
+.rt-opts{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;font-size:.84rem;padding:.5rem .7rem;border:1px solid var(--border);border-radius:10px;background:var(--card)}
+.rt-opt{display:inline-flex;align-items:center;gap:.35rem;cursor:pointer}
+.rt-opt select{font:inherit;padding:.1rem .3rem;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:inherit}
+.rt-home{display:inline-flex;align-items:center;gap:.45rem;font-weight:600}
+.rt-home.edit input{width:340px}
+.rt-empty{padding:1.5rem;text-align:center;border:1px dashed var(--border);border-radius:12px}
+.rt-card{border:1px solid var(--border);border-radius:12px;background:var(--card);padding:.7rem .8rem}
+.rt-card-h{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.5rem}
+.rt-card-h .grow{flex:1}
+.rt-card-h>b{font-size:.95rem}
+.rt-sched{display:inline-flex;gap:.35rem;align-items:center}
+.rt-sched select{font:inherit;font-size:.8rem;padding:.25rem .4rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:inherit}
+.rt-body{display:flex;gap:1rem;align-items:flex-start}
+.rt-map{flex:0 0 auto;border-radius:10px;background:var(--bg);border:1px solid var(--border)}
+.rt-stops{list-style:none;margin:0;padding:0;flex:1;min-width:0;display:flex;flex-direction:column;gap:.3rem}
+.rt-stops li{display:grid;grid-template-columns:26px minmax(0,1fr) auto 64px 30px;gap:.5rem;align-items:center;padding:.3rem .45rem;border-radius:8px;background:var(--bg);font-size:.85rem}
+.rt-stops li.rt-home-li{display:flex;gap:.5rem;background:none;color:var(--muted);font-size:.8rem;padding:.1rem .45rem}
+.rt-num{width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:.72rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.rt-leg{text-align:right}
+.rt-stops .ck{width:26px;height:26px;border-radius:6px;border:2px solid var(--muted);background:var(--card);cursor:pointer;color:var(--muted);padding:0}
+.rt-stops .ck:hover{border-color:#22c55e;color:#22c55e}
+.rt-nogps{margin-top:.5rem;font-size:.8rem;display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;color:#d97706}
+@media (max-width:760px){.rt-body{flex-direction:column}.rt-stops li{grid-template-columns:26px 1fr 30px}.rt-stops li small{display:none}}
+.rt-bar .ed-tabs button{white-space:nowrap;display:inline-flex;align-items:center;gap:.3rem}
+.phone-box h2{margin:0 0 .8rem;font-size:1.1rem}
+.phone-grid{display:grid;grid-template-columns:220px 1fr;gap:1.2rem;align-items:start}
+.phone-grid .qr{background:#fff;padding:8px;border-radius:12px}
+.phone-grid .qr svg{width:100%;height:auto;display:block}
+.phone-steps{margin:0;padding-left:1.2rem;display:flex;flex-direction:column;gap:.55rem;font-size:.9rem}
+.phone-modal .modal-actions{display:flex;margin-top:1rem}

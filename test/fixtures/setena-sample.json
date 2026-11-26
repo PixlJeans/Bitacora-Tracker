@@ -1,0 +1,14 @@
+{"projects":[
+ {"code":"D1-0170-2020","name":"CONDOMINIO VISTA DEL BOSQUE","status":"Abierta","closed":false,"events":[
+  {"date":"2024-02-29","text":"Se procede a presentar informe de Regencia Ambiental I-2024.","files":[]},
+  {"date":"2024-02-29","text":"","files":["~/D1-0170-2020/Tramitacion/553a394a-bef6-4662-8529-ce60dac45ccb2024_2_29.pdf"]},
+  {"date":"2023-08-28","text":"El proyecto cuenta con todas la infraestructura construida","files":[]},
+  {"date":"2023-08-28","text":"","files":["~/D1-0170-2020/Tramitacion/76aad41f-13c1-4c8b-84a3-1c21620d4c0e2023_8_28.jpg","~/D1-0170-2020/Tramitacion/8bad26ce-3552-4c3a-a5d9-bc37c9e20f112023_8_28.jpg"]},
+  {"date":"2022-01-14","text":"Se apertura bitácora. Se ha iniciado los movimientos de tierra","files":["~/D1-0170-2020/Tramitacion/89fd012e-8bed-4be9-ae9b-33c929d1895e2022_1_14.jpg"]}]},
+ {"code":"D1-0607-2026","name":"AMPLIACION DE BODEGA","status":"Abierta","closed":false,"events":[
+  {"date":"2026-11-25","text":"","files":["~/D1-0607-2026/Tramitacion/b4bae5e9-ac67-4ddd-afee-6a4c624fe0d32026_11_25.JPG"]},
+  {"date":"2026-11-25","text":"Inicio de obra con fecha del 16 de noviembre del 2026.","files":[]},
+  {"date":"2026-11-09","text":"","files":["~/D1-0607-2026/Tramitacion/473fa0af-8544-4f80-a82d-c14d5ef3a5f02026_11_9.pdf"]}]},
+ {"code":"D1-0550-2020","name":"Condominio Almazara","status":"Solicitud de Cierre","closed":false,"events":[
+  {"date":"2026-04-29","text":"","files":["~/d1-0550-2020/cierre/solicitudcierre_2026_4_29.pdf"]}]}
+]}

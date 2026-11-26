@@ -1,0 +1,112 @@
+// ===== What the user put in the folders by hand (File Explorer, phone sync, camera card…) =====
+// Reads Proyectos/<Código - Nombre>/<Año>/<MM - Mes>/Fotos|Regencias and …/Inicio de obras:
+//  · photos in a month's Fotos folder → that month's Inspección is checked, on the date the photo was taken
+//    (EXIF), and a project without location takes it from the photos' GPS;
+//  · a document in a Regencias folder → that Regencia is «elaborada» and «subida»;
+//  · a document in Inicio de obras → the Carta de Inicio de obras is checked.
+// Only the first bytes of each photo are read (the EXIF), and only when something is still unchecked.
+import type { Project } from './types';
+import { isActiveProject } from './types';
+import { backend, esWeb } from './backend';
+import { getData, mutate, applyStep, deliveryOf } from './store';
+import { dueInMonth, hasSchedule, inspectionDate, regenciaDueDates, regenciaDue } from './schedule';
+import { readExif } from './exif';
+import { addMonths, todayISO } from './dates';
+import { projectFolder } from './folders';
+
+const IMG = /\.(jpe?g|png|heic|heif|webp)$/i;
+const DOC = /\.(docx?|pdf|odt|rtf|xlsx?)$/i;
+const MONTH_DIR = /\/(\d{4})\/(\d{2}) - [^/]+\/(Fotos|Regencias)\/[^/]+$/;
+
+function b64ToBuf(b64: string): ArrayBuffer {
+  const bin = atob(b64), u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return u.buffer;
+}
+
+/** Monthly key whose inspection falls in folder month `ym` (it may have been moved), or that month itself. */
+function inspectionKeyFor(b: Project, ym: string): string | null {
+  for (let i = -3; i <= 3; i++) {
+    const mk = addMonths(`${ym}-15`, i).slice(0, 7);
+    if (dueInMonth(b, mk) && inspectionDate(b, mk).slice(0, 7) === ym) return `m:${mk}`;
+  }
+  return dueInMonth(b, ym) ? `m:${ym}` : null;
+}
+/** Regencia key whose (possibly moved) date falls in folder month `ym`. */
+function regenciaKeyFor(b: Project, ym: string): string | null {
+  const k = regenciaDueDates(b, b.openedOn, addMonths(`${ym}-01`, 7)).find(x => regenciaDue(b, x).slice(0, 7) === ym);
+  return k ? `r:${k}` : null;
+}
+
+let busy = false, last = 0;
+
+/** Looks at every active project's folder; returns a short summary of what it checked. */
+export async function scanFolders(force = false): Promise<string> {
+  if (esWeb || busy || (!force && Date.now() - last < 20_000)) return '';
+  busy = true; last = Date.now();
+  const today = todayISO();
+  const visits: { id: string; key: string; date: string }[] = [];
+  const regs: { id: string; key: string }[] = [];
+  const starts: string[] = [];
+  const places: { id: string; lat: number; lng: number }[] = [];
+  try {
+    for (const b of getData().projects) {
+      if (!isActiveProject(b) || !hasSchedule(b)) continue;
+      let files: { path: string; size: number; modified: number }[];
+      try { files = await backend.listTree(projectFolder(b)); } catch { continue; }
+      if (!files.length) continue;
+      const byKey = new Map<string, typeof files>();
+      const gps: { lat: number; lng: number }[] = [];
+      for (const f of files) {
+        if (/\/Inicio de obras\/[^/]+$/.test(f.path) && DOC.test(f.path) && !deliveryOf(b, 's:start').uploaded && !starts.includes(b.id)) { starts.push(b.id); continue; }
+        const m = MONTH_DIR.exec(f.path);
+        if (!m) continue;
+        const ym = `${m[1]}-${m[2]}`;
+        if (m[3] === 'Fotos' && IMG.test(f.path)) {
+          const key = inspectionKeyFor(b, ym);
+          if (key) byKey.set(key, [...(byKey.get(key) ?? []), f]);
+        } else if (m[3] === 'Regencias' && DOC.test(f.path)) {
+          const key = regenciaKeyFor(b, ym);
+          if (key && !deliveryOf(b, key).uploaded && !regs.some(r => r.id === b.id && r.key === key)) regs.push({ id: b.id, key });
+        }
+      }
+      // Photos: read the EXIF only where the inspection is still unchecked, or to find the project's location
+      let readForGps = 0;
+      for (const [key, photos] of byKey) {
+        const needVisit = !deliveryOf(b, key).visit;
+        if (!needVisit && (b.location || readForGps >= 6)) continue;
+        const dates: string[] = [];
+        for (const f of photos.slice(0, needVisit ? 12 : 3)) {
+          if (!/\.jpe?g$/i.test(f.path)) { if (f.modified) dates.push(new Date(f.modified).toISOString().slice(0, 10)); continue; }
+          try {
+            const info = readExif(b64ToBuf(await backend.readHead(f.path, 262_144)));
+            if (info.date) dates.push(info.date);
+            else if (f.modified) dates.push(new Date(f.modified).toISOString().slice(0, 10));
+            if (info.lat != null && info.lng != null) gps.push({ lat: info.lat, lng: info.lng });
+          } catch { /* unreadable photo */ }
+          readForGps++;
+        }
+        if (needVisit) {
+          const ym = key.slice(2), insp = inspectionDate(b, ym);
+          // the photo date if it is near the inspection month, otherwise the inspection date
+          const near = dates.filter(x => x >= addMonths(insp, -1) && x <= addMonths(insp, 1)).sort();
+          const date = near[near.length - 1] ?? insp;
+          visits.push({ id: b.id, key, date: date <= today ? date : today });
+        }
+      }
+      if (!b.location && gps.length) {
+        const lat = gps.reduce((s, p) => s + p.lat, 0) / gps.length, lng = gps.reduce((s, p) => s + p.lng, 0) / gps.length;
+        places.push({ id: b.id, lat: +lat.toFixed(6), lng: +lng.toFixed(6) });
+      }
+    }
+    if (!visits.length && !regs.length && !starts.length && !places.length) return '';
+    mutate(d => {
+      for (const v of visits) { const b = d.projects.find(x => x.id === v.id); if (b && !deliveryOf(b, v.key).visit) { applyStep(b, v.key, 'visit', v.date); applyStep(b, v.key, 'photos', v.date); } }
+      for (const r of regs) { const b = d.projects.find(x => x.id === r.id); if (b) { if (!deliveryOf(b, r.key).letter) applyStep(b, r.key, 'letter', today); applyStep(b, r.key, 'uploaded', today); } }
+      for (const id of starts) { const b = d.projects.find(x => x.id === id); if (b) applyStep(b, 's:start', 'uploaded', today); }
+      for (const p of places) { const b = d.projects.find(x => x.id === p.id); if (b && !b.location) b.location = { lat: p.lat, lng: p.lng, text: '', source: 'photo' }; }
+    }, { undo: true });
+    return [visits.length && `${visits.length} inspección(es) marcadas por sus fotos`, regs.length && `${regs.length} regencia(s) encontradas`,
+      starts.length && `${starts.length} carta(s) de inicio`, places.length && `ubicación de ${places.length} proyecto(s) tomada del GPS`].filter(Boolean).join(' · ');
+  } finally { busy = false; }
+}
