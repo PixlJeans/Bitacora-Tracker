@@ -3,22 +3,24 @@
 // Here it is copied as it is, by the DATE of each entry:
 //  · every file → Proyectos/<Código - Nombre>/<Año>/<MM - Mes>/Fotos (photos) or …/Regencias (PDF / Word),
 //    named with that date; without opening date: …/<MM - Mes>/SETENA;
+//  · when one day has several entries with documents, the first one is the regencia and the later ones are
+//    SETENA's receipt → …/Notas de recibido (also moved there if it was already downloaded into Regencias);
 //  · every entry's text → that month's notes («SETENA 12/09/2023: …»);
 //  · the start of the project = its first SETENA entry (the bottom of its page): it fills the opening date of
 //    projects that don't have one (a date you entered is never changed);
 //  · a bitácora that isn't in the app is created with that date;
 //  · the status is copied from SETENA (Nueva / Abierta / Solicitud de Cierre; closed → Terminada).
-// Nothing is checked and no file is classified: that stays in your hands.
 // Running it again only adds what is new (files already on disk are skipped, notes aren't repeated).
 import type { AppData, Project, Status } from './types';
 import { emptyDelivery } from './types';
 import { todayISO, uid } from './dates';
-import { setenaTarget } from './folders';
+import { isImage, monthFolderOf, setenaTarget } from './folders';
 
-export interface SetenaEvent { date: string; text: string; files: string[] }
+export interface SetenaEvent { date: string; time?: number | null; text: string; files: string[] }
 export interface SetenaProject { code: string; name: string; status: string; closed?: boolean; url?: string; events: SetenaEvent[] }
 export interface SetenaManifest { projects: SetenaProject[]; readAt?: string }
 export interface Download { url: string; folder: string; name: string }
+export interface Move { from: string; folder: string }
 
 const ddmmyyyy = (iso: string) => `${iso.slice(8)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 
@@ -42,12 +44,18 @@ export function fileName(url: string, date: string): string {
 /** Applies the portal's data to `d` (inside a mutate). Returns the files to download and a summary. */
 export function applySetena(d: AppData, m: SetenaManifest, today = todayISO()) {
   const downloads: Download[] = [];
+  const moves: Move[] = [];
   const seen = new Set<string>();
   let created = 0, notes = 0, statuses = 0, dates = 0;
 
   for (const sp of m.projects) {
     const code = sp.code.trim().toUpperCase();
-    const events = [...(sp.events || [])].filter(e => /^\d{4}-\d{2}-\d{2}$/.test(e.date)).sort((a, c) => a.date.localeCompare(c.date));
+    // oldest first; within a day by the hour (the page lists the newest on top, so without an hour: reversed page order)
+    const events = [...(sp.events || [])].map((e, i) => ({ ...e, order: -i })).filter(e => /^\d{4}-\d{2}-\d{2}$/.test(e.date))
+      .sort((a, c) => a.date.localeCompare(c.date) || ((a.time ?? null) !== null && (c.time ?? null) !== null ? a.time! - c.time! : a.order - c.order));
+    const withDocs = (e: SetenaEvent) => e.files.some(u => !isImage(u));
+    const firstDocOfDay = new Map<string, SetenaEvent>();
+    for (const e of events) if (withDocs(e) && !firstDocOfDay.has(e.date)) firstDocOfDay.set(e.date, e);
     const start = events[0]?.date ?? null;
     let b = d.projects.find(x => x.code.toUpperCase() === code);
     if (!b) {
@@ -82,10 +90,14 @@ export function applySetena(d: AppData, m: SetenaManifest, today = todayISO()) {
         if (!/^https:\/\/bitacora\.setena\.go\.cr\/documents\//i.test(url) || seen.has(url)) continue;
         seen.add(url);
         const name = fileName(url, e.date);
-        downloads.push({ url, folder: setenaTarget(b, ym, name), name });
+        // a document after the day's first one with documents = SETENA's receipt of that regencia
+        const receipt = !isImage(name) && firstDocOfDay.get(e.date) !== e;
+        const folder = setenaTarget(b, ym, name, receipt);
+        downloads.push({ url, folder, name });
+        if (receipt && folder.endsWith('/Notas de recibido')) moves.push({ from: `${monthFolderOf(b, ym, 'Regencias')}/${name}`, folder });
       }
     }
   }
   const summary = [created && `${created} bitácora(s) nuevas`, dates && `${dates} fecha(s) de inicio`, statuses && `${statuses} estado(s) actualizados`, notes && `${notes} notas`].filter(Boolean).join(' · ');
-  return { downloads, summary };
+  return { downloads, moves, summary };
 }

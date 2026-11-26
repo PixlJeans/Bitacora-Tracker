@@ -74,7 +74,12 @@ export default function App() {
       toast(`📥 SETENA: ${res.summary || 'sin cambios'} · descargando ${res.downloads.length} archivo(s)…`, true);
       // The app never replaces a file: it skips the ones downloaded before (even if renamed, moved or deleted)
       // and any name already in the project's folder; it only brings what's missing.
-      if (res.downloads.length) backend.downloadFiles(res.downloads).catch(e => toast(String(e)));
+      // receipts already downloaded into Regencias go to «Notas de recibido» (if not there, nothing happens)
+      void (async () => {
+        for (const mv of res.moves) { try { await backend.moveAttachment(mv.from, mv.folder); } catch { /* not there */ } }
+        if (res.downloads.length) await backend.downloadFiles(res.downloads);
+        void scanFolders(true).then(msg => { if (msg) toast(msg, true); });
+      })().catch(e => toast(String(e)));
     });
     backend.onDownload(p => {
       setDl(p.finished ? null : p);

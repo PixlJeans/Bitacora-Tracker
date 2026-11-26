@@ -30,8 +30,12 @@
         const u = x.getAttribute('href') || x.getAttribute('src') || '';
         if (/\/documents\//i.test(u) && /\.[a-z0-9]{2,5}$/i.test(u)) files.add(new URL(u, location.origin).href);
       });
+      const when = l.querySelector('.flik-timeline-date').textContent;
+      // «7:45:30 p.m» → seconds of the day (to know which of two entries of the same day came first)
+      const tm = /(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([ap])\.?\s*m/i.exec(when);
+      const time = tm ? ((+tm[1] % 12) + (tm[4].toLowerCase() === 'p' ? 12 : 0)) * 3600 + +tm[2] * 60 + +(tm[3] || 0) : null;
       return {
-        date: parseDate(l.querySelector('.flik-timeline-date').textContent),
+        date: parseDate(when), time,
         text: clean((l.querySelector('.masTexto') || {}).textContent || ''),
         files: [...files]
       };

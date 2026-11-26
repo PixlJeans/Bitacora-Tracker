@@ -524,10 +524,11 @@ fn open_setena(url: String) -> Result<(), String> {
     open_in_system(url)
 }
 
-/// Opens Google Maps (a project's location or a day's route) in the browser.
+/// Opens Google Maps (a project's location or a day's route) or a SETENA portal page in the default browser.
 #[tauri::command]
 fn open_map(url: String) -> Result<(), String> {
-    if !url.starts_with("https://www.google.com/maps/") || url.chars().any(|c| c.is_whitespace() || c == '"') {
+    let allowed = url.starts_with("https://www.google.com/maps/") || url.starts_with("https://bitacora.setena.go.cr/");
+    if !allowed || url.chars().any(|c| c.is_whitespace() || c == '"') {
         return Err("Dirección no permitida".into());
     }
     open_in_system(url)

@@ -37,15 +37,17 @@ export function regenciaKeyNear(b: Project, date: string): string | null {
 
 const IMG = /\.(jpe?g|png|gif|webp|heic|heif)$/i;
 /** Where a file from SETENA goes, by the month of its entry (no guessing):
- *  photos → that month's Fotos · documents (PDF / Word: regencias, notas de recibido…) → that month's Regencias.
+ *  photos → that month's Fotos · documents (PDF / Word) → that month's Regencias, or its «Notas de recibido» when
+ *  `receipt` (a later document of the same day: SETENA's receipt of the regencia posted just before).
  *  While the project has no opening date: the month's SETENA folder. */
-export function setenaTarget(b: Project, ym: string, name: string): string {
+export function setenaTarget(b: Project, ym: string, name: string, receipt = false): string {
   if (!hasSchedule(b)) return monthFolderOf(b, ym, 'SETENA');
-  return monthFolderOf(b, ym, IMG.test(name) ? 'Fotos' : 'Regencias');
+  return monthFolderOf(b, ym, IMG.test(name) ? 'Fotos' : receipt ? 'Notas de recibido' : 'Regencias');
 }
+export const isImage = (name: string) => IMG.test(name);
 
 /** Folder of one month of a project (by date), e.g. «…/2026/11 - Noviembre/Documentos». */
-export const monthFolderOf = (b: Pick<Project, 'code' | 'name'>, ym: string, sub: 'Fotos' | 'Regencias' | 'Documentos' | 'SETENA') => `${projectFolder(b)}/${monthFolder(ym)}/${sub}`;
+export const monthFolderOf = (b: Pick<Project, 'code' | 'name'>, ym: string, sub: 'Fotos' | 'Regencias' | 'Notas de recibido' | 'Documentos' | 'SETENA') => `${projectFolder(b)}/${monthFolder(ym)}/${sub}`;
 
 const monthFolder = (ym: string) => {
   const [y, m] = ym.split('-');

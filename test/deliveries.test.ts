@@ -274,6 +274,26 @@ console.log('deliveries OK');
   applySetena(dd, raw, '2026-11-26');
   assert.equal(JSON.stringify(dd), before, 'idempotent');
 }
+// ---- same day, two entries with documents: the first is the regencia, the later one SETENA's receipt ----
+{
+  const dd = normalize({ projects: [{ id: 'rc', code: 'D1-0009-2023', name: 'REC', status: 'open', openedOn: '2023-08-14', createdOn: '2023-08-14', noOpeningDate: false }] });
+  const doc = (h: string) => `https://bitacora.setena.go.cr/documents/D1-0009-2023/Tramitacion/${h}-1111-2222-3333-444444444444_2024_2_29.pdf`;
+  const man = { projects: [{ code: 'D1-0009-2023', name: 'REC', status: 'Abierta', url: '/x', events: [
+    { date: '2024-02-29', time: 19 * 3600 + 45 * 60 + 30, text: '', files: [doc('aaaaaaaa')] },   // 7:45:30 p.m (top of the page)
+    { date: '2024-02-29', time: 19 * 3600 + 44 * 60 + 29, text: '', files: [doc('bbbbbbbb')] },   // 7:44:29 p.m
+    { date: '2024-03-10', text: '', files: [doc('cccccccc')] },                                    // alone: regencia
+    { date: '2024-04-02', text: 'top', files: [doc('dddddddd')] },                                 // no hour: page order
+    { date: '2024-04-02', text: 'bottom', files: [doc('eeeeeeee')] }
+  ] }] };
+  const r = applySetena(dd, man as any, '2026-11-26');
+  const at = (h: string) => r.downloads.find(x => x.name.includes(h))!.folder.split('/').pop();
+  assert.equal(at('bbbbbbbb'), 'Regencias', 'earlier entry = regencia');
+  assert.equal(at('aaaaaaaa'), 'Notas de recibido', 'later entry the same day = receipt');
+  assert.equal(at('cccccccc'), 'Regencias');
+  assert.equal(at('eeeeeeee'), 'Regencias', 'bottom of the page = earlier');
+  assert.equal(at('dddddddd'), 'Notas de recibido');
+  assert.deepEqual(r.moves.map(m => m.from.split('/').slice(-2).join('/')), ['Regencias/2024-02-29_aaaaaaaa.pdf', 'Regencias/2024-04-02_dddddddd.pdf']);
+}
 // ---- location from photos downloaded from SETENA (nothing checked) ----
 {
   const dd = normalize({ projects: [{ id: 's2', code: 'D1-0002-2025', name: 'GPS', status: 'open', openedOn: '2025-01-10', createdOn: '2025-01-10', noOpeningDate: false }] });
