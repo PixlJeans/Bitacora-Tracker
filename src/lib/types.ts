@@ -60,6 +60,7 @@ export interface Delivery {
   uploaded: string | null;   // date it was uploaded to SETENA (= submitted)
   received: string | null; // Regencia: SETENA's «nota de recibido» (date)
   letterText: string;      // the letter for SETENA (a template will fill it later)
+  notes?: string;          // notes of that month / Regencia
   files: Attachment[];     // photos and documents (letter, PDF) of this delivery, saved in proyectos/<code>/
 }
 export const emptyDelivery = (): Delivery => ({ planned: null, due: null, visit: null, photos: null, letter: null, uploaded: null, received: null, letterText: '', files: [] });

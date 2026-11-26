@@ -61,10 +61,12 @@ export function DeliveryCard({ b, itemKey: key }: { b: Project; itemKey: string;
           onMove={v => editDelivery(b.id, key, { planned: v })} />
         <CheckRow b={b} itemKey={key} step="uploaded" name="📋 Llenado de bitácora" date={due} auto={auto} today={today}
           onMove={v => editDelivery(b.id, key, { due: v })} />
+        <MonthNote b={b} itemKey={key} />
       </> : <>
         <CheckRow b={b} itemKey={key} step="letter" name="✍️ Elaboración de la regencia" today={today} />
         <CheckRow b={b} itemKey={key} step="uploaded" name="📤 Subir regencia" today={today} date={due} />
         <CheckRow b={b} itemKey={key} step="received" name="🧾 Nota de recibido" today={today} />
+        <MonthNote b={b} itemKey={key} />
       </>}
     </div>
   );
@@ -223,5 +225,23 @@ export function StartLetter({ b }: { b: Project }) {
       <div className="cl-h"><b>🏗️ Inicio del proyecto</b><span className="grow" /><FolderButton b={b} itemKey="s:start" /></div>
       <CheckRow b={b} itemKey="s:start" step="uploaded" name="🏗️ Carta de Inicio de obras" today={todayISO()} />
     </div>
+  );
+}
+
+/** Notes of one month (or one Regencia): saved by themselves while typing. */
+export function MonthNote({ b, itemKey: key, rows = 1, placeholder }: { b: Project; itemKey: string; rows?: number; placeholder?: string }) {
+  const saved = deliveryOf(b, key).notes ?? '';
+  const [txt, setTxt] = useState(saved);
+  const t = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => { if (!t.current) setTxt(saved); }, [saved]);
+  const change = (v: string) => {
+    setTxt(v);
+    if (t.current) clearTimeout(t.current);
+    t.current = setTimeout(() => { t.current = null; editDelivery(b.id, key, { notes: v }, { undo: false }); }, 500);
+  };
+  return (
+    <textarea className={`month-note ${txt ? 'has' : ''}`} rows={txt ? Math.max(rows, Math.min(6, txt.split('\n').length)) : rows} value={txt}
+      placeholder={placeholder ?? '📝 Notas de este mes…'} onChange={e => change(e.target.value)}
+      onBlur={() => { if (t.current) { clearTimeout(t.current); t.current = null; editDelivery(b.id, key, { notes: txt }, { undo: false }); } }} />
   );
 }

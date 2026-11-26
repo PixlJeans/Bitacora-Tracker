@@ -949,3 +949,40 @@ button.sr-chip{cursor:pointer}
 .c-task .ck{width:24px;height:24px;border-radius:6px;border:2px solid var(--muted);background:var(--card);color:transparent;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
 .c-task .ck:hover{border-color:#22c55e;color:#22c55e}
 .c-task.overdue .ck{border-color:var(--danger)}
+/* ===== v1.11: Tareas home + simpler header ===== */
+.btn.icon-only{padding:.4rem .7rem;font-weight:700;letter-spacing:.05em}
+.tasks{display:flex;flex-direction:column;gap:1rem;padding-bottom:4rem}
+.tk-sec h3{font-size:.95rem;margin:0 0 .45rem;display:flex;align-items:center;gap:.5rem}
+.tk-n{font-size:.72rem;padding:.05rem .5rem;border-radius:999px;background:var(--border)}
+.tk-sec.late .tk-n{background:var(--danger);color:#fff}
+.tk-empty{margin:.1rem 0;font-size:.85rem}
+.tk-row{display:grid;grid-template-columns:minmax(220px,300px) minmax(0,1fr) 110px 130px;align-items:center;gap:.8rem;padding:.5rem .7rem;margin-bottom:.35rem;border-radius:10px;background:var(--card);border:1px solid var(--border);transition:opacity .25s, transform .25s}
+.tk-row.late{border-left:3px solid var(--danger)}
+.tk-row.done{opacity:.35;transform:translateX(8px)}
+.tk-row.done .cl-box{background:#22c55e;border-color:#22c55e}
+.tk-what{font-weight:600;font-size:.88rem}
+.tk-row.k-regElab .tk-what,.tk-row.k-regUpload .tk-what{color:#8b5cf6}
+.tk-proj{all:unset;cursor:pointer;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.86rem}
+.tk-proj:hover span{text-decoration:underline}
+.tk-proj .mono{margin-right:.35rem}
+.tk-date{display:flex;flex-direction:column;line-height:1.15;font-size:.82rem}
+.tk-date small{color:var(--muted);font-size:.7rem}
+.tk-row.late .tk-date{color:var(--danger)}
+.tk-folder{justify-self:end}
+.tk-more{margin:.2rem 0 0 .4rem}
+.tk-catchup{padding:.6rem .8rem;border-radius:10px;border:1px solid var(--border);background:var(--card);font-size:.85rem;display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
+.tk-catchup.warn{border-color:#f59e0b}
+.ed-summary{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;font-size:.85rem;padding:.4rem 0 .2rem}
+.ed-summary .grow{flex:1}
+@media (max-width:760px){.tk-row{grid-template-columns:1fr auto}.tk-proj{grid-column:1/-1;grid-row:2}.tk-folder{display:none}}
+.top-btns .pop-opt,.popover .pop-opt{justify-content:flex-start;text-align:left;gap:.5rem;width:100%}
+/* month notes + location tab */
+.month-note{width:100%;box-sizing:border-box;resize:vertical;font:inherit;font-size:.84rem;padding:.4rem .6rem;border-radius:9px;border:1px dashed var(--border);background:transparent;color:inherit;min-height:2.1rem}
+.month-note:focus{outline:none;border-style:solid;border-color:var(--accent);background:var(--bg)}
+.month-note.has{border-style:solid;background:color-mix(in srgb,#f59e0b 7%,var(--bg))}
+.month-notes{display:flex;flex-direction:column;gap:.6rem;min-height:300px}
+.mn-row{display:grid;grid-template-columns:170px 1fr;gap:.7rem;align-items:start}
+.mn-month{font-size:.86rem;padding-top:.45rem}
+.mn-old{font-size:.82rem;margin:.3rem 0}
+.ed-location{min-height:300px;padding-top:.3rem}
+@media (max-width:760px){.mn-row{grid-template-columns:1fr}}

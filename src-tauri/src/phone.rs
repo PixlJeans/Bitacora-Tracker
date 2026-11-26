@@ -5,7 +5,6 @@
 
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hasher};
-use std::io::Read;
 use std::sync::Mutex;
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};

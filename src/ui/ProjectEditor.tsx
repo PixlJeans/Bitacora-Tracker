@@ -6,14 +6,14 @@ import type { Project, Status, ProjectLocation } from '../lib/types';
 import { STATUSES, isActiveProject, isFinished } from '../lib/types';
 import { codeExists, getData, mutate, labelForStatus, archive, useAppData, markAllBefore } from '../lib/store';
 import { normalizeCode, isValidCode } from '../lib/parser';
-import { nextRegencia, openingFrom, pendingBefore } from '../lib/schedule';
+import { nextRegencia, openingFrom, pendingBefore, monthsSinceOpening, dueInMonth } from '../lib/schedule';
 import { mapLink, parseCoordinates } from '../lib/geo';
 import { gpsComun } from '../lib/exif';
 import { backend } from '../lib/backend';
-import { shortDate, longDate, fromISO, todayISO, uid, monthName } from '../lib/dates';
+import { shortDate, longDate, fromISO, todayISO, uid, monthName, monthNameOf, addMonths } from '../lib/dates';
 import { ProjectCalendar } from './ProjectCalendar';
 import { projectFolder } from '../lib/folders';
-import { ProjectLog } from './ProjectLog';
+import { MonthNote } from './Delivery';
 import { Ic, openModal, closeModal, confirmDialog, toast } from './core';
 import { openSettings } from './Settings';
 
@@ -35,12 +35,15 @@ export async function deleteProject(b: Project): Promise<boolean> {
   return true;
 }
 
-export function openEditor(b?: Project, initial?: Partial<Project>, initialTab: 'details' | 'log' = 'details') {
+type Tab = 'details' | 'log' | 'notes' | 'location';
+
+export function openEditor(b?: Project, initial?: Partial<Project>, initialTab: Tab = 'details') {
   openModal(<ProjectEditor b={b} initial={initial} initialTab={initialTab} />, 'create-modal editor');
 }
 
-function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Project; initial?: Partial<Project>; initialTab: 'details' | 'log' }) {
+function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Project; initial?: Partial<Project>; initialTab: Tab }) {
   const [tab, setTab] = useState(initialTab);
+  const [editFields, setEditFields] = useState(false);
   const d = useAppData();
   // Deliveries, steps, log entries and photos are saved immediately: always read from the live data
   const live = b ? d.projects.find(x => x.id === b.id) : undefined;
@@ -105,13 +108,23 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
         {b && (
           <div className="ed-tabs" role="tablist">
             <button type="button" role="tab" className={tab === 'details' ? 'on' : ''} onClick={() => setTab('details')}>📋 Entregas</button>
-            <button type="button" role="tab" className={tab === 'log' ? 'on' : ''} onClick={() => setTab('log')}>
-              📷 Notas{b.entries.some(a => !a.uploaded) ? <b className="tab-badge">{b.entries.filter(a => !a.uploaded).length}</b> : null}</button>
+            <button type="button" role="tab" className={tab === 'notes' || tab === 'log' ? 'on' : ''} onClick={() => setTab('notes')}>📝 Notas</button>
+            <button type="button" role="tab" className={tab === 'location' ? 'on' : ''} onClick={() => setTab('location')}>📍 Ubicación{view.location ? '' : <b className="tab-badge">!</b>}</button>
           </div>
         )}
       </div>
-      {tab === 'log' && b ? <ProjectLog id={b.id} /> : <>
-      <div className="ed-row">
+      {b && (tab === 'notes' || tab === 'log') ? <MonthNotes b={view} f={f} setNotes={v => set('notes', v)} />
+        : b && tab === 'location' ? <div className="ed-location"><LocationField b={view} onChange={setLoc} /></div> : <>
+      {b && !editFields && (
+        <div className="ed-summary">
+          <span className={`status-chip status-${f.status}`}>{STATUSES.find(x => x.id === f.status)?.name}</span>
+          <span>Apertura <b>{f.noOpeningDate ? '—' : longDate(f.openedOn)}</b></span>
+          {isActiveProject(f) && !f.noOpeningDate && <span className="muted">· tareas el día {day} de cada mes{nextReg ? ` · regencia ${shortDate(nextReg.due)}` : ''}</span>}
+          <span className="grow" />
+          <button type="button" className="dp-link" onClick={() => setEditFields(true)}>✏️ Editar datos</button>
+        </div>
+      )}
+      {(!b || editFields) && <div className="ed-row">
         <div className="ed-f code">
           <label className="modal-label" htmlFor="ed_num">Número</label>
           <input id="ed_num" className="modal-input mono" placeholder="D1-0170-2020" value={f.code} autoFocus={!b}
@@ -133,7 +146,7 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
             {STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
-      </div>
+      </div>}
 
       {isActiveProject(f) && f.noOpeningDate && <MissingOpening f={f} onSet={o => {
         setF(x => ({ ...x, openedOn: o, noOpeningDate: false }));
@@ -141,8 +154,8 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
         toast(`📅 ${f.code}: apertura ${longDate(o)}; entregas calculadas`, true);
       }} />}
       {isActiveProject(f) && f.noOpeningDate ? null : isActiveProject(f)
-        ? <div className="ed-auto-line muted">📅 Inspección y bitácora el día <b>{day}</b> de cada mes · Regencia cada 6 meses{nextReg ? ` (${nextReg.due < today ? 'pendiente' : 'próxima'} ${shortDate(nextReg.due)})` : ''} · ✏️ cada fecha se puede mover
-            {b && live && <> · <button type="button" className="dp-link" title="Ir al mes de inicio (carta de Inicio de obras)" onClick={() => window.dispatchEvent(new CustomEvent('bt-goto-month', { detail: view.openedOn.slice(0, 7) }))}>🏗️ Inicio de obras{live.deliveries?.['s:start']?.uploaded ? ' ✓' : ''}</button></>}
+        ? <div className="ed-auto-line muted">{!b && <>📅 Inspección y bitácora el día <b>{day}</b> de cada mes · Regencia cada 6 meses</>}
+            {b && live && <><button type="button" className="dp-link" title="Ir al mes de inicio (carta de Inicio de obras)" onClick={() => window.dispatchEvent(new CustomEvent('bt-goto-month', { detail: view.openedOn.slice(0, 7) }))}>🏗️ Inicio de obras{live.deliveries?.['s:start']?.uploaded ? ' ✓' : ''}</button></>}
             {b && live && behind > 0 && (askCatchUp
               ? <span className="catch-up">¿Marcar como hechas las {behind} tareas anteriores a {monthName(fromISO(today)).toLowerCase()}? <button type="button" className="btn sm primary" onClick={catchUp}>Sí, marcar</button> <button type="button" className="dp-link" onClick={() => setAskCatchUp(false)}>no</button></span>
               : <button type="button" className="dp-link catch-up" onClick={() => setAskCatchUp(true)}>✓ Marcar todo lo anterior a {monthName(fromISO(today)).toLowerCase()} como hecho ({behind})</button>)}</div>
@@ -151,7 +164,7 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
       <ProjectCalendar b={view} live={!!live} onChange={c => setF(x => ({ ...x, ...c }))} />
 
       <details className="ed-more">
-        <summary>Más datos · avance, ubicación y notas</summary>
+        <summary>Más datos · avance</summary>
         <div className="ed-more-grid">
           <div>
             <label className="modal-label">Avance
@@ -163,11 +176,8 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
                   onClick={() => set('labelId', e.id)}><span className="dot" />{e.name}</button>
               ))}
             </div>
-            <label className="modal-label" htmlFor="ed_notas">Notas</label>
-            <textarea id="ed_notas" className="modal-input" rows={2} value={f.notes} placeholder="Regente, consultor, observaciones…"
-              onChange={e => set('notes', e.target.value)} />
           </div>
-          <div><LocationField b={view} onChange={setLoc} /></div>
+          {!b && <div><LocationField b={view} onChange={setLoc} /></div>}
         </div>
       </details>
       </>}
@@ -241,6 +251,35 @@ function MissingOpening({ f, onSet }: { f: Project; onSet: (opening: string) => 
         <button type="button" className="btn sm primary" disabled={!calc} onClick={() => onSet(calc)} title={calc ? `Apertura calculada: ${longDate(calc)}` : ''}>Calcular</button>
         <button type="button" className="dp-link" onClick={() => onSet(f.openedOn)}>La de arriba ({shortDate(f.openedOn)}) es correcta</button>
       </div>
+    </div>
+  );
+}
+
+/** Notes by month: one box per month (newest first), the same notes shown in each month of «Entregas». */
+function MonthNotes({ b, f, setNotes }: { b: Project; f: Project; setNotes: (v: string) => void }) {
+  const today = todayISO();
+  const months = monthsSinceOpening(b, addMonths(today, 1)).filter(mk => dueInMonth(b, mk)).reverse();
+  const [all, setAll] = useState(false);
+  const withText = (mk: string) => !!b.deliveries?.[`m:${mk}`]?.notes;
+  const shown = all ? months : months.filter((mk, i) => i < 3 || withText(mk));
+  const oldLog = b.entries.filter(e => e.text.trim());
+  return (
+    <div className="month-notes">
+      {!months.length && <p className="muted">Las notas por mes aparecen cuando el proyecto tiene fecha de apertura.</p>}
+      {shown.map(mk => (
+        <div key={mk} className="mn-row">
+          <b className="mn-month">{monthNameOf(mk)}</b>
+          <MonthNote b={b} itemKey={`m:${mk}`} rows={2} placeholder="Notas de este mes…" />
+        </div>
+      ))}
+      {!all && months.length > shown.length && <button type="button" className="dp-link" onClick={() => setAll(true)}>Ver todos los meses ({months.length})</button>}
+      {(f.notes || oldLog.length > 0) && (
+        <details className="ed-more" open={!!f.notes}>
+          <summary>Notas generales de antes</summary>
+          <textarea className="modal-input" rows={3} value={f.notes} onChange={e => setNotes(e.target.value)} />
+          {oldLog.map(e => <p key={e.id} className="mn-old"><b>{shortDate(e.date)}</b> {e.text}</p>)}
+        </details>
+      )}
     </div>
   );
 }

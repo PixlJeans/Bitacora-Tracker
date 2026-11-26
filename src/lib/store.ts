@@ -60,6 +60,7 @@ function normDeliveries(raw: any): Record<string, Delivery> {
       planned: isoDate(e.planned), due: isoDate(pick(e, 'due', 'vence')), visit: isoDate(pick(e, 'visit', 'visita')), photos: isoDate(pick(e, 'photos', 'fotos')),
       letter: isoDate(pick(e, 'letter', 'carta')), uploaded: isoDate(pick(e, 'uploaded', 'subida')), received: isoDate(e.received),
       letterText: String(pick(e, 'letterText', 'textoCarta') || ''),
+      ...(e.notes ? { notes: String(e.notes) } : {}),
       files: Array.isArray(e.files) ? e.files.filter((f: any) => f && pick(f, 'path', 'ruta')).map(normAttachment) : []
     };
   }
@@ -151,7 +152,7 @@ export function normalize(raw: any): AppData {
 
   // Import paused halfway (can be resumed another day)
   const session = pick(raw, 'importSession', 'importacion');
-  const rows = Array.isArray(pick(session, 'rows', 'filas')) ? pick(session, 'rows', 'filas').filter((f: any) => f).map((f: any): ImportRow => ({
+  const rows: ImportRow[] = Array.isArray(pick(session, 'rows', 'filas')) ? pick(session, 'rows', 'filas').filter((f: any) => f).map((f: any): ImportRow => ({
     code: String(pick(f, 'code', 'numero') || ''), name: String(pick(f, 'name', 'nombre') || ''),
     status: value(pick(f, 'status', 'estado'), ['open', 'new', 'closing', 'finished'] as const, LEGACY_STATUS, 'open'),
     openedOn: String(pick(f, 'openedOn', 'apertura') || ''), labelId: labelId(pick(f, 'labelId', 'etiquetaId')),
@@ -388,7 +389,7 @@ export function markStep(id: string, key: string, step: Step, date: string | nul
 }
 
 /** Changes the due date (null = back to automatic) or the letter text. */
-export function editDelivery(id: string, key: string, change: Partial<Pick<Delivery, 'planned' | 'due' | 'letterText'>>, opts: { undo?: boolean } = {}) {
+export function editDelivery(id: string, key: string, change: Partial<Pick<Delivery, 'planned' | 'due' | 'letterText' | 'notes'>>, opts: { undo?: boolean } = {}) {
   mutate(d => {
     const b = d.projects.find(x => x.id === id);
     if (!b) return;

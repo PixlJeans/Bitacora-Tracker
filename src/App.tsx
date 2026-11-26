@@ -6,12 +6,11 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAppData, isReady, Undo, mutate, reload, markAllBefore } from './lib/store';
 import type { Project, Status } from './lib/types';
 import { isActiveProject, isFinished } from './lib/types';
-import { pendingBefore, completeIn, nextDue, upcomingRegencias, summary, monthTasks, type RegenciaInfo, sortDate } from './lib/schedule';
+import { reportTasks, pendingBefore, completeIn, nextDue, upcomingRegencias, summary, monthTasks, type RegenciaInfo, sortDate } from './lib/schedule';
 import { matches } from './lib/search';
-import { monthKeyOf, monthNameOf, todayISO } from './lib/dates';
-import { ReminderCards } from './ui/ReminderCards';
+import { addDays, monthKeyOf, monthNameOf, todayISO } from './lib/dates';
 import { SettingsPanel, applyAppearance, toggleSettings } from './ui/Settings';
-import { Ic, ModalHost, ToastHost, hasModal, toast } from './ui/core';
+import { Ic, Popover, ModalHost, ToastHost, hasModal, toast } from './ui/core';
 import { openEditor } from './ui/ProjectEditor';
 import { openImport, pausedImport } from './ui/Import';
 import { RowHeader, ProjectRow, type Mode } from './ui/ProjectRow';
@@ -21,10 +20,11 @@ import { Help } from './ui/Help';
 import { Agenda } from './ui/Agenda';
 import { listenToPhone } from './ui/ProjectLog';
 import { openStatusReport } from './ui/StatusReport';
+import { TasksView } from './ui/Tasks';
 import { backend, esWeb } from './lib/backend';
 import { toCsv } from './lib/csv';
 
-type View = 'active' | 'agenda' | 'month' | 'nextMonth' | 'regencias' | 'archive';
+type View = 'tasks' | 'active' | 'agenda' | 'month' | 'nextMonth' | 'regencias' | 'archive';
 type SortOrder = 'nextDue' | 'code' | 'name' | 'openedOn';
 type StatusFilter = 'all' | Status | 'overdue' | 'nodate';
 
@@ -32,12 +32,13 @@ const LS_VIEW = 'bt_vista';
 
 export default function App() {
   const d = useAppData();
-  const [view, setViewRaw] = useState<View>(() => { try { const v = localStorage.getItem(LS_VIEW) as View; return ['active', 'agenda', 'archive'].includes(v) ? v : 'active'; } catch { return 'active'; } });
+  const [view, setViewRaw] = useState<View>(() => { try { const v = localStorage.getItem(LS_VIEW) as View; return ['tasks', 'active', 'agenda', 'archive'].includes(v) ? v : 'tasks'; } catch { return 'tasks'; } });
   const [filter, setFilter] = useState<StatusFilter>('all');
   const labelFilter = null as string | null;
   const sortOrder: SortOrder = 'nextDue';
   const [q, setQ] = useState('');
   const [dropAll, setDropAll] = useState(false);
+  const [menu, setMenu] = useState<HTMLElement | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const setView = (v: View) => { setViewRaw(v); setQ(''); try { localStorage.setItem(LS_VIEW, v); } catch { /* opcional */ } };
 
@@ -68,7 +69,7 @@ export default function App() {
   useEffect(() => {
     const f = (e: Event) => {
       const v = String((e as CustomEvent).detail);
-      const views: View[] = ['active', 'agenda', 'archive'];
+      const views: View[] = ['tasks', 'active', 'agenda', 'archive'];
       setView(views.includes(v as View) ? v as View : 'active'); setFilter('all');
     };
     window.addEventListener('bt:view', f);
@@ -76,8 +77,8 @@ export default function App() {
   }, []);
 
   const TABS: { id: View; txt: string; keyName: string }[] = [
-    { id: 'active', txt: 'Proyectos', keyName: '1' }, { id: 'agenda', txt: 'Agenda y rutas', keyName: '2' },
-    { id: 'archive', txt: 'Archivadas', keyName: '3' }
+    { id: 'tasks', txt: '✅ Tareas', keyName: '1' }, { id: 'active', txt: 'Proyectos', keyName: '2' },
+    { id: 'agenda', txt: 'Rutas', keyName: '3' }, { id: 'archive', txt: 'Archivadas', keyName: '4' }
   ];
 
   useEffect(() => {
@@ -111,6 +112,7 @@ export default function App() {
   const results = useMemo(() => searching ? d.projects.filter(b => matches(d, b, q)) : [], [d, q, searching]);
 
   const [askAll, setAskAll] = useState(false);
+  const taskCounts = useMemo(() => { const t = reportTasks(d, today, addDays(today, 6)); return { late: t.overdue.length, week: t.upcoming.length }; }, [d, today]);
   const allBehind = useMemo(() => activeProjects.reduce((n, b) => n + pendingBefore(b, `${mk}-01`).length, 0), [activeProjects, mk]);
   const activeList = useMemo(() => {
     // Priority = DATE of the most urgent pending delivery (Informe Regencial or Regencia): overdue first
@@ -151,7 +153,9 @@ export default function App() {
       <div className="info-bar searching"><Ic n="search" /> {results.length} resultado{results.length === 1 ? '' : 's'} para «{q.trim()}» (activas y archivadas) <button className="dp-link" onClick={() => setQ('')}>Limpiar</button></div>
       {results.length ? <><RowHeader />{results.map(b => P(b))}</> : emptyData('Ninguna bitácora coincide.')}
     </>;
-  } else if (view === 'active') {
+  } else if (view === 'tasks' && d.projects.length) {
+    body = <TasksView d={d} />;
+  } else if (view === 'active' || view === 'tasks') {
     body = !d.projects.length ? (
       <div className="empty-list"><div className="empty">
         <div className="empty-ic">🌿</div>
@@ -218,12 +222,16 @@ export default function App() {
           <input ref={searchRef} placeholder="Buscar número, proyecto o estado  ( / )" value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setQ(''); }} />
           {q && <button className="icon-btn sm" onClick={() => setQ('')} title="Limpiar"><Ic n="close" /></button>}</div>
         <div className="top-btns">
-          <button className={`btn ${paused ? 'paused' : ''}`} data-tour="import" data-help-title="Importar PDF" data-help="Carga el PDF (o el texto copiado) del listado de SETENA. La app saca número, proyecto, estado y fecha de apertura, y luego los revisas uno por uno. Puedes pausar y continuar otro día." onClick={() => openImport()} title={paused ? `Continuar importación (${paused.doneCount}/${paused.total})` : 'Importar PDF (I)'}>
-            <Ic n="upload" /> {paused ? <>Continuar <b>{paused.doneCount}/{paused.total}</b></> : 'Importar PDF'}</button>
-          <button className="btn" data-help-title="Exportar CSV" data-help="Descarga todas las bitácoras en un archivo para Excel: número, proyecto, estado, avance, próximas entregas, pasos y ubicación." onClick={async () => { if (await backend.saveFile(`bitacoras-${today}.csv`, toCsv(d), 'csv', 'CSV (Excel)')) toast('CSV exportado'); }} title="Exportar a CSV (Excel)"><Ic n="download" /></button>
-          <button className="btn" data-help-title="Informe de estado" data-help="Qué hay que hacer los próximos días (por día, con las inspecciones cercanas juntas) y todo lo que quedó pendiente. Se puede copiar o guardar para imprimir." onClick={() => openStatusReport()} title="Informe de estado (E)">📊 Informe de estado</button>
-          <button className="btn" data-help-title="Resumen" data-help="Revisión general: cuántos proyectos hay por estado, qué falta este mes y qué Regencias vienen." onClick={() => openReview()} title="Resumen general (R)"><Ic n="review" /> Resumen</button>
-          <button className="btn primary" data-tour="new" data-help-title="Nueva bitácora" data-help="Crea una bitácora a mano: número D1-XXXX-AAAA, nombre del proyecto, fecha de apertura, estado y ubicación. Las entregas se calculan solas." onClick={() => openEditor()} title="Nueva bitácora (N)"><Ic n="plus" /> Nueva bitácora</button>
+          {paused && <button className="btn paused" onClick={() => openImport()} title="Continuar importación"><Ic n="upload" /> Continuar <b>{paused.doneCount}/{paused.total}</b></button>}
+          <button className="btn" data-help-title="Informe de estado" data-help="Qué hay que hacer los próximos días y todo lo que quedó pendiente. Se puede copiar o guardar para imprimir." onClick={() => openStatusReport()} title="Informe de estado (E)">📊 Informe</button>
+          <button className="btn primary" data-tour="new" data-help-title="Nueva bitácora" data-help="Crea una bitácora a mano: número, nombre, fecha de apertura y estado. Las tareas se calculan solas." onClick={() => openEditor()} title="Nueva bitácora (N)"><Ic n="plus" /> Nueva</button>
+          <button className="btn icon-only" data-tour="import" title="Más: importar PDF, exportar, resumen" onClick={e => setMenu(e.currentTarget)}>⋯</button>
+          {menu && <Popover anchor={menu} onClose={() => setMenu(null)} width={230}><>
+            <button className="pop-opt" onClick={() => { setMenu(null); openImport(); }}><Ic n="upload" /> Importar PDF de SETENA</button>
+            <button className="pop-opt" onClick={async () => { setMenu(null); if (await backend.saveFile(`bitacoras-${today}.csv`, toCsv(d), 'csv', 'CSV (Excel)')) toast('CSV exportado'); }}><Ic n="download" /> Exportar a Excel (CSV)</button>
+            <button className="pop-opt" onClick={() => { setMenu(null); openReview(); }}><Ic n="review" /> Resumen general</button>
+            <button className="pop-opt" onClick={() => { setMenu(null); backend.openFolder().catch(e => toast(String(e))); }}>📂 Abrir carpeta de datos</button>
+          </></Popover>}
         </div>
       </header>
 
@@ -237,9 +245,9 @@ export default function App() {
               {t.id === 'archive' && r.archivedCount > 0 && <b className="gray">{r.archivedCount}</b>}
             </button>))}
         </div>
-        <div className="stats" data-help-title="Contadores" data-help="Informes Regenciales pendientes del mes, Regencias en aviso o vencidas y proyectos activos.">
-          <span title="Informes Regenciales del mes pendientes"><i className="red" />{r.pendingMonth} pendientes</span>
-          <span title="Regencias en aviso o vencidas"><i className="purple" />{r.regenciasDueSoon + r.regenciasOverdue} regencias</span>
+        <div className="stats">
+          <span title="Tareas atrasadas"><i className="red" />{taskCounts.late} atrasadas</span>
+          <span title="Tareas de los próximos 7 días"><i className="purple" />{taskCounts.week} esta semana</span>
           <span title="Proyectos activos"><i />{r.activeProjects} activos</span>
         </div>
       </div>
@@ -251,13 +259,8 @@ export default function App() {
 
       <main className="project-list">{body}</main>
 
-      <footer className="foot">
-        <span>🚗 Inspección y 📋 Bitácora cada mes · 🗂️ Regencia cada 6 meses · todas el día de la apertura · se ve la más antigua que falta · ✓ para marcarla</span>
-        <span className="grow" />Clic en un proyecto para abrirlo · ? = ayuda
-      </footer>
 
       {dropAll && <div className="drop-veil"><Ic n="upload" size={40} /><b>Suelta el PDF para importarlo</b></div>}
-      <ReminderCards />
       <Tutorial hasProjects={d.projects.length > 0} />
       <Help />
       <SettingsPanel />
