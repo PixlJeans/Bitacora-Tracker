@@ -58,7 +58,7 @@ function normDeliveries(raw: any): Record<string, Delivery> {
     if (!/^(m:\d{4}-\d{2}|r:\d{4}-\d{2}-\d{2}|s:start)$/.test(k) || !e || typeof e !== 'object') continue;
     out[k] = {
       planned: isoDate(e.planned), due: isoDate(pick(e, 'due', 'vence')), visit: isoDate(pick(e, 'visit', 'visita')), photos: isoDate(pick(e, 'photos', 'fotos')),
-      letter: isoDate(pick(e, 'letter', 'carta')), uploaded: isoDate(pick(e, 'uploaded', 'subida')),
+      letter: isoDate(pick(e, 'letter', 'carta')), uploaded: isoDate(pick(e, 'uploaded', 'subida')), received: isoDate(e.received),
       letterText: String(pick(e, 'letterText', 'textoCarta') || ''),
       files: Array.isArray(e.files) ? e.files.filter((f: any) => f && pick(f, 'path', 'ruta')).map(normAttachment) : []
     };
@@ -71,7 +71,8 @@ function normAttachment(f: any): Attachment {
     id: String(f.id || uid()), name: String(pick(f, 'name', 'nombre') || 'archivo'), path: String(pick(f, 'path', 'ruta')),
     thumb: pick(f, 'thumb', 'mini') ? String(pick(f, 'thumb', 'mini')) : null,
     type: value(pick(f, 'type', 'tipo'), ['photo', 'pdf', 'other'] as const, LEGACY_FILE_TYPE, 'other'),
-    takenOn: isoDate(pick(f, 'takenOn', 'tomada')), lat: num(f.lat), lng: num(f.lng)
+    takenOn: isoDate(pick(f, 'takenOn', 'tomada')), lat: num(f.lat), lng: num(f.lng),
+    ...(f.role === 'receipt' ? { role: 'receipt' as const } : {})
   };
 }
 
@@ -474,8 +475,14 @@ export function addDeliveryFiles(id: string, key: string, files: Attachment[]): 
         marked.push('ubicación');
       }
     }
+    // SETENA's «nota de recibido» of a Regencia: it was received (so it was also uploaded)
+    const receipts = docs.filter(f => f.role === 'receipt');
+    if (receipts.length) {
+      if (!e.received) { applyStep(b, key, 'received', todayISO()); marked.push('recibida'); }
+      if (!e.uploaded) { applyStep(b, key, 'uploaded', todayISO()); marked.push('subida'); }
+    }
     // Attaching the Regencia document = elaborated and uploaded
-    if (docs.length && key.startsWith('r:')) {
+    if (docs.length > receipts.length && key.startsWith('r:')) {
       if (!e.letter) { applyStep(b, key, 'letter', todayISO()); marked.push('elaboración'); }
       if (!e.uploaded) { applyStep(b, key, 'uploaded', todayISO()); marked.push('subida'); }
     }

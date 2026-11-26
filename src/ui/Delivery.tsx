@@ -3,7 +3,7 @@
 // Regencia: ✍️ Elaboración (a check) and 📤 Subir (attach the Word / PDF). Dates movable to any month.
 // Files are saved in Proyectos/<Código - Nombre>/<Año>/<MM - Mes>/Fotos|Regencias.
 // Everything is saved to the data immediately.
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Project, Step } from '../lib/types';
 import { MONTHLY_NAME, SEMIANNUAL_NAME, STEPS } from '../lib/types';
 import { inspectionDate, monthlyDue, monthlyDueAuto, regenciaDue } from '../lib/schedule';
@@ -46,47 +46,76 @@ export function DeliveryCard({ b, itemKey: key }: { b: Project; itemKey: string;
   const monthly = isMonthly(key);
   const due = dueDate(b, key), auto = autoDate(b, key);
   const insp = monthly ? inspectionDate(b, key.slice(2)) : due;
-  const done = monthly ? !!(e.visit && e.uploaded) : !!e.uploaded;
-  const late = (!e.uploaded && due < today) || (monthly && !e.visit && insp < today);
-
-  /** One checkbox task: ☐ name · date (movable) or «hecha el …». */
-  const task = (p: Step, name: string, date: string | null, move?: (v: string | null) => void) => (
-    <div className={`task-box ${e[p] ? 'on' : date && date < today ? 'late' : ''}`}>
-      <button type="button" className={`ent-check ${e[p] ? 'on' : ''}`} title={e[p] ? 'Clic para desmarcar' : 'Clic para marcarla hecha'}
-        onClick={() => { const d = e[p] ? null : (date && date <= today ? date : today); markStep(b.id, key, p, d); toast(d ? `✓ ${b.code}: ${name}` : `${b.code}: ${name} desmarcada`, true); }}>
-        <span className="cb">{e[p] && <Ic n="check" size={12} />}</span>
-      </button>
-      <div className="task-txt">
-        <b>{name}</b>
-        {e[p] ? <span className="ent-date-edit"><small className="muted">hecha el</small>
-          <input type="date" className="ent-step-date" value={e[p]!} title="Fecha en que se hizo (editable)" onChange={ev => ev.target.value && markStep(b.id, key, p, ev.target.value)} /></span>
-          : date && move ? <DateMover b={b} itemKey={key} what={name} date={date} auto={auto} onMove={move} /> : null}
-      </div>
-    </div>
-  );
 
   return (
-    <div className={`delivery ${done ? 'completed' : late ? 'is-overdue' : ''} ${monthly ? 'monthly' : 'semiannual'}`}
+    <div className={`checklist ${monthly ? 'monthly' : 'semiannual'}`}
       onKeyDown={ev => { if (ev.key === 'Enter' && (ev.target as HTMLElement).tagName === 'INPUT') ev.preventDefault(); }}>
-      <div className="ent-h">
+      <div className="cl-h">
         <b>{monthly ? `📅 ${monthNameOf(key.slice(2))}` : '🗂️ Regencia (semestral)'}</b>
         {!monthly && !e.uploaded && <DateMover b={b} itemKey={key} what="Regencia" date={due} auto={auto} onMove={v => editDelivery(b.id, key, { due: v })} />}
+        <span className="grow" />
+        <FolderButton b={b} itemKey={key} />
       </div>
       {monthly ? <>
-        <div className="task-row">
-          {task('visit', '🚗 Inspección', insp, v => editDelivery(b.id, key, { planned: v }))}
-          {task('uploaded', '📋 Llenado de bitácora', due, v => editDelivery(b.id, key, { due: v }))}
-        </div>
-        <DeliveryFiles b={b} itemKey={key} kind="photos" />
+        <CheckRow b={b} itemKey={key} step="visit" name="🚗 Inspección" date={insp} auto={auto} today={today}
+          onMove={v => editDelivery(b.id, key, { planned: v })} />
+        <CheckRow b={b} itemKey={key} step="uploaded" name="📋 Llenado de bitácora" date={due} auto={auto} today={today}
+          onMove={v => editDelivery(b.id, key, { due: v })} />
       </> : <>
-        <div className="task-row">
-          {task('letter', '✍️ Elaboración de la regencia', null)}
-          {task('uploaded', '📤 Subir regencia', null)}
-        </div>
-        <DeliveryFiles b={b} itemKey={key} kind="docs" label="📝 Adjuntar la regencia (Word / PDF)"
-          hint="📝 Arrastra aquí el documento Word de la regencia (o el PDF): queda marcada como subida" />
+        <CheckRow b={b} itemKey={key} step="letter" name="✍️ Elaboración de la regencia" today={today} />
+        <CheckRow b={b} itemKey={key} step="uploaded" name="📤 Subir regencia" today={today} date={due} />
+        <CheckRow b={b} itemKey={key} step="received" name="🧾 Nota de recibido" today={today} />
       </>}
     </div>
+  );
+}
+
+/** One line of the checklist: big checkbox · name · its date (movable) or the day it was done. */
+export function CheckRow({ b, itemKey: key, step, name, date, auto, today, onMove }: {
+  b: Project; itemKey: string; step: Step; name: string; today: string; date?: string; auto?: string; onMove?: (v: string | null) => void;
+}) {
+  const e = deliveryOf(b, key);
+  const on = !!e[step];
+  const toggle = () => {
+    const d = on ? null : (date && date <= today ? date : today);
+    markStep(b.id, key, step, d);
+    toast(d ? `✓ ${b.code}: ${name.replace(/^\S+\s/, '')}` : `${b.code}: ${name.replace(/^\S+\s/, '')} desmarcada`, true);
+  };
+  return (
+    <div className={`cl-row ${on ? 'on' : date && date < today ? 'late' : ''}`}>
+      <label className="cl-check">
+        <input type="checkbox" checked={on} onChange={toggle} />
+        <span className="cl-box">{on && <Ic n="check" size={14} />}</span>
+        <span className="cl-name">{name}</span>
+      </label>
+      <span className="cl-date">
+        {on ? <span className="ent-date-edit"><small className="muted">hecha el</small>
+          <input type="date" className="ent-step-date" value={e[step]!} title="Fecha en que se hizo (editable)" onChange={ev => ev.target.value && markStep(b.id, key, step, ev.target.value)} /></span>
+          : date && onMove && auto ? <DateMover b={b} itemKey={key} what={name.replace(/^\S+\s/, '')} date={date} auto={auto} onMove={onMove} />
+          : date ? <small className={date < today ? 'red-t' : 'muted'}>{longDate(date)} · {daysText(daysUntil(date, today))}</small> : null}
+      </span>
+    </div>
+  );
+}
+
+/** «📂 Fotos (3)»: opens the folder in the file explorer, where the files are added, opened and deleted.
+ *  The count is read from the folder itself (refreshed when coming back to the app). */
+export function FolderButton({ b, itemKey: key }: { b: Project; itemKey: string }) {
+  const folder = deliveryFolder(b, key);
+  const [n, setN] = useState<number | null>(null);
+  useEffect(() => {
+    let live = true;
+    const read = () => backend.listFolder(folder).then(l => { if (live) setN(l.length); }).catch(() => { /* not on desktop */ });
+    read();
+    window.addEventListener('focus', read);
+    return () => { live = false; window.removeEventListener('focus', read); };
+  }, [folder]);
+  const label = key.startsWith('m:') ? 'Fotos' : key.startsWith('r:') ? 'Regencias' : 'Inicio de obras';
+  return (
+    <button type="button" className={`btn sm folder-btn ${n ? 'has' : ''}`} title={`Abrir en el explorador: ${folder.replace(/\//g, '\\')}`}
+      onClick={() => backend.openSubfolder(folder).catch(err => toast(String(err)))}>
+      📂 {label}{n !== null ? <b className="folder-n">{n}</b> : null}
+    </button>
   );
 }
 
@@ -121,8 +150,8 @@ function DateMover({ b, what, date, auto, onMove }: { b: Project; itemKey: strin
 }
 
 /** Photos and documents of a delivery: add (button or drag & drop), open, remove. */
-export function DeliveryFiles({ b, itemKey: key, kind, label, hint }: { b: Project; itemKey: string; kind: 'photos' | 'docs'; label?: string; hint?: string }) {
-  const files = [...(deliveryOf(b, key).files ?? [])].filter(f => (f.type === 'photo') === (kind === 'photos'))
+export function DeliveryFiles({ b, itemKey: key, kind, label, hint }: { b: Project; itemKey: string; kind: 'photos' | 'docs' | 'receipt'; label?: string; hint?: string }) {
+  const files = [...(deliveryOf(b, key).files ?? [])].filter(f => kind === 'photos' ? f.type === 'photo' : f.type !== 'photo' && (f.role === 'receipt') === (kind === 'receipt'))
     .sort((x, y) => (x.takenOn ?? '9').localeCompare(y.takenOn ?? '9'));
   const photoRef = useRef<HTMLInputElement>(null);
   const docRef = useRef<HTMLInputElement>(null);
@@ -136,7 +165,8 @@ export function DeliveryFiles({ b, itemKey: key, kind, label, hint }: { b: Proje
     if (list.length < all.length) toast(kind === 'photos' ? 'Aquí solo van fotos: los documentos van en la Bitácora o la Regencia.' : 'Aquí solo van documentos: las fotos van en la Inspección.');
     if (!list.length) return;
     try {
-      const atts = await saveAttachments(b.code, list, todayISO(), i => setSaving(`Guardando ${i} de ${list.length}…`), deliveryFolder(b, key));
+      const atts = (await saveAttachments(b.code, list, todayISO(), i => setSaving(`Guardando ${i} de ${list.length}…`), deliveryFolder(b, key)))
+        .map(a => kind === 'receipt' ? { ...a, role: 'receipt' as const } : a);
       const marked = addDeliveryFiles(b.id, key, atts);
       toast(`✓ ${b.code}: ${atts.length} archivo(s) guardado(s)` + (marked.length ? ` · marcado: ${marked.join(', ')}` : ''), true);
     } catch (e) { toast('No se pudo guardar: ' + String(e)); }
@@ -183,21 +213,10 @@ export function DeliveryFiles({ b, itemKey: key, kind, label, hint }: { b: Proje
 
 /** «Inicio de obras»: the letter sent to SETENA when the project starts (attach it, and check it presented). */
 export function StartLetter({ b }: { b: Project }) {
-  const key = 's:start';
-  const e = deliveryOf(b, key);
-  const today = todayISO();
   return (
-    <section className={`ent-block start-letter ${e.uploaded ? 'on' : ''}`}>
-      <div className="ent-row">
-        <button type="button" className={`ent-check ${e.uploaded ? 'on' : ''}`} title={e.uploaded ? 'Clic para desmarcar' : 'Marcar presentada a SETENA'}
-          onClick={() => { markStep(b.id, key, 'uploaded', e.uploaded ? null : today); toast(e.uploaded ? `${b.code}: Inicio de obras desmarcado` : `✓ ${b.code}: Inicio de obras presentado`, true); }}>
-          <span className="cb">{e.uploaded && <Ic n="check" size={12} />}</span>
-        </button>
-        <b>🏗️ Carta de Inicio de obras</b>
-        {e.uploaded && <span className="ent-date-edit"><small className="muted">presentada el</small>
-          <input type="date" className="ent-step-date" value={e.uploaded} onChange={ev => ev.target.value && markStep(b.id, key, 'uploaded', ev.target.value)} /></span>}
-      </div>
-      <DeliveryFiles b={b} itemKey={key} kind="docs" label="📄 Agregar carta de Inicio de obras" hint="📄 Arrastra aquí la carta de Inicio de obras (Word o PDF)" />
-    </section>
+    <div className="checklist start">
+      <div className="cl-h"><b>🏗️ Inicio del proyecto</b><span className="grow" /><FolderButton b={b} itemKey="s:start" /></div>
+      <CheckRow b={b} itemKey="s:start" step="uploaded" name="🏗️ Carta de Inicio de obras" today={todayISO()} />
+    </div>
   );
 }

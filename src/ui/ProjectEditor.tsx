@@ -12,7 +12,6 @@ import { gpsComun } from '../lib/exif';
 import { backend } from '../lib/backend';
 import { shortDate, longDate, fromISO, todayISO, uid, monthName } from '../lib/dates';
 import { ProjectCalendar } from './ProjectCalendar';
-import { StartLetter } from './Delivery';
 import { projectFolder } from '../lib/folders';
 import { ProjectLog } from './ProjectLog';
 import { Ic, openModal, closeModal, confirmDialog, toast } from './core';
@@ -143,12 +142,12 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
       }} />}
       {isActiveProject(f) && f.noOpeningDate ? null : isActiveProject(f)
         ? <div className="ed-auto-line muted">📅 Inspección y bitácora el día <b>{day}</b> de cada mes · Regencia cada 6 meses{nextReg ? ` (${nextReg.due < today ? 'pendiente' : 'próxima'} ${shortDate(nextReg.due)})` : ''} · ✏️ cada fecha se puede mover
+            {b && live && <> · <button type="button" className="dp-link" title="Ir al mes de inicio (carta de Inicio de obras)" onClick={() => window.dispatchEvent(new CustomEvent('bt-goto-month', { detail: view.openedOn.slice(0, 7) }))}>🏗️ Inicio de obras{live.deliveries?.['s:start']?.uploaded ? ' ✓' : ''}</button></>}
             {b && live && behind > 0 && (askCatchUp
               ? <span className="catch-up">¿Marcar como hechas las {behind} tareas anteriores a {monthName(fromISO(today)).toLowerCase()}? <button type="button" className="btn sm primary" onClick={catchUp}>Sí, marcar</button> <button type="button" className="dp-link" onClick={() => setAskCatchUp(false)}>no</button></span>
               : <button type="button" className="dp-link catch-up" onClick={() => setAskCatchUp(true)}>✓ Marcar todo lo anterior a {monthName(fromISO(today)).toLowerCase()} como hecho ({behind})</button>)}</div>
         : <p className="ed-auto-line muted">{f.archived ? 'Archivada: sin entregas.' : 'Ya terminó: no genera entregas. Ciérrala con 📦 Archivar.'}</p>}
 
-      {b && live && <StartLetter b={view} />}
       <ProjectCalendar b={view} live={!!live} onChange={c => setF(x => ({ ...x, ...c }))} />
 
       <details className="ed-more">

@@ -27,6 +27,7 @@ export interface Attachment {
   takenOn?: string | null;  // date the photo was taken (EXIF) YYYY-MM-DD
   lat?: number | null;     // photo GPS (EXIF)
   lng?: number | null;
+  role?: 'receipt';         // the «nota de recibido» SETENA sends back for a Regencia
 }
 
 /** Project location (to group nearby visits on the same day). */
@@ -40,14 +41,15 @@ export interface ProjectLocation {
 // ===== Deliveries: each Informe Regencial (monthly) and each Regencia (every 6 months) =====
 // Key: 'm:YYYY-MM' (monthly) or 'r:YYYY-MM-DD' (semiannual, automatic due date).
 // Each step stores the DATE it was done (editable) or null if it is still missing.
-export type Step = 'visit' | 'photos' | 'letter' | 'uploaded';
+export type Step = 'visit' | 'photos' | 'letter' | 'uploaded' | 'received';
 // Monthly: INSPECCIÓN (site visit, `visit`) and BITÁCORA (presented to SETENA, `uploaded`).
 // Regencia (every 6 months): one check, presented (`uploaded`). Photos and letter are supporting material.
 export const STEPS: { id: Step; name: string; icon: string; main: boolean }[] = [
   { id: 'visit', name: 'Inspección', icon: '🚗', main: true },
   { id: 'photos', name: 'Fotos', icon: '📷', main: false },
   { id: 'letter', name: 'Carta', icon: '✉️', main: false },
-  { id: 'uploaded', name: 'Bitácora', icon: '📋', main: true }
+  { id: 'uploaded', name: 'Bitácora', icon: '📋', main: true },
+  { id: 'received', name: 'Nota de recibido', icon: '🧾', main: false }
 ];
 export interface Delivery {
   planned: string | null;  // inspection date moved by hand (null = automatic: the opening day)
@@ -56,10 +58,11 @@ export interface Delivery {
   photos: string | null;
   letter: string | null;    // date the letter was ready
   uploaded: string | null;   // date it was uploaded to SETENA (= submitted)
+  received: string | null; // Regencia: SETENA's «nota de recibido» (date)
   letterText: string;      // the letter for SETENA (a template will fill it later)
   files: Attachment[];     // photos and documents (letter, PDF) of this delivery, saved in proyectos/<code>/
 }
-export const emptyDelivery = (): Delivery => ({ planned: null, due: null, visit: null, photos: null, letter: null, uploaded: null, letterText: '', files: [] });
+export const emptyDelivery = (): Delivery => ({ planned: null, due: null, visit: null, photos: null, letter: null, uploaded: null, received: null, letterText: '', files: [] });
 export const MONTHLY_NAME = 'Bitácora';
 export const SEMIANNUAL_NAME = 'Regencia';
 

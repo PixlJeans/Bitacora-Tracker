@@ -7,7 +7,7 @@ import type { Project } from '../lib/types';
 import { isActiveProject } from '../lib/types';
 import { monthlyDue, regenciaDue, regenciaInMonth, dueInMonth, hasSchedule, monthlyKeysDueIn, completeIn, regenciaSubmitted, regenciaDueDates, inspectionDate } from '../lib/schedule';
 import { shortDate, longDate, fromISO, monthKeyOf, monthName, todayISO } from '../lib/dates';
-import { DeliveryCard } from './Delivery';
+import { DeliveryCard, StartLetter } from './Delivery';
 
 const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 type Change = Partial<Pick<Project, 'uploads' | 'visits' | 'regencias'>>;
@@ -59,6 +59,7 @@ export function ProjectCalendar({ b, live: live = false }: { b: Project; onChang
               onClick={() => setMonth(new Date(y, n - 1, 1, 12))}
               title={`${longDate(`${m}-01`).replace(/^\S+\s/, '')}${x.dates.length ? ' · entrega: ' + x.dates.map(shortDate).join(', ') : ' · sin entregas'}`}>
               <span>{MONTHS_SHORT[n - 1]}{n === 1 ? <small>{String(y).slice(2)}</small> : null}</span>
+              {m === b.openedOn.slice(0, 7) && <small className="ct-day" title="Mes de inicio: carta de Inicio de obras">🏗️ {fromISO(b.openedOn).getDate()}</small>}
               {x.dates.length > 0 && <small className="ct-day">{x.dates.map(d => fromISO(d).getDate()).join('·')}</small>}
             </button>
           );
@@ -72,7 +73,8 @@ export function ProjectCalendar({ b, live: live = false }: { b: Project; onChang
           <button type="button" className="dp-link" onClick={() => goTo(ownMoved)}>Ir a ese mes →</button></p>}
         {active && regMoved && <p className="muted sm pcal-moved">↪ La regencia de {monthName(month).toLowerCase()} se movió al {longDate(regMoved)}.{' '}
           <button type="button" className="dp-link" onClick={() => goTo(regMoved)}>Ir a ese mes →</button></p>}
-        {active && !cur.keys.length && !cur.reg && !ownMoved && !regMoved && <p className="muted sm">Sin entregas en {monthName(month).toLowerCase()}.</p>}
+        {live && isActiveProject(b) && mk === b.openedOn.slice(0, 7) && <StartLetter b={b} />}
+        {active && !cur.keys.length && !cur.reg && !ownMoved && !regMoved && mk !== b.openedOn.slice(0, 7) && <p className="muted sm">Sin entregas en {monthName(month).toLowerCase()}.</p>}
         {live && active && cur.keys.map(k => <DeliveryCard key={`m:${k}`} b={b} itemKey={`m:${k}`} />)}
         {live && active && cur.reg && <DeliveryCard key={`r:${cur.reg}`} b={b} itemKey={`r:${cur.reg}`} />}
         {!live && active && cur.dates.length > 0 && <p className="muted sm">Entrega: {cur.dates.map(longDate).join(' · ')}. Los pasos se marcan después de crearla.</p>}

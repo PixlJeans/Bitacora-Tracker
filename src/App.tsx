@@ -20,6 +20,7 @@ import { Tutorial, openTutorial } from './ui/Tutorial';
 import { Help } from './ui/Help';
 import { Agenda } from './ui/Agenda';
 import { listenToPhone } from './ui/ProjectLog';
+import { openStatusReport } from './ui/StatusReport';
 import { backend, esWeb } from './lib/backend';
 import { toCsv } from './lib/csv';
 
@@ -89,7 +90,7 @@ export default function App() {
       if ((ev.target as HTMLElement).closest('input, textarea, select, [contenteditable]')) { if (ev.key === 'Escape') (ev.target as HTMLElement).blur(); return; }
       const t = TABS.find(x => x.keyName === ev.key);
       if (t) { ev.preventDefault(); setView(t.id); return; }
-      const act: Record<string, () => void> = { n: () => openEditor(), i: () => openImport(), r: () => openReview(), '/': () => searchRef.current?.focus(), ',': toggleSettings };
+      const act: Record<string, () => void> = { n: () => openEditor(), i: () => openImport(), r: () => openReview(), e: () => openStatusReport(), '/': () => searchRef.current?.focus(), ',': toggleSettings };
       const fn = act[ev.key.toLowerCase()];
       if (fn) { ev.preventDefault(); fn(); }
     };
@@ -219,7 +220,8 @@ export default function App() {
         <div className="top-btns">
           <button className={`btn ${paused ? 'paused' : ''}`} data-tour="import" data-help-title="Importar PDF" data-help="Carga el PDF (o el texto copiado) del listado de SETENA. La app saca número, proyecto, estado y fecha de apertura, y luego los revisas uno por uno. Puedes pausar y continuar otro día." onClick={() => openImport()} title={paused ? `Continuar importación (${paused.doneCount}/${paused.total})` : 'Importar PDF (I)'}>
             <Ic n="upload" /> {paused ? <>Continuar <b>{paused.doneCount}/{paused.total}</b></> : 'Importar PDF'}</button>
-          <button className="btn" data-help-title="Exportar CSV" data-help="Descarga todas las bitácoras en un archivo para Excel: número, proyecto, estado, avance, próximas entregas, pasos y ubicación." onClick={async () => { if (await backend.saveFile(`bitacoras-${today}.csv`, toCsv(d), 'csv', 'CSV (Excel)')) toast('CSV exportado'); }} title="Exportar a CSV"><Ic n="download" /> CSV</button>
+          <button className="btn" data-help-title="Exportar CSV" data-help="Descarga todas las bitácoras en un archivo para Excel: número, proyecto, estado, avance, próximas entregas, pasos y ubicación." onClick={async () => { if (await backend.saveFile(`bitacoras-${today}.csv`, toCsv(d), 'csv', 'CSV (Excel)')) toast('CSV exportado'); }} title="Exportar a CSV (Excel)"><Ic n="download" /></button>
+          <button className="btn" data-help-title="Informe de estado" data-help="Qué hay que hacer los próximos días (por día, con las inspecciones cercanas juntas) y todo lo que quedó pendiente. Se puede copiar o guardar para imprimir." onClick={() => openStatusReport()} title="Informe de estado (E)">📊 Informe de estado</button>
           <button className="btn" data-help-title="Resumen" data-help="Revisión general: cuántos proyectos hay por estado, qué falta este mes y qué Regencias vienen." onClick={() => openReview()} title="Resumen general (R)"><Ic n="review" /> Resumen</button>
           <button className="btn primary" data-tour="new" data-help-title="Nueva bitácora" data-help="Crea una bitácora a mano: número D1-XXXX-AAAA, nombre del proyecto, fecha de apertura, estado y ubicación. Las entregas se calculan solas." onClick={() => openEditor()} title="Nueva bitácora (N)"><Ic n="plus" /> Nueva bitácora</button>
         </div>

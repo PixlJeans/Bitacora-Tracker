@@ -357,6 +357,23 @@ fn move_attachment(path: String, folder: String, state: State<'_, AppState>) -> 
     Ok(rel_string(&base, &to))
 }
 
+/// Names of the files in a folder of the data folder (no subfolders, no hidden files); empty if it doesn't exist.
+#[tauri::command]
+fn list_folder(folder: String, state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let dir = data_dir(&state)?.join(clean_folder(&folder));
+    let mut out = Vec::new();
+    if let Ok(rd) = fs::read_dir(&dir) {
+        for e in rd.flatten() {
+            let name = e.file_name().to_string_lossy().to_string();
+            if e.path().is_file() && !name.starts_with('.') && !name.starts_with("~$") && name != "desktop.ini" && name != "Thumbs.db" {
+                out.push(name);
+            }
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
 /// Opens a folder of the data folder in the file explorer (creates it if needed).
 #[tauri::command]
 fn open_folder(folder: String, state: State<'_, AppState>) -> Result<(), String> {
@@ -598,6 +615,7 @@ pub fn run() {
             open_project_folder,
             move_attachment,
             open_folder,
+            list_folder,
             open_setena,
             open_map,
             phone::phone_start,

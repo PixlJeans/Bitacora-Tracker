@@ -2,7 +2,7 @@
 import assert from 'node:assert';
 import { deliveryFolder, folderOf } from '../src/lib/folders';
 import { normalize, applyStep, emptyData, fileLogIntoDeliveries } from '../src/lib/store';
-import { monthlyKeysDueIn, openingFrom, hasSchedule, agenda, completeIn, monthlyDue, regenciaInMonth, nextDue, nextRegencia, computeReminders, sortDate, pendingOf, inspectionDate, taskColumns, pendingBefore } from '../src/lib/schedule';
+import { monthlyKeysDueIn, openingFrom, hasSchedule, agenda, completeIn, monthlyDue, regenciaInMonth, nextDue, nextRegencia, computeReminders, reportTasks, sortDate, pendingOf, inspectionDate, taskColumns, pendingBefore } from '../src/lib/schedule';
 import { readExif, commonDate, gpsComun } from '../src/lib/exif';
 import { groupNearby, distanceKm, routeLink, parseCoordinates } from '../src/lib/geo';
 
@@ -179,6 +179,17 @@ console.log('deliveries OK');
   assert.equal(deliveryFolder(pr, 'r:2027-01-15'), 'Proyectos/D1-0170-2020 - CONDOMINIO- VISTA DEL BOSQUE/2027/01 - Enero/Regencias');
   assert.equal(deliveryFolder(pr, 's:start'), 'Proyectos/D1-0170-2020 - CONDOMINIO- VISTA DEL BOSQUE/Inicio de obras');
   assert.equal(folderOf('a/b/c.jpg'), 'a/b');
+}
+// ---- Informe de estado ----
+{
+  const dd = normalize({ projects: [
+    { id: 'q', code: 'D1-0004-2026', name: 'Q', status: 'open', openedOn: '2026-05-28', createdOn: '2026-05-28', uploads: [], visits: [], regencias: [], noOpeningDate: false },
+    { id: 'z', code: 'D1-0005-2026', name: 'Z', status: 'open', openedOn: '2026-11-26', createdOn: '2026-11-26', uploads: [], visits: [], regencias: [] }
+  ] });
+  const r = reportTasks(dd, '2026-11-26', '2026-12-02');
+  assert.deepEqual(r.upcoming.map(t => t.kind), ['inspection', 'bitacora', 'regElab', 'regUpload'], 'Nov 28: inspection, bitácora and the Regencia');
+  assert.equal(r.overdue.filter(t => t.kind === 'bitacora').length, 5, 'Jun … Oct');
+  assert.deepEqual(r.noDate.map(b => b.id), ['z']);
 }
 console.log('moved / no-date OK');
 process.exit(0); // store.ts leaves an hourly timer running

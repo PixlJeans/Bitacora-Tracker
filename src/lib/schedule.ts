@@ -9,7 +9,7 @@
 //
 // The native process only receives the flat list {key, at, until, title, body} and fires the notification.
 
-import type { Reminder, Project, AppData } from './types';
+import type { Reminder, Project, AppData, Step } from './types';
 import { isActiveProject, isFinished } from './types';
 import { daysInMonth, shortDate, longDate, fromISO, monthKeyOf, msAt, monthNameOf, addDays, addMonths, toISO, todayISO } from './dates';
 
@@ -373,4 +373,36 @@ export function computeReminders(d: AppData, now = Date.now()): Reminder[] {
 
 export function upcomingReminders(d: AppData, n = 5, now = Date.now()) {
   return computeReminders(d, now).filter(a => a.at > now).slice(0, n);
+}
+
+// ---------------- Informe de estado: what is pending and what comes next ----------------
+export type ReportKind = 'inspection' | 'bitacora' | 'regElab' | 'regUpload';
+export interface ReportTask { b: Project; kind: ReportKind; key: string; step: Step; date: string; month: string }
+export const REPORT_LABEL: Record<ReportKind, string> = {
+  inspection: '🚗 Inspección', bitacora: '📋 Llenado de bitácora', regElab: '✍️ Elaboración de regencia', regUpload: '📤 Subir regencia'
+};
+
+/** Every task not done yet with a date up to `until`: `overdue` (before today) and `upcoming` (today … until), by date. */
+export function reportTasks(d: AppData, today: string, until: string) {
+  const all: ReportTask[] = [];
+  for (const b of d.projects) {
+    if (!hasSchedule(b)) continue;
+    for (const mk of monthsSinceOpening(b, until)) {
+      if (!dueInMonth(b, mk)) continue;
+      if (!visitedIn(b, mk)) all.push({ b, kind: 'inspection', key: `m:${mk}`, step: 'visit', date: inspectionDate(b, mk), month: mk });
+      if (!uploadedIn(b, mk)) all.push({ b, kind: 'bitacora', key: `m:${mk}`, step: 'uploaded', date: monthlyDue(b, mk), month: mk });
+    }
+    for (const key of regenciaDueDates(b, b.openedOn, addMonths(until, 6))) {
+      const date = regenciaDue(b, key), e = b.deliveries?.[`r:${key}`];
+      if (regenciaSubmitted(b, key)) continue;
+      if (!e?.letter) all.push({ b, kind: 'regElab', key: `r:${key}`, step: 'letter', date, month: key.slice(0, 7) });
+      all.push({ b, kind: 'regUpload', key: `r:${key}`, step: 'uploaded', date, month: key.slice(0, 7) });
+    }
+  }
+  const inRange = all.filter(t => t.date <= until).sort((a, c) => a.date.localeCompare(c.date) || a.b.code.localeCompare(c.b.code));
+  return {
+    overdue: inRange.filter(t => t.date < today),
+    upcoming: inRange.filter(t => t.date >= today),
+    noDate: d.projects.filter(b => isActiveProject(b) && b.noOpeningDate)
+  };
 }
