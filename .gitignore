@@ -4,3 +4,7 @@ src-tauri/target
 src-tauri/gen
 *.log
 .DS_Store
+dist-web
+instaladores/
+web-para-subir/
+*.key

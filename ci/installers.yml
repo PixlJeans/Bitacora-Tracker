@@ -1,8 +1,9 @@
-# Compila los instaladores de Bitácora Tracker:
-#   Windows → .exe (NSIS) y .msi      macOS → .dmg universal (Intel + Apple Silicon)
-# Se ejecuta a mano (Actions → Instaladores → Run workflow) o al subir una etiqueta v1.0.0, v1.1.0…
-# Los instaladores quedan como "artefactos" de la ejecución y en un borrador de Release.
-name: Instaladores
+# Builds the Bitácora Tracker installers and PUBLISHES the update:
+#   Windows → .exe (NSIS) and .msi      macOS → universal .dmg (Intel + Apple Silicon)
+# Runs when a v1.6.1, v1.6.2… tag is pushed (publish-update.bat does it) or by hand.
+# Publishes a Release with a signed latest.json: installed apps find it and update themselves.
+# Needs the TAURI_SIGNING_PRIVATE_KEY secret (set up by setup-updates.bat).
+name: Installers
 
 on:
   workflow_dispatch:
@@ -39,25 +40,28 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
 
-      - name: Instalar dependencias
+      - name: Install dependencies
         run: npm install
 
-      - name: Generar íconos oficiales
+      - name: Generate icons
         run: npx tauri icon src-tauri/icons/icon.png
 
-      - name: Compilar
+      - name: Build
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v__VERSION__
           releaseName: 'Bitácora Tracker v__VERSION__'
-          releaseBody: 'Instaladores para Windows (.exe / .msi) y macOS (.dmg).'
-          releaseDraft: true
+          releaseBody: 'Installed apps update themselves. To install from scratch: Windows (.exe) or macOS (.dmg).'
+          releaseDraft: false
           prerelease: false
-          args: ${{ matrix.args }}
+          includeUpdaterJson: true
+          args: ${{ matrix.args }} --config src-tauri/tauri.updater.conf.json
 
-      - name: Subir instaladores
+      - name: Upload installers
         uses: actions/upload-artifact@v4
         with:
           name: bitacora-tracker-${{ matrix.nombre }}

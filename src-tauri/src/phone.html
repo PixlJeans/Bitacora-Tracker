@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bitácora Tracker · Fotos</title>
+<style>
+  :root{--bg:#121212;--card:#1e1e1e;--text:#eee;--muted:#999;--accent:#4ade80;--border:#333;--danger:#ef4444}
+  @media (prefers-color-scheme: light){:root{--bg:#f5f5f5;--card:#fff;--text:#1a1a1a;--muted:#666;--border:#ddd;--accent:#16a34a}}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif}
+  body{background:var(--bg);color:var(--text);padding:16px;padding-bottom:110px;max-width:560px;margin:auto}
+  h1{font-size:1.25rem;display:flex;gap:.4rem;align-items:center;margin-bottom:.2rem}
+  .sub{color:var(--muted);font-size:.85rem;margin-bottom:1rem}
+  label{display:block;font-size:.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:1rem 0 .35rem}
+  input,select,textarea{width:100%;font-size:1rem;padding:.75rem;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text)}
+  textarea{min-height:90px;resize:vertical}
+  .btns{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-top:1rem}
+  .btn{display:flex;align-items:center;justify-content:center;gap:.4rem;padding:1rem;border-radius:14px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:1rem;font-weight:700}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#111}
+  .photos{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:.8rem}
+  .photos div{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--card)}
+  .photos img{width:100%;height:100%;object-fit:cover}
+  .photos button{position:absolute;top:4px;right:4px;width:26px;height:26px;border-radius:50%;border:none;background:rgba(0,0,0,.6);color:#fff;font-size:.9rem}
+  .photos .ok::after{content:'✓';position:absolute;inset:0;display:grid;place-items:center;background:rgba(74,222,128,.45);color:#fff;font-size:2rem;font-weight:900}
+  .photos .gps{position:absolute;left:4px;bottom:4px;font-size:.9rem;filter:drop-shadow(0 1px 2px #000)}
+  .bar{position:fixed;left:0;right:0;bottom:0;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:var(--bg);border-top:1px solid var(--border)}
+  .bar .btn{width:100%}
+  .msg{margin-top:.8rem;padding:.7rem .9rem;border-radius:12px;font-size:.9rem;display:none}
+  .msg.ok{display:block;background:rgba(74,222,128,.15);color:var(--accent)}
+  .msg.err{display:block;background:rgba(239,68,68,.15);color:var(--danger)}
+  .proj{font-size:.8rem;color:var(--muted);margin-top:.3rem}
+</style>
+</head>
+<body>
+  <h1>🌿 Fotos para la bitácora</h1>
+  <p class="sub">Se guardan directo en la computadora, en la carpeta del proyecto, como anotación «por subir a SETENA».</p>
+
+  <label for="search">Proyecto</label>
+  <input id="search" placeholder="Buscar número o nombre…" autocomplete="off">
+  <select id="project" size="1"></select>
+  <div class="proj" id="projInfo"></div>
+
+  <label for="date">Fecha de la visita</label>
+  <input id="date" type="date">
+
+  <label for="note">Nota (opcional)</label>
+  <textarea id="note" placeholder="Qué se observó en la inspección…"></textarea>
+
+  <div class="btns">
+    <button class="btn" id="camera">📷 Tomar foto</button>
+    <button class="btn" id="gallery">🖼️ Galería</button>
+  </div>
+  <input id="inCam" type="file" accept="image/*" capture="environment" hidden>
+  <input id="inGal" type="file" accept="image/*" multiple hidden>
+  <div class="photos" id="photos"></div>
+  <div class="msg" id="msg"></div>
+
+  <div class="bar"><button class="btn primary" id="send">Enviar a la computadora</button></div>
+
+<script>
+const T = new URLSearchParams(location.search).get('t');
+const $ = id => document.getElementById(id);
+let projects = [], photos = [];
+const now = new Date(); $('date').value = new Date(now.getTime() - now.getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+let dateTouched = false;
+$('date').addEventListener('change', () => { dateTouched = true; });
+const msg = (t, ok) => { const m = $('msg'); m.textContent = t; m.className = 'msg ' + (ok ? 'ok' : 'err'); };
+const stripAccents = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/** Date and GPS of the ORIGINAL photo (JPEG EXIF). Shrinking it with canvas loses them, so they are read first. */
+function readExif(buf) {
+  const r = { date: null, lat: null, lng: null };
+  try {
+    const v = new DataView(buf);
+    if (v.getUint16(0) !== 0xffd8) return r;
+    let p = 2, t = -1;
+    while (p + 4 <= v.byteLength) {
+      const m = v.getUint16(p);
+      if ((m & 0xff00) !== 0xff00 || m === 0xffda) break;
+      if (m === 0xffe1 && v.getUint32(p + 4) === 0x45786966) { t = p + 10; break; }
+      p += 2 + v.getUint16(p + 2);
+    }
+    if (t < 0) return r;
+    const le = v.getUint16(t) === 0x4949;
+    const u16 = o => v.getUint16(t + o, le), u32 = o => v.getUint32(t + o, le);
+    const ifd = off => { const m = new Map(); if (!off || t + off + 2 > v.byteLength) return m; const k = u16(off);
+      for (let i = 0; i < k; i++) { const e = off + 2 + i * 12; if (t + e + 12 > v.byteLength) break; m.set(u16(e), { n: u32(e + 4), val: u32(e + 8), pos: e + 8 }); } return m; };
+    const text = x => { if (!x) return ''; const o = x.n > 4 ? x.val : x.pos; let s = ''; for (let i = 0; i < x.n; i++) { const c = v.getUint8(t + o + i); if (!c) break; s += String.fromCharCode(c); } return s; };
+    const rationals = x => { if (!x) return null; const a = []; for (let i = 0; i < x.n; i++) { const d = u32(x.val + i * 8 + 4); a.push(d ? u32(x.val + i * 8) / d : 0); } return a; };
+    const i0 = ifd(u32(4)), ex = ifd(i0.get(0x8769) ? i0.get(0x8769).val : 0), g = ifd(i0.get(0x8825) ? i0.get(0x8825).val : 0);
+    const dt = /^(\d{4}):(\d{2}):(\d{2})/.exec(text(ex.get(0x9003)) || text(ex.get(0x9004)) || text(i0.get(0x0132)));
+    if (dt && dt[1] !== '0000') r.date = dt[1] + '-' + dt[2] + '-' + dt[3];
+    const la = rationals(g.get(2)), lo = rationals(g.get(4));
+    if (la && lo && la.length >= 3 && lo.length >= 3) {
+      let lat = la[0] + la[1] / 60 + la[2] / 3600, lng = lo[0] + lo[1] / 60 + lo[2] / 3600;
+      if (text(g.get(1)).toUpperCase() === 'S') lat = -lat;
+      if (text(g.get(3)).toUpperCase() === 'W') lng = -lng;
+      if ((lat || lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) { r.lat = +lat.toFixed(6); r.lng = +lng.toFixed(6); }
+    }
+  } catch (e) { /* no data */ }
+  return r;
+}
+async function exifOf(file) {
+  if (file.type && !/jpe?g/i.test(file.type)) return { date: null, lat: null, lng: null };
+  try { return readExif(await file.slice(0, 262144).arrayBuffer()); } catch (e) { return { date: null, lat: null, lng: null }; }
+}
+
+function renderProjects() {
+  const q = stripAccents($('search').value.trim());
+  const sel = $('project'), prev = sel.value;
+  sel.innerHTML = '';
+  projects.filter(p => !q || stripAccents(p.code + ' ' + p.name).includes(q)).forEach(p => {
+    const o = document.createElement('option'); o.value = p.code; o.textContent = p.code + ' — ' + p.name; sel.appendChild(o);
+  });
+  if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+  const last = localStorage.getItem('bt_cel_proy');
+  if (!prev && last && [...sel.options].some(o => o.value === last)) sel.value = last;
+}
+fetch('/projects?t=' + T).then(r => r.json()).then(l => { projects = l; renderProjects(); if (!l.length) msg('No hay proyectos activos en la app.', false); })
+  .catch(() => msg('No se pudo conectar con la computadora. Revisa que estén en el mismo Wi-Fi.', false));
+$('search').addEventListener('input', renderProjects);
+
+/** Shrinks the photo (max 2000 px) and makes a 360 px thumbnail. */
+function prepare(file) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const make = max => {
+        const k = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        return c.toDataURL('image/jpeg', max > 1000 ? 0.85 : 0.7);
+      };
+      res({ name: (file.name || 'foto').replace(/\.[^.]+$/, '') + '.jpg', data: make(2000), thumb: make(360) });
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = rej;
+    img.src = URL.createObjectURL(file);
+  });
+}
+async function addPhotos(files) {
+  for (const f of files) {
+    try {
+      const meta = await exifOf(f);
+      photos.push({ ...(await prepare(f)), ...meta, sent: false });
+      // The visit date comes from the photo (unless it was changed by hand)
+      if (meta.date && !dateTouched && photos.filter(x => x.date).length === 1) $('date').value = meta.date;
+    } catch { msg('No se pudo leer una foto.', false); }
+  }
+  renderPhotos();
+}
+function renderPhotos() {
+  $('photos').innerHTML = '';
+  photos.forEach((f, i) => {
+    const d = document.createElement('div'); if (f.sent) d.className = 'ok';
+    const im = document.createElement('img'); im.src = f.thumb; d.appendChild(im);
+    if (f.lat !== null && f.lat !== undefined) { const g = document.createElement('span'); g.className = 'gps'; g.textContent = '📍'; d.appendChild(g); }
+    if (!f.sent) { const b = document.createElement('button'); b.textContent = '✕'; b.onclick = () => { photos.splice(i, 1); renderPhotos(); }; d.appendChild(b); }
+    $('photos').appendChild(d);
+  });
+  const pending = photos.filter(f => !f.sent).length;
+  $('send').textContent = pending ? `Enviar ${pending} foto(s) a la computadora` : 'Enviar a la computadora';
+}
+$('camera').onclick = () => $('inCam').click();
+$('gallery').onclick = () => $('inGal').click();
+$('inCam').onchange = e => { addPhotos([...e.target.files]); e.target.value = ''; };
+$('inGal').onchange = e => { addPhotos([...e.target.files]); e.target.value = ''; };
+
+$('send').onclick = async () => {
+  const code = $('project').value;
+  if (!code) return msg('Elige el proyecto.', false);
+  const pending = photos.filter(f => !f.sent);
+  const note = $('note').value.trim();
+  if (!pending.length && !note) return msg('Agrega al menos una foto o una nota.', false);
+  localStorage.setItem('bt_cel_proy', code);
+  const batch = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const items = pending.length ? pending : [null];
+  $('send').disabled = true;
+  try {
+    for (let i = 0; i < items.length; i++) {
+      const f = items[i];
+      $('send').textContent = `Enviando ${i + 1} de ${items.length}…`;
+      const body = { batch, code, date: $('date').value, note, index: i + 1, total: items.length,
+        name: f ? f.name : 'nota.txt', data: f ? f.data.split(',')[1] : btoa(unescape(encodeURIComponent(note))), thumb: f ? f.thumb.split(',')[1] : '',
+        takenOn: f && f.date ? f.date : null, lat: f && f.lat !== null ? f.lat : null, lng: f && f.lng !== null ? f.lng : null };
+      const r = await fetch('/upload?t=' + T, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!r.ok) throw new Error(await r.text());
+      if (f) { f.sent = true; renderPhotos(); }
+    }
+    msg(`✓ Listo: ${pending.length} foto(s)${note ? ' y la nota' : ''} guardadas en ${code}.`, true);
+    $('note').value = '';
+  } catch (e) { msg('No se pudo enviar: ' + (e.message || e), false); }
+  $('send').disabled = false; renderPhotos();
+};
+</script>
+</body>
+</html>

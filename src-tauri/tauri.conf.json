@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Bitacora Tracker",
-  "version": "1.0.0",
+  "version": "1.6.2",
   "identifier": "com.cognose.bitacoratracker",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -48,6 +48,17 @@
     "macOS": {
       "signingIdentity": "-",
       "minimumSystemVersion": "10.15"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVDNjEwMzM3NjM5QjU1NDMKUldSRFZadGpOd05oWEdDT2Fra3hkd2djeXR4ZUIvcG5LYlQ4YjQ2R3liQUI4OTY4NTIvd05CTkEK",
+      "endpoints": [
+        "https://github.com/PixlJeans/Bitacora-Tracker/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

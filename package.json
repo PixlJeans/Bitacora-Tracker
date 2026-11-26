@@ -1,9 +1,9 @@
 {
   "name": "bitacora-tracker",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.6.2",
   "type": "module",
-  "description": "Registro y seguimiento de bitácoras ambientales SETENA",
+  "description": "Tracking of SETENA environmental logbooks (bitácoras)",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -12,13 +12,17 @@
     "tauri": "tauri",
     "app:dev": "tauri dev",
     "app:build": "tauri build",
-    "test": "tsx test/parser.test.ts && tsx test/avisos.test.ts"
+    "test": "tsx test/parser.test.ts && tsx test/schedule.test.ts && tsx test/search.test.ts && tsx test/deliveries.test.ts",
+    "build:web": "vite build --mode web",
+    "version:bump": "node scripts/bump-version.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-autostart": "^2.3.0",
     "@tauri-apps/plugin-dialog": "^2.2.2",
     "@tauri-apps/plugin-notification": "^2.2.2",
+    "@tauri-apps/plugin-process": "^2.0.0",
+    "@tauri-apps/plugin-updater": "^2.0.0",
     "pdfjs-dist": "^5.3.31",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"

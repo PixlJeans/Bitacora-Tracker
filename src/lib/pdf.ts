@@ -1,33 +1,35 @@
-// ===== Lee el texto de un PDF, línea por línea (pdf.js) =====
-// Agrupa los fragmentos por su posición vertical para reconstruir las filas de la tabla.
-import * as pdfjs from 'pdfjs-dist';
+// ===== Reads the text of a PDF, line by line (pdf.js) =====
+// Groups the fragments by vertical position to rebuild the table rows.
+import './polyfills'; // must come before pdf.js
+// "legacy" build: works with the Safari of older Macs
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { workerSrc } from './pdfWorker';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
 interface Frag { str: string; x: number; y: number; h: number }
 
-export async function textoDePdf(data: ArrayBuffer): Promise<string> {
+export async function textFromPdf(data: ArrayBuffer): Promise<string> {
   const doc = await pdfjs.getDocument({ data: new Uint8Array(data) }).promise;
-  const paginas: string[] = [];
+  const pages: string[] = [];
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p);
     const tc = await page.getTextContent();
-    const frags: Frag[] = [];
+    const fragments: Frag[] = [];
     for (const it of tc.items as any[]) {
       if (typeof it.str !== 'string' || !it.str.trim()) continue;
       const t = it.transform as number[];
-      frags.push({ str: it.str, x: t[4], y: t[5], h: Math.abs(t[3]) || 10 });
+      fragments.push({ str: it.str, x: t[4], y: t[5], h: Math.abs(t[3]) || 10 });
     }
-    // filas: misma línea si la diferencia vertical es menor que media altura de letra
-    frags.sort((a, b) => b.y - a.y || a.x - b.x);
-    const filas: Frag[][] = [];
-    for (const f of frags) {
-      const fila = filas.find(r => Math.abs(r[0].y - f.y) < Math.max(3, r[0].h * 0.5));
-      if (fila) fila.push(f); else filas.push([f]);
+    // rows: same line if the vertical difference is less than half the text height
+    fragments.sort((a, b) => b.y - a.y || a.x - b.x);
+    const rows: Frag[][] = [];
+    for (const f of fragments) {
+      const row = rows.find(r => Math.abs(r[0].y - f.y) < Math.max(3, r[0].h * 0.5));
+      if (row) row.push(f); else rows.push([f]);
     }
-    filas.sort((a, b) => b[0].y - a[0].y);
-    paginas.push(filas.map(r => r.sort((a, b) => a.x - b.x).map(f => f.str.trim()).join('  ')).join('\n'));
+    rows.sort((a, b) => b[0].y - a[0].y);
+    pages.push(rows.map(r => r.sort((a, b) => a.x - b.x).map(f => f.str.trim()).join('  ')).join('\n'));
   }
-  return paginas.join('\n\n');
+  return pages.join('\n\n');
 }

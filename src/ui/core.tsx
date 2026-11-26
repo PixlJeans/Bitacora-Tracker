@@ -1,12 +1,12 @@
-// ===== Núcleo de interfaz (puerto de Cognose tools/05-modal.js + cal-forms toast + cal-views iconos) =====
-//  · Un solo sistema de ventanas para todo: abrirModal / cerrarModal / confirmar / alerta
-//  · Pop-ups estilo Habitica: cabecera de color con un icono grande (variante `hb`)
-//  · Toast inferior con "Deshacer"
-//  · Popover anclado (selector rápido de estado y color)
+// ===== UI core (port of Cognose tools/05-modal.js + cal-forms toast + cal-views icons) =====
+//  · A single dialog system for everything: openModal / closeModal / confirmDialog / alertBox
+//  · Habitica-style pop-ups: colored header with a big icon (variant `hb`)
+//  · Bottom toast with «Deshacer» (undo)
+//  · Anchored popover (quick status and color picker)
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Undo } from '../lib/store';
 
-// ---------- Iconos SVG (heredan el color del texto) ----------
+// ---------- SVG icons (inherit the text color) ----------
 const ICONS: Record<string, string> = {
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   edit: '<path d="M4 20h4L19 9l-4-4L4 16v4z"/>',
@@ -39,11 +39,11 @@ let modal: ModalState | null = null;
 const msubs = new Set<() => void>();
 const memit = () => msubs.forEach(f => f());
 
-export function abrirModal(node: ReactNode, size = '') { modal = { node, size }; memit(); }
-export function cerrarModal() { modal = null; memit(); }
-export const hayModal = () => !!modal;
+export function openModal(node: ReactNode, size = '') { modal = { node, size }; memit(); }
+export function closeModal() { modal = null; memit(); }
+export const hasModal = () => !!modal;
 
-// Igual que en Cognose: si el clic empezó dentro de la ventana (seleccionar texto, arrastrar), no cierra.
+// Same as in Cognose: if the click started inside the dialog (selecting text, dragging), it doesn't close.
 let pressInside = false, dragDist = 0, down: { x: number; y: number } | null = null;
 if (typeof document !== 'undefined') {
   document.addEventListener('mousedown', e => {
@@ -54,56 +54,56 @@ if (typeof document !== 'undefined') {
     if (down) dragDist = Math.max(dragDist, Math.abs(e.clientX - down.x), Math.abs(e.clientY - down.y));
   });
   document.addEventListener('mouseup', () => { down = null; });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal && !document.querySelector('.pop')) cerrarModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal && !document.querySelector('.pop')) closeModal(); });
 }
 
 export function ModalHost() {
   const m = useSyncExternalStore(cb => { msubs.add(cb); return () => { msubs.delete(cb); }; }, () => modal);
   if (!m) return null;
   return (
-    <div className="modal-overlay" onClick={() => { if (!pressInside && dragDist <= 5) cerrarModal(); }}>
+    <div className="modal-overlay" onClick={() => { if (!pressInside && dragDist <= 5) closeModal(); }}>
       <div className={`modal ${m.size}`} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">{m.node}</div>
     </div>
   );
 }
 
-/** Cabecera estilo Habitica: banda de color con un icono grande en círculo y el título centrado. */
-export function HbHead({ icon, titulo, sub, color = 'var(--accent)' }: { icon: string; titulo: string; sub?: string; color?: string }) {
+/** Habitica-style header: colored band with a big round icon and the centered title. */
+export function HbHead({ icon, title: title, sub, color = 'var(--accent)' }: { icon: string; title: string; sub?: string; color?: string }) {
   return (
     <div className="hb-head" style={{ ['--hb' as any]: color }}>
       <div className="hb-band"><span className="hb-spark s1" /><span className="hb-spark s2" /><span className="hb-spark s3" /></div>
       <div className="hb-icon">{icon}</div>
-      <h3>{titulo}</h3>
+      <h3>{title}</h3>
       {sub && <p className="hb-sub">{sub}</p>}
     </div>
   );
 }
 
-export function confirmar(o: { titulo: string; texto: string; ok?: string; peligro?: boolean; icon?: string }): Promise<boolean> {
+export function confirmDialog(o: { title: string; text: string; ok?: string; danger?: boolean; icon?: string }): Promise<boolean> {
   return new Promise(res => {
-    const fin = (v: boolean) => { cerrarModal(); res(v); };
-    abrirModal(
+    const end = (v: boolean) => { closeModal(); res(v); };
+    openModal(
       <>
-        <HbHead icon={o.icon || (o.peligro ? '🗑️' : '❔')} titulo={o.titulo} color={o.peligro ? 'var(--danger)' : 'var(--accent)'} />
-        <p className="modal-text center">{o.texto}</p>
+        <HbHead icon={o.icon || (o.danger ? '🗑️' : '❔')} title={o.title} color={o.danger ? 'var(--danger)' : 'var(--accent)'} />
+        <p className="modal-text center">{o.text}</p>
         <div className="modal-btns center">
-          <button className="modal-btn cancel" onClick={() => fin(false)}>Cancelar</button>
-          <button className={`modal-btn ok ${o.peligro ? 'danger' : ''}`} autoFocus onClick={() => fin(true)}>{o.ok || 'Aceptar'}</button>
+          <button className="modal-btn cancel" onClick={() => end(false)}>Cancelar</button>
+          <button className={`modal-btn ok ${o.danger ? 'danger' : ''}`} autoFocus onClick={() => end(true)}>{o.ok || 'Aceptar'}</button>
         </div>
       </>, 'small hb');
   });
 }
 
-export function alerta(titulo: string, texto?: ReactNode, icon = '✨', color?: string) {
-  abrirModal(
+export function alertBox(title: string, text?: ReactNode, icon = '✨', color?: string) {
+  openModal(
     <>
-      <HbHead icon={icon} titulo={titulo} color={color} />
-      {texto && <div className="modal-text center">{texto}</div>}
-      <div className="modal-btns center"><button className="modal-btn ok" autoFocus onClick={cerrarModal}>¡Listo!</button></div>
+      <HbHead icon={icon} title={title} color={color} />
+      {text && <div className="modal-text center">{text}</div>}
+      <div className="modal-btns center"><button className="modal-btn ok" autoFocus onClick={closeModal}>¡Listo!</button></div>
     </>, 'small hb');
 }
 
-// ---------- Toast con Deshacer ----------
+// ---------- Toast with Undo ----------
 let toastMsg: { msg: string; undo: boolean; id: number } | null = null;
 let toastT: ReturnType<typeof setTimeout> | null = null;
 const tsubs = new Set<() => void>();
@@ -126,7 +126,7 @@ export function ToastHost() {
   );
 }
 
-// ---------- Popover anclado (como el popover rápido del calendario de Cognose) ----------
+// ---------- Anchored popover (like the quick popover of the Cognose calendar) ----------
 export function Popover({ anchor, onClose, children, width = 230 }:
   { anchor: HTMLElement; onClose: () => void; children: ReactNode; width?: number }) {
   const ref = useRef<HTMLDivElement>(null);

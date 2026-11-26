@@ -1,0 +1,212 @@
+// ===== Create / edit project dialog (consistent with the Cognose editor) =====
+// The user only sets code + project, opening date, status, progress and location.
+// Delivery dates are calculated from the opening date; each one can then be adjusted in the calendar.
+import { useState } from 'react';
+import type { Project, Status, ProjectLocation } from '../lib/types';
+import { STATUSES, isActiveProject, isFinished } from '../lib/types';
+import { codeExists, getData, mutate, labelForStatus, archive, useAppData } from '../lib/store';
+import { normalizeCode, isValidCode } from '../lib/parser';
+import { trackingStart, regenciaDueDates, regenciaDue } from '../lib/schedule';
+import { mapLink, parseCoordinates } from '../lib/geo';
+import { gpsComun } from '../lib/exif';
+import { backend } from '../lib/backend';
+import { shortDate, longDate, fromISO, addMonths, todayISO, uid } from '../lib/dates';
+import { ProjectCalendar } from './ProjectCalendar';
+import { ProjectLog } from './ProjectLog';
+import { Ic, openModal, closeModal, confirmDialog, toast, HbHead } from './core';
+import { openSettings } from './Settings';
+
+/** Deletes a project (with confirmation). Can be undone with Ctrl+Z or «Deshacer».
+ *  Photos and PDFs are not deleted from disk: they stay in the project folder, to be safe. */
+export async function deleteProject(b: Project): Promise<boolean> {
+  const photos = b.entries.reduce((n, a) => n + a.attachments.length, 0);
+  const ok = await confirmDialog({
+    title: '¿Eliminar este proyecto?',
+    text: `${b.code} → ${b.name}. Se borra de la lista con sus entregas, cartas y anotaciones${photos ? ` (sus ${photos} archivo(s) se quedan en la carpeta del proyecto)` : ''}. Si solo terminó, mejor archívalo.`,
+    ok: 'Eliminar', danger: true, icon: '🗑️'
+  });
+  if (!ok) return false;
+  mutate(dd => {
+    dd.projects = dd.projects.filter(x => x.id !== b.id);
+    dd.snoozed = dd.snoozed.filter(p => p.ref !== b.id);
+  });
+  toast(`🗑️ ${b.code} eliminado`, true);
+  return true;
+}
+
+export function openEditor(b?: Project, initial?: Partial<Project>, initialTab: 'details' | 'log' = 'details') {
+  openModal(<ProjectEditor b={b} initial={initial} initialTab={initialTab} />, 'create-modal editor');
+}
+
+function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Project; initial?: Partial<Project>; initialTab: 'details' | 'log' }) {
+  const [tab, setTab] = useState(initialTab);
+  const d = useAppData();
+  // Deliveries, steps, log entries and photos are saved immediately: always read from the live data
+  const live = b ? d.projects.find(x => x.id === b.id) : undefined;
+  const [locTouched, setLocTouched] = useState(false);
+  const today = todayISO();
+  const [f, setF] = useState<Project>(() => b ? structuredClone(b) : {
+    id: uid(), code: '', name: '', status: 'new', labelId: labelForStatus('new'), openedOn: today, notes: '',
+    uploads: [], visits: [], regencias: [], entries: [], archived: false, archivedOn: null, lastUpdated: null, createdOn: today, ...initial
+  });
+  const [err, setErr] = useState('');
+  const set = <K extends keyof Project>(k: K, v: Project[K]) => setF(x => ({ ...x, [k]: v }));
+  const view: Project = live ? {
+    ...f, uploads: live.uploads, visits: live.visits, regencias: live.regencias, deliveries: live.deliveries,
+    entries: live.entries, location: locTouched ? f.location : live.location
+  } : f;
+  const setLoc = (u: ProjectLocation | null) => { setLocTouched(true); set('location', u); };
+
+  const day = fromISO(f.openedOn).getDate();
+  const firstMonthly = addMonths(f.openedOn, 1);
+  const regencias = regenciaDueDates(view, trackingStart(view), addMonths(today, 13)).slice(0, 3);
+
+  function save() {
+    const code = normalizeCode(f.code);
+    const name = f.name.trim().replace(/\s+/g, ' ');
+    if (!code) return setErr('Falta el número de bitácora.');
+    if (!isValidCode(code)) return setErr('El número debe tener el formato D1-XXXX-AAAA (ej. D1-0170-2020).');
+    if (!name) return setErr('Falta el nombre del proyecto: el número siempre va ligado a un proyecto.');
+    if (!f.openedOn) return setErr('Falta la fecha de apertura.');
+    if (codeExists(code, f.id)) return setErr(`Ya existe una bitácora con el número ${code}.`);
+    // Log entries are saved right away in the «Bitácora» tab: don't overwrite them with the form's copy
+    const current = getData().projects.find(x => x.id === f.id);
+    const result: Project = current ? {
+      ...f, code: code, name: name, entries: current.entries, uploads: current.uploads, visits: current.visits,
+      regencias: current.regencias, deliveries: current.deliveries, location: locTouched ? f.location ?? null : current.location ?? null
+    } : { ...f, code: code, name: name };
+    mutate(dd => {
+      const i = dd.projects.findIndex(x => x.id === f.id);
+      if (i >= 0) dd.projects[i] = result; else dd.projects.push(result);
+    });
+    closeModal();
+    toast(b ? `Bitácora ${code} actualizada` : `Bitácora ${code} creada`, true);
+  }
+
+  async function remove() {
+    if (!b) return;
+    if (!(await deleteProject(b))) openEditor(b);
+  }
+
+  return (
+    <form onSubmit={e => { e.preventDefault(); save(); }}>
+      <HbHead icon={b ? '📝' : '🌿'} title={b ? 'Editar bitácora' : 'Nueva bitácora'} sub="Las entregas se calculan solas desde la apertura; cada fecha se puede ajustar" />
+
+      {b && (
+        <div className="ed-tabs" role="tablist">
+          <button type="button" role="tab" className={tab === 'details' ? 'on' : ''} onClick={() => setTab('details')} data-help="Número, nombre, apertura, estado, avance, ubicación y el calendario de entregas con sus pasos, fechas y la carta.">📝 Datos, entregas y carta</button>
+          <button type="button" role="tab" className={tab === 'log' ? 'on' : ''} onClick={() => setTab('log')} data-help="Historial del proyecto: fotos de visitas, informes en PDF y observaciones, marcadas «Por subir» o «Subida» a SETENA.">
+            📷 Bitácora · fotos y notas{b.entries.some(a => !a.uploaded) ? <b className="tab-badge">{b.entries.filter(a => !a.uploaded).length}</b> : null}</button>
+        </div>
+      )}
+      {tab === 'log' && b ? <ProjectLog id={b.id} /> : <>
+      <div className="ed-pair">
+        <div>
+          <label className="modal-label" htmlFor="ed_num">Número</label>
+          <input id="ed_num" className="modal-input mono" placeholder="D1-0170-2020" value={f.code} autoFocus={!b}
+            onChange={e => { set('code', e.target.value.toUpperCase()); setErr(''); }}
+            onBlur={e => { const n = normalizeCode(e.target.value); if (n) set('code', n); }} />
+        </div>
+        <span className="ed-arrow">→</span>
+        <div className="grow">
+          <label className="modal-label" htmlFor="ed_nom">Nombre del proyecto</label>
+          <input id="ed_nom" className="modal-input" placeholder="CONDOMINIO VISTA DEL BOSQUE" value={f.name}
+            onChange={e => { set('name', e.target.value); setErr(''); }} />
+        </div>
+      </div>
+
+      <div className="ed-cols">
+        <div>
+          <label className="modal-label" htmlFor="ed_ap">Fecha de apertura</label>
+          <input id="ed_ap" type="date" className="modal-input" value={f.openedOn} onChange={e => e.target.value && set('openedOn', e.target.value)} />
+
+          <label className="modal-label">Estado</label>
+          <div className="chip-pick">
+            {STATUSES.map(s => (
+              <button type="button" key={s.id} className={`echip status-${s.id} ${f.status === s.id ? 'on' : ''}`}
+                onClick={() => set('status', s.id as Status)}>{s.name}</button>
+            ))}
+          </div>
+
+          <label className="modal-label">Avance
+            <button type="button" className="dp-link inline" onClick={() => { closeModal(); openSettings('colors'); }}>editar</button>
+          </label>
+          <div className="chip-pick">
+            {d.labels.map(e => (
+              <button type="button" key={e.id} className={`echip ${f.labelId === e.id ? 'on' : ''}`} style={{ ['--ec' as any]: e.color }}
+                onClick={() => set('labelId', e.id)}><span className="dot" />{e.name}</button>
+            ))}
+          </div>
+
+          <div className="ed-auto">
+            <div className="ed-auto-h"><Ic n="calendar" size={14} /> Automático</div>
+            {isActiveProject(f) ? <>
+              <p><b>Informe Regencial</b> (mensual): día <b>{day}</b> de cada mes{day > 28 ? ' (o el último en meses cortos)' : ''}, desde el {shortDate(firstMonthly)} {firstMonthly.slice(0, 4)}.</p>
+              <p><b>Regencia</b> cada 6 meses{regencias.length ? `; la próxima: ${longDate(regenciaDue(view, regencias.find(v => !view.regencias.includes(v)) ?? regencias[0]))}.` : '.'}</p>
+              <p className="muted sm">Cada fecha se puede ajustar en el calendario (clic en la fecha de la entrega).</p>
+            </> : <p className="muted">{f.archived ? 'Archivada: sin entregas.' : f.status === 'closing' ? 'Solicitud de Cierre: el proyecto ya terminó, no genera entregas. Ciérralo con 📦 Archivar.' : 'Terminada: ya no genera entregas. Ciérrala con 📦 Archivar.'}</p>}
+          </div>
+        </div>
+
+        <div>
+          <label className="modal-label">Calendario de entregas</label>
+          <ProjectCalendar b={view} live={!!live} onChange={c => setF(x => ({ ...x, ...c }))} />
+        </div>
+      </div>
+
+      <LocationField b={view} onChange={setLoc} />
+
+      <label className="modal-label" htmlFor="ed_notas">Notas</label>
+      <textarea id="ed_notas" className="modal-input" rows={2} value={f.notes} placeholder="Regente, consultor, observaciones…"
+        onChange={e => set('notes', e.target.value)} />
+      </>}
+
+      <p className="ed-error" role="alert">{err}</p>
+      <div className="modal-btns">
+        {b && <button type="button" className="modal-btn cancel danger-text" onClick={remove}><Ic n="trash" size={14} /> Eliminar</button>}
+        {b && (isFinished(b.status) || b.archived) && <button type="button" className="modal-btn cancel" onClick={() => { closeModal(); archive(b.id, !b.archived); toast(b.archived ? `${b.code} restaurada` : `📦 ${b.code} archivada`, true); }}>
+          {b.archived ? '↑ Restaurar' : '📦 Archivar'}</button>}
+        <span className="grow" />
+        <button type="button" className="modal-btn cancel" onClick={closeModal}>Cancelar</button>
+        <button type="submit" className="modal-btn ok">{b ? 'Guardar' : 'Crear bitácora'}</button>
+      </div>
+    </form>
+  );
+}
+
+/** Project location: paste coordinates or a Google Maps link, or take it from the photos' GPS. */
+function LocationField({ b, onChange }: { b: Project; onChange: (u: ProjectLocation | null) => void }) {
+  const u = b.location ?? null;
+  const [txt, setTxt] = useState('');
+  const [err, setErr] = useState('');
+  const gpsPhotos = b.entries.flatMap(a => a.attachments).filter(f => f.lat != null && f.lng != null);
+  const fromPhotos = gpsComun(gpsPhotos.map(f => ({ date: null, time: null, lat: f.lat!, lng: f.lng! })));
+  const paste = (v: string) => {
+    setTxt(v); setErr('');
+    if (!v.trim()) return;
+    const p = parseCoordinates(v);
+    if (p) { onChange({ lat: p.lat, lng: p.lng, text: u?.text ?? '', source: 'manual' }); setTxt(''); }
+    else if (v.trim().length > 6) setErr('No encontré coordenadas. Pega «9.9325, -84.0795» o el enlace de Google Maps (Compartir → Copiar enlace, abierto en el navegador).');
+  };
+  return (
+    <div className="loc">
+      <label className="modal-label">📍 Ubicación del proyecto <small className="muted">(para agrupar visitas cercanas el mismo día)</small></label>
+      {u ? (
+        <div className="loc-row">
+          <span className="loc-coord mono">{u.lat.toFixed(5)}, {u.lng.toFixed(5)}</span>
+          <small className="muted">{u.source === 'photo' ? 'del GPS de las fotos' : 'puesta a mano'}</small>
+          <button type="button" className="dp-link" onClick={() => backend.openMap(mapLink(u)).catch(e => toast(String(e)))}>Ver en el mapa</button>
+          <button type="button" className="dp-link danger" onClick={() => onChange(null)}>Quitar</button>
+        </div>
+      ) : <p className="muted sm">Sin ubicación. Pégala abajo, o se toma sola del GPS de las primeras fotos con ubicación.</p>}
+      <div className="loc-row">
+        <input className="modal-input" placeholder={u ? 'Cambiar: pega coordenadas o enlace de Google Maps' : 'Pega coordenadas (9.9325, -84.0795) o enlace de Google Maps'} value={txt}
+          onChange={e => paste(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} />
+        {fromPhotos && (!u || u.source !== 'photo') && <button type="button" className="btn sm" onClick={() => onChange({ ...fromPhotos, text: u?.text ?? '', source: 'photo' })}>Usar GPS de las fotos ({gpsPhotos.length})</button>}
+      </div>
+      {u && <input className="modal-input" placeholder="Dirección o referencia (opcional): 200 m norte de la iglesia de…" value={u.text}
+        onChange={e => onChange({ ...u, text: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} />}
+      {err && <p className="ed-hint warn">{err}</p>}
+    </div>
+  );
+}
