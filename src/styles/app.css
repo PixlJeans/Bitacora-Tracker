@@ -803,3 +803,59 @@ body.help-mode [data-ayuda]:hover{outline:2px solid var(--accent)}
 .ent-check .cb{width:17px;height:17px;border:1.5px solid var(--muted);border-radius:4px;display:inline-grid;place-items:center}
 .ent-check.on .cb{background:#4ade80;border-color:#4ade80;color:#0b0b0b}
 .ent-warn{font-size:.72rem;color:var(--danger);margin-top:.25rem;padding-left:1.6rem;font-weight:600}
+/* ===== v1.7: simple project rows ===== */
+.prow3-h,.prow3{display:grid;grid-template-columns:128px minmax(0,1fr) 168px 190px 92px 34px;align-items:center;gap:.6rem}
+.prow3-h{padding:.2rem .8rem;font-size:.66rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.prow3{padding:.45rem .8rem;margin-bottom:.3rem;border-radius:10px;background:var(--card);border:1px solid var(--border);border-left:3px solid transparent;cursor:pointer;min-height:48px}
+.prow3:hover{border-color:color-mix(in srgb, var(--accent) 45%, var(--border))}
+.prow3.late{border-left-color:var(--danger)}
+.prow3.archived,.prow3.status-closing,.prow3.status-finished{opacity:.6}
+.prow3 .c-code{font-weight:700;font-size:.84rem}
+.prow3 .c-name{font-weight:600;font-size:.86rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-task{display:flex;align-items:center;gap:.4rem;justify-content:space-between;padding:.15rem .3rem .15rem .5rem;border-radius:8px;background:var(--bg);min-height:36px}
+.c-task.na{justify-content:flex-start;color:var(--muted);background:none;font-size:.8rem}
+.c-task-txt{display:flex;flex-direction:column;line-height:1.15;min-width:0}
+.c-task-txt b{font-size:.82rem;white-space:nowrap}
+.c-task-txt small{font-size:.66rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-task.overdue .c-task-txt b,.c-task.overdue .c-task-txt small{color:var(--danger)}
+.c-task.done .c-task-txt b{color:#4ade80}
+.c-task.reg .c-task-txt small{color:#a78bfa}
+.c-task .ck{flex:0 0 auto}
+.prow3 .status-chip{justify-self:start}
+.filters.simple{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin:.3rem 0 .6rem}
+@media (max-width:760px){
+  .prow3-h{display:none}
+  .prow3{grid-template-columns:1fr 1fr;grid-template-areas:"code status" "name name" "insp inf"}
+  .prow3 .c-code{grid-area:code}.prow3 .c-name{grid-area:name}.prow3 .status-chip{grid-area:status;justify-self:end}
+  .prow3 .c-task:nth-of-type(1){grid-area:insp}.prow3 .c-acc{display:none}
+}
+/* ===== v1.7: compact editor ===== */
+.modal.editor,.create-modal.editor{width:min(980px,96vw)!important;max-width:980px!important}
+.ed-top{display:flex;align-items:center;gap:.8rem;margin:0 0 .7rem;padding-right:2rem}
+.ed-top h2{flex:1;min-width:0;margin:0;font-size:1.05rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ed-top h2 .mono{color:var(--muted);font-size:.9rem;margin-right:.3rem}
+.ed-top .ed-tabs{display:flex;gap:.25rem;margin:0;flex:0 0 auto}
+.ed-top .ed-tabs button{padding:.35rem .8rem;font-size:.8rem}
+.ed-row{display:grid;grid-template-columns:150px minmax(0,1fr) 150px 170px;gap:.6rem;align-items:end}
+.ed-row .modal-label{margin-top:0}
+.ed-auto-line{font-size:.75rem;margin:.45rem 0 .5rem}
+.pcal{display:block}
+.pcal-strip{display:flex;gap:.25rem;align-items:center;margin-bottom:.6rem}
+.pcal-strip .ct{flex:1;min-width:0}
+.pcal-strip .dp-nav{flex:0 0 auto}
+.pcal-checks{display:flex;flex-direction:column;gap:.6rem}
+.ent-cols{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;align-items:stretch}
+.ent-cols>.ent-block{display:flex;flex-direction:column;gap:.35rem;margin:0}
+.ent-cols .ent-files{margin-top:auto;border:1px dashed var(--border);border-radius:8px;padding:.4rem}
+.ent-cols .ent-files.over{border-color:var(--accent)}
+.ent-cols .ent-letter textarea{min-height:110px}
+.ed-more{margin-top:.7rem;border:1px solid var(--border);border-radius:10px;padding:.4rem .7rem}
+.ed-more summary{cursor:pointer;font-size:.8rem;font-weight:600;color:var(--muted)}
+.ed-more-grid{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin-top:.4rem}
+@media (max-width:760px){.ed-row{grid-template-columns:1fr 1fr}.ed-row .name{grid-column:1/-1}.ent-cols,.ed-more-grid{grid-template-columns:1fr}}
+.ed-row .modal-input{width:100%;box-sizing:border-box}
+.ed-top .ed-tabs button{display:inline-flex;align-items:center;gap:.3rem;white-space:nowrap}
+.ent-cols>.ent-block>.ent-files{flex:1;display:flex;flex-direction:column;gap:.4rem;min-height:70px}
+.ent-cols .ent-files-btns{margin-top:auto}
+.ent-files-empty{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.75rem;color:var(--muted);padding:.4rem}
+.ent-cols .ent-letter textarea{min-height:90px}

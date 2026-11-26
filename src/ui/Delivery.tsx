@@ -47,7 +47,7 @@ export function DeliveryCard({ b, itemKey: key, isOpen = false }: { b: Project; 
   const inspBy = inspectionDeadline(due);
   const done = isMonthly(key) ? !!(e.visit && e.uploaded) : !!e.uploaded;
   const days = daysUntil(due, today);
-  const [showLetter, setShowLetter] = useState(isOpen || !!e.letterText);
+  const [showLetter, setShowLetter] = useState(!e.uploaded);
   const [editingDate, setEditingDate] = useState(false);
   const lateVisit = !!e.planned && e.planned > inspBy;
 
@@ -73,66 +73,65 @@ export function DeliveryCard({ b, itemKey: key, isOpen = false }: { b: Project; 
         <b>{isMonthly(key) ? '📋' : '🗂️'} {deliveryTitle(key)}</b>
       </div>
 
-      {/* 1 · Inspección (site visit): at least 7 days before the informe */}
-      <div className={`ent-block ${e.visit ? 'on' : !e.visit && today > inspBy ? 'late' : ''}`}>
-        <div className="ent-row">
-          {check('visit')}
-          <b>🚗 Inspección</b>
-          {e.visit ? doneOn('visit')
-            : <small className={today > inspBy ? 'red-t' : 'muted'}>hacer a más tardar el <b>{longDate(inspBy)}</b> ({daysText(daysUntil(inspBy, today))})</small>}
-        </div>
-        {!e.visit && (
-          <div className="ent-row sub">
-            <span>Programada para</span>
-            <input type="date" className="modal-input sm" value={e.planned ?? ''} title="Día en que piensas ir (se puede mover cuando quieras)"
-              onChange={ev => { const v = ev.target.value || null; editDelivery(b.id, key, { planned: v }); toast(v ? `${b.code}: inspección programada ${longDate(v)}` : `${b.code}: inspección sin programar`, true); }} />
-            {e.planned ? <>
-              <small className="muted">{daysText(daysUntil(e.planned, today))}</small>
-              <button type="button" className="dp-link" onClick={() => { editDelivery(b.id, key, { planned: null }); toast(`${b.code}: inspección sin programar`, true); }}>quitar</button>
-            </> : <small className="muted">sin programar</small>}
+      <div className="ent-cols">
+        {/* LEFT · Inspección (site visit, at least 7 days before) + its photos */}
+        <section className={`ent-block ${e.visit ? 'on' : today > inspBy ? 'late' : ''}`}>
+          <div className="ent-row">
+            {check('visit')}
+            <b>🚗 Inspección</b>
           </div>
-        )}
-        {lateVisit && !e.visit && <div className="ent-warn">⚠️ Debe ser al menos 7 días antes del informe ({shortDate(due)}): a más tardar el {shortDate(inspBy)}.</div>}
-      </div>
-
-      {/* 2 · Informe presented to SETENA */}
-      <div className={`ent-block ${e.uploaded ? 'on' : days < 0 ? 'late' : ''}`}>
-        <div className="ent-row">
-          {check('uploaded')}
-          <b>📤 Informe a SETENA</b>
-          {e.uploaded ? doneOn('uploaded') : editingDate ? (
-            <span className="ent-date-edit">
-              <input type="date" className="modal-input sm" value={due} autoFocus
-                onChange={ev => { const v = ev.target.value; if (v) { editDelivery(b.id, key, { due: v === auto ? null : v }); toast(`${b.code}: fecha del informe ${shortDate(v)}`, true); } }} />
-              {adjusted && <button type="button" className="dp-link" onClick={() => { editDelivery(b.id, key, { due: null }); setEditingDate(false); toast(`${b.code}: fecha automática ${shortDate(auto)}`, true); }}>Automática ({shortDate(auto)})</button>}
-              <button type="button" className="dp-link" onClick={() => setEditingDate(false)}>Listo</button>
-            </span>
-          ) : (
-            <span className="ent-date-edit">
-              <small className={days < 0 ? 'red-t' : 'muted'}>vence el <b>{longDate(due)}</b>{adjusted ? ' (ajustada)' : ''} · {daysText(days)}</small>
-              <button type="button" className="dp-link" onClick={() => setEditingDate(true)}>✏️ cambiar</button>
-            </span>
+          <div className="ent-row sub">
+            {e.visit ? doneOn('visit')
+              : <small className={today > inspBy ? 'red-t' : 'muted'}>a más tardar el <b>{longDate(inspBy)}</b> · {daysText(daysUntil(inspBy, today))}</small>}
+          </div>
+          {!e.visit && (
+            <div className="ent-row sub">
+              <span>Programada</span>
+              <input type="date" className="modal-input sm" value={e.planned ?? ''} title="Día en que piensas ir (se puede mover cuando quieras)"
+                onChange={ev => { const v = ev.target.value || null; editDelivery(b.id, key, { planned: v }); toast(v ? `${b.code}: inspección programada ${longDate(v)}` : `${b.code}: inspección sin programar`, true); }} />
+              {e.planned && <button type="button" className="dp-link" onClick={() => { editDelivery(b.id, key, { planned: null }); toast(`${b.code}: inspección sin programar`, true); }}>quitar</button>}
+            </div>
           )}
-        </div>
-        <div className="ent-row sub muted">
-          <span>📷 {e.photos ? `fotos ${shortDate(e.photos)}` : 'sin fotos'}</span>
-          <span>✉️ {e.letter ? `carta lista ${shortDate(e.letter)}` : 'carta pendiente'}</span>
-        </div>
-      </div>
+          {lateVisit && !e.visit && <div className="ent-warn">⚠️ Debe ser al menos 7 días antes del informe: a más tardar el {shortDate(inspBy)}.</div>}
+          <DeliveryFiles b={b} itemKey={key} kind="photos" />
+        </section>
 
-      <DeliveryFiles b={b} itemKey={key} />
-
-      <div className="ent-letter">
-        <button type="button" className="dp-link" onClick={() => setShowLetter(v => !v)}>✉️ Carta para SETENA {e.letterText ? `(${e.letterText.trim().split(/\s+/).length} palabras)` : '(vacía)'} {showLetter ? '▴' : '▾'}</button>
-        {showLetter && <LetterText b={b} itemKey={key} />}
+        {/* RIGHT · Informe presented to SETENA + letter and documents */}
+        <section className={`ent-block ${e.uploaded ? 'on' : days < 0 ? 'late' : ''}`}>
+          <div className="ent-row">
+            {check('uploaded')}
+            <b>📤 Informe a SETENA</b>
+          </div>
+          <div className="ent-row sub">
+            {e.uploaded ? doneOn('uploaded') : editingDate ? (
+              <span className="ent-date-edit">
+                <input type="date" className="modal-input sm" value={due} autoFocus
+                  onChange={ev => { const v = ev.target.value; if (v) { editDelivery(b.id, key, { due: v === auto ? null : v }); toast(`${b.code}: fecha del informe ${shortDate(v)}`, true); } }} />
+                {adjusted && <button type="button" className="dp-link" onClick={() => { editDelivery(b.id, key, { due: null }); setEditingDate(false); toast(`${b.code}: fecha automática ${shortDate(auto)}`, true); }}>automática</button>}
+                <button type="button" className="dp-link" onClick={() => setEditingDate(false)}>listo</button>
+              </span>
+            ) : (
+              <span className="ent-date-edit">
+                <small className={days < 0 ? 'red-t' : 'muted'}>vence el <b>{longDate(due)}</b>{adjusted ? ' (ajustada)' : ''} · {daysText(days)}</small>
+                <button type="button" className="dp-link" onClick={() => setEditingDate(true)}>✏️ cambiar</button>
+              </span>
+            )}
+          </div>
+          <div className="ent-letter">
+            <button type="button" className="dp-link" onClick={() => setShowLetter(v => !v)}>✉️ Carta {e.letter ? `lista (${shortDate(e.letter)})` : e.letterText ? `(${e.letterText.trim().split(/\s+/).length} palabras)` : '(vacía)'} {showLetter ? '▴' : '▾'}</button>
+            {showLetter && <LetterText b={b} itemKey={key} />}
+          </div>
+          <DeliveryFiles b={b} itemKey={key} kind="docs" />
+        </section>
       </div>
     </div>
   );
 }
 
 /** Photos and documents of a delivery: add (button or drag & drop), open, remove. */
-function DeliveryFiles({ b, itemKey: key }: { b: Project; itemKey: string }) {
-  const files = [...(deliveryOf(b, key).files ?? [])].sort((x, y) => (x.takenOn ?? '9').localeCompare(y.takenOn ?? '9'));
+function DeliveryFiles({ b, itemKey: key, kind }: { b: Project; itemKey: string; kind: 'photos' | 'docs' }) {
+  const files = [...(deliveryOf(b, key).files ?? [])].filter(f => (f.type === 'photo') === (kind === 'photos'))
+    .sort((x, y) => (x.takenOn ?? '9').localeCompare(y.takenOn ?? '9'));
   const photoRef = useRef<HTMLInputElement>(null);
   const docRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState('');
@@ -155,16 +154,14 @@ function DeliveryFiles({ b, itemKey: key }: { b: Project; itemKey: string }) {
     if (f.thumb) backend.deleteAttachment(f.thumb).catch(() => { /* already gone */ });
     toast(`${f.name} quitado (queda en la papelera de la carpeta de datos)`, true);
   };
-  const photos = files.filter(f => f.type === 'photo').length, docs = files.length - photos;
+  const isPhotos = kind === 'photos';
+  const ref = isPhotos ? photoRef : docRef;
 
   return (
-    <div className={`ent-files ${over ? 'over' : ''}`}
+    <div className={`ent-files ${over ? 'over' : ''}`} title="También puedes arrastrar archivos aquí"
       onDragOver={ev => { ev.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
       onDrop={ev => { ev.preventDefault(); setOver(false); add(Array.from(ev.dataTransfer.files) as File[]); }}>
-      <div className="ent-files-h">
-        <b>📎 Fotos y documentos para SETENA</b>
-        <small className="muted">{files.length ? `${photos} foto(s) · ${docs} documento(s)` : 'arrastra aquí o usa los botones'}</small>
-      </div>
+      {!files.length && <div className="ent-files-empty">{isPhotos ? '📷 Arrastra aquí las fotos de la inspección: se leen su fecha y ubicación' : '📄 Arrastra aquí la carta firmada o los PDF'}</div>}
       {files.length > 0 && (
         <div className="ent-files-grid">
           {files.map(f => (
@@ -176,9 +173,9 @@ function DeliveryFiles({ b, itemKey: key }: { b: Project; itemKey: string }) {
         </div>
       )}
       <div className="ent-files-btns">
-        <button type="button" className="btn sm" disabled={!!saving} onClick={() => photoRef.current?.click()}>📷 Agregar fotos</button>
-        <button type="button" className="btn sm" disabled={!!saving} onClick={() => docRef.current?.click()}>📄 Agregar carta / documento</button>
-        <button type="button" className="dp-link" onClick={() => backend.openProjectFolder(b.code).catch(e => toast(String(e)))}>Abrir carpeta</button>
+        <button type="button" className="btn sm" disabled={!!saving} onClick={() => ref.current?.click()}>
+          {isPhotos ? `📷 ${files.length ? 'Más fotos' : 'Agregar fotos'}` : `📄 ${files.length ? 'Más documentos' : 'Agregar carta / PDF'}`}</button>
+        {isPhotos && files.length > 0 && <button type="button" className="dp-link" onClick={() => backend.openProjectFolder(b.code).catch(e => toast(String(e)))}>Abrir carpeta</button>}
         {saving && <small className="muted">{saving}</small>}
       </div>
       <input ref={photoRef} type="file" accept="image/*" multiple hidden onChange={ev => { add(Array.from(ev.target.files ?? []) as File[]); ev.target.value = ''; }} />

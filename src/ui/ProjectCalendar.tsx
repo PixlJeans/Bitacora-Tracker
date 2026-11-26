@@ -6,7 +6,7 @@ import { useState } from 'react';
 import type { Project } from '../lib/types';
 import { isActiveProject } from '../lib/types';
 import { reminderFrom, monthState, monthlyDue, regenciaDue, regenciaInMonth, dueInMonth } from '../lib/schedule';
-import { DOW_SHORT, shortDate, longDate, fromISO, monthGrid, monthKeyOf, monthName, todayISO } from '../lib/dates';
+import { shortDate, longDate, fromISO, monthKeyOf, monthName, todayISO } from '../lib/dates';
 import { Ic } from './core';
 import { DeliveryCard } from './Delivery';
 
@@ -36,6 +36,7 @@ export function ProjectCalendar({ b, onChange, live: live = false }: { b: Projec
   return (
     <div className="pcal">
       <div className="pcal-strip">
+        <button type="button" className="dp-nav" onClick={() => shift(-1)} title="Mes anterior">‹</button>
         {strip.map(m => {
           const [y, n] = m.split('-').map(Number);
           return (
@@ -45,27 +46,7 @@ export function ProjectCalendar({ b, onChange, live: live = false }: { b: Projec
             </button>
           );
         })}
-      </div>
-
-      <div className="pcal-month">
-        <div className="dp-head">
-          <button type="button" className="dp-nav" onClick={() => shift(-1)} title="Mes anterior">‹</button>
-          <span className="dp-month">{monthName(month)}</span>
-          <button type="button" className="dp-nav" onClick={() => shift(1)} title="Mes siguiente">›</button>
-        </div>
-        <div className="dp-grid">
-          {DOW_SHORT.map(x => <span key={x} className="dp-dow">{x}</span>)}
-          {monthGrid(month).map(iso => {
-            const out = iso.slice(0, 7) !== mk;
-            const isMonthlyDay = !out && iso === monthlyDate, isRegencia = !out && iso === regDate, isOpening = iso === b.openedOn;
-            return (
-              <span key={iso} className={`cd ${out ? 'out' : ''} ${iso === today ? 'today' : ''} ${isMonthlyDay ? `rev st-${st}` : ''} ${isRegencia ? 'regd' : ''} ${isOpening ? 'opening' : ''}`}
-                title={[isMonthlyDay && 'Informe Regencial (mensual)', isRegencia && 'Regencia (semestral)', isOpening && 'Apertura'].filter(Boolean).join(' · ') || undefined}>
-                {fromISO(iso).getDate()}
-              </span>
-            );
-          })}
-        </div>
+        <button type="button" className="dp-nav" onClick={() => shift(1)} title="Mes siguiente">›</button>
       </div>
 
       <div className="pcal-checks">

@@ -10,10 +10,10 @@ import { trackingStart, regenciaDueDates, regenciaDue } from '../lib/schedule';
 import { mapLink, parseCoordinates } from '../lib/geo';
 import { gpsComun } from '../lib/exif';
 import { backend } from '../lib/backend';
-import { shortDate, longDate, fromISO, addMonths, todayISO, uid } from '../lib/dates';
+import { shortDate, fromISO, addMonths, todayISO, uid } from '../lib/dates';
 import { ProjectCalendar } from './ProjectCalendar';
 import { ProjectLog } from './ProjectLog';
-import { Ic, openModal, closeModal, confirmDialog, toast, HbHead } from './core';
+import { Ic, openModal, closeModal, confirmDialog, toast } from './core';
 import { openSettings } from './Settings';
 
 /** Deletes a project (with confirmation). Can be undone with Ctrl+Z or «Deshacer».
@@ -58,7 +58,6 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
   const setLoc = (u: ProjectLocation | null) => { setLocTouched(true); set('location', u); };
 
   const day = fromISO(f.openedOn).getDate();
-  const firstMonthly = addMonths(f.openedOn, 1);
   const regencias = regenciaDueDates(view, trackingStart(view), addMonths(today, 13)).slice(0, 3);
 
   function save() {
@@ -90,75 +89,67 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
 
   return (
     <form onSubmit={e => { e.preventDefault(); save(); }}>
-      <HbHead icon={b ? '📝' : '🌿'} title={b ? 'Editar bitácora' : 'Nueva bitácora'} sub="Las entregas se calculan solas desde la apertura; cada fecha se puede ajustar" />
-
-      {b && (
-        <div className="ed-tabs" role="tablist">
-          <button type="button" role="tab" className={tab === 'details' ? 'on' : ''} onClick={() => setTab('details')} data-help="Número, nombre, apertura, estado, avance, ubicación y el calendario de entregas con sus pasos, fechas y la carta.">📝 Datos, entregas y carta</button>
-          <button type="button" role="tab" className={tab === 'log' ? 'on' : ''} onClick={() => setTab('log')} data-help="Historial del proyecto: fotos de visitas, informes en PDF y observaciones, marcadas «Por subir» o «Subida» a SETENA.">
-            📷 Bitácora · fotos y notas{b.entries.some(a => !a.uploaded) ? <b className="tab-badge">{b.entries.filter(a => !a.uploaded).length}</b> : null}</button>
-        </div>
-      )}
+      <div className="ed-top">
+        <h2>{b ? <><span className="mono">{b.code}</span> {b.name}</> : '🌿 Nueva bitácora'}</h2>
+        {b && (
+          <div className="ed-tabs" role="tablist">
+            <button type="button" role="tab" className={tab === 'details' ? 'on' : ''} onClick={() => setTab('details')}>📋 Entregas</button>
+            <button type="button" role="tab" className={tab === 'log' ? 'on' : ''} onClick={() => setTab('log')}>
+              📷 Notas{b.entries.some(a => !a.uploaded) ? <b className="tab-badge">{b.entries.filter(a => !a.uploaded).length}</b> : null}</button>
+          </div>
+        )}
+      </div>
       {tab === 'log' && b ? <ProjectLog id={b.id} /> : <>
-      <div className="ed-pair">
-        <div>
+      <div className="ed-row">
+        <div className="ed-f code">
           <label className="modal-label" htmlFor="ed_num">Número</label>
           <input id="ed_num" className="modal-input mono" placeholder="D1-0170-2020" value={f.code} autoFocus={!b}
             onChange={e => { set('code', e.target.value.toUpperCase()); setErr(''); }}
             onBlur={e => { const n = normalizeCode(e.target.value); if (n) set('code', n); }} />
         </div>
-        <span className="ed-arrow">→</span>
-        <div className="grow">
+        <div className="ed-f name">
           <label className="modal-label" htmlFor="ed_nom">Nombre del proyecto</label>
           <input id="ed_nom" className="modal-input" placeholder="CONDOMINIO VISTA DEL BOSQUE" value={f.name}
             onChange={e => { set('name', e.target.value); setErr(''); }} />
         </div>
-      </div>
-
-      <div className="ed-cols">
-        <div>
-          <label className="modal-label" htmlFor="ed_ap">Fecha de apertura</label>
+        <div className="ed-f">
+          <label className="modal-label" htmlFor="ed_ap">Apertura</label>
           <input id="ed_ap" type="date" className="modal-input" value={f.openedOn} onChange={e => e.target.value && set('openedOn', e.target.value)} />
-
-          <label className="modal-label">Estado</label>
-          <div className="chip-pick">
-            {STATUSES.map(s => (
-              <button type="button" key={s.id} className={`echip status-${s.id} ${f.status === s.id ? 'on' : ''}`}
-                onClick={() => set('status', s.id as Status)}>{s.name}</button>
-            ))}
-          </div>
-
-          <label className="modal-label">Avance
-            <button type="button" className="dp-link inline" onClick={() => { closeModal(); openSettings('colors'); }}>editar</button>
-          </label>
-          <div className="chip-pick">
-            {d.labels.map(e => (
-              <button type="button" key={e.id} className={`echip ${f.labelId === e.id ? 'on' : ''}`} style={{ ['--ec' as any]: e.color }}
-                onClick={() => set('labelId', e.id)}><span className="dot" />{e.name}</button>
-            ))}
-          </div>
-
-          <div className="ed-auto">
-            <div className="ed-auto-h"><Ic n="calendar" size={14} /> Automático</div>
-            {isActiveProject(f) ? <>
-              <p><b>Informe Regencial</b> (mensual): día <b>{day}</b> de cada mes{day > 28 ? ' (o el último en meses cortos)' : ''}, desde el {shortDate(firstMonthly)} {firstMonthly.slice(0, 4)}.</p>
-              <p><b>Regencia</b> cada 6 meses{regencias.length ? `; la próxima: ${longDate(regenciaDue(view, regencias.find(v => !view.regencias.includes(v)) ?? regencias[0]))}.` : '.'}</p>
-              <p className="muted sm">Cada fecha se puede ajustar en el calendario (clic en la fecha de la entrega).</p>
-            </> : <p className="muted">{f.archived ? 'Archivada: sin entregas.' : f.status === 'closing' ? 'Solicitud de Cierre: el proyecto ya terminó, no genera entregas. Ciérralo con 📦 Archivar.' : 'Terminada: ya no genera entregas. Ciérrala con 📦 Archivar.'}</p>}
-          </div>
         </div>
-
-        <div>
-          <label className="modal-label">Calendario de entregas</label>
-          <ProjectCalendar b={view} live={!!live} onChange={c => setF(x => ({ ...x, ...c }))} />
+        <div className="ed-f">
+          <label className="modal-label" htmlFor="ed_st">Estado</label>
+          <select id="ed_st" className={`modal-input status-${f.status}`} value={f.status} onChange={e => set('status', e.target.value as Status)}>
+            {STATUSES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
         </div>
       </div>
 
-      <LocationField b={view} onChange={setLoc} />
+      {isActiveProject(f)
+        ? <p className="ed-auto-line muted">📅 Informe Regencial el día <b>{day}</b> de cada mes · Regencia cada 6 meses{regencias.length ? ` (próxima ${shortDate(regenciaDue(view, regencias.find(v => !view.regencias.includes(v)) ?? regencias[0]))})` : ''} · ✏️ cada fecha se puede cambiar</p>
+        : <p className="ed-auto-line muted">{f.archived ? 'Archivada: sin entregas.' : 'Ya terminó: no genera entregas. Ciérrala con 📦 Archivar.'}</p>}
 
-      <label className="modal-label" htmlFor="ed_notas">Notas</label>
-      <textarea id="ed_notas" className="modal-input" rows={2} value={f.notes} placeholder="Regente, consultor, observaciones…"
-        onChange={e => set('notes', e.target.value)} />
+      <ProjectCalendar b={view} live={!!live} onChange={c => setF(x => ({ ...x, ...c }))} />
+
+      <details className="ed-more">
+        <summary>Más datos · avance, ubicación y notas</summary>
+        <div className="ed-more-grid">
+          <div>
+            <label className="modal-label">Avance
+              <button type="button" className="dp-link inline" onClick={() => { closeModal(); openSettings('colors'); }}>editar</button>
+            </label>
+            <div className="chip-pick">
+              {d.labels.map(e => (
+                <button type="button" key={e.id} className={`echip ${f.labelId === e.id ? 'on' : ''}`} style={{ ['--ec' as any]: e.color }}
+                  onClick={() => set('labelId', e.id)}><span className="dot" />{e.name}</button>
+              ))}
+            </div>
+            <label className="modal-label" htmlFor="ed_notas">Notas</label>
+            <textarea id="ed_notas" className="modal-input" rows={2} value={f.notes} placeholder="Regente, consultor, observaciones…"
+              onChange={e => set('notes', e.target.value)} />
+          </div>
+          <div><LocationField b={view} onChange={setLoc} /></div>
+        </div>
+      </details>
       </>}
 
       <p className="ed-error" role="alert">{err}</p>

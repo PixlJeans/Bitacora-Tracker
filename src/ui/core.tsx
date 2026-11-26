@@ -128,7 +128,7 @@ export function ToastHost() {
 
 // ---------- Anchored popover (like the quick popover of the Cognose calendar) ----------
 export function Popover({ anchor, onClose, children, width = 230 }:
-  { anchor: HTMLElement; onClose: () => void; children: ReactNode; width?: number }) {
+  { anchor: HTMLElement; onClose: () => void; children?: ReactNode; width?: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: -9999, top: -9999 });
   useLayoutEffect(() => {

@@ -31,11 +31,10 @@ const LS_VIEW = 'bt_vista';
 
 export default function App() {
   const d = useAppData();
-  const [view, setViewRaw] = useState<View>(() => { try { const v = localStorage.getItem(LS_VIEW) as View; return ['active', 'agenda', 'month', 'nextMonth', 'regencias', 'archive'].includes(v) ? v : 'active'; } catch { return 'active'; } });
+  const [view, setViewRaw] = useState<View>(() => { try { const v = localStorage.getItem(LS_VIEW) as View; return ['active', 'agenda', 'archive'].includes(v) ? v : 'active'; } catch { return 'active'; } });
   const [filter, setFilter] = useState<StatusFilter>('all');
-  const [labelFilter, setLabelFilter] = useState<string | null>(null);
-  const [sortOrder, setSortOrderRaw] = useState<SortOrder>(() => { try { const o = localStorage.getItem('bt_orden') as SortOrder; return ['nextDue', 'code', 'name', 'openedOn'].includes(o) ? o : 'nextDue'; } catch { return 'nextDue'; } });
-  const setSortOrder = (o: SortOrder) => { setSortOrderRaw(o); try { localStorage.setItem('bt_orden', o); } catch { /* opcional */ } };
+  const labelFilter = null as string | null;
+  const sortOrder: SortOrder = 'nextDue';
   const [q, setQ] = useState('');
   const [dropAll, setDropAll] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -68,17 +67,16 @@ export default function App() {
   useEffect(() => {
     const f = (e: Event) => {
       const v = String((e as CustomEvent).detail);
-      const views: View[] = ['active', 'agenda', 'month', 'nextMonth', 'regencias', 'archive'];
-      setView(views.includes(v as View) ? v as View : 'active'); setFilter('all'); setLabelFilter(null);
+      const views: View[] = ['active', 'agenda', 'archive'];
+      setView(views.includes(v as View) ? v as View : 'active'); setFilter('all');
     };
     window.addEventListener('bt:view', f);
     return () => window.removeEventListener('bt:view', f);
   }, []);
 
   const TABS: { id: View; txt: string; keyName: string }[] = [
-    { id: 'active', txt: 'Activas', keyName: '1' }, { id: 'agenda', txt: 'Agenda y rutas', keyName: '2' },
-    { id: 'month', txt: 'Mes actual', keyName: '3' }, { id: 'nextMonth', txt: 'Mes próximo', keyName: '4' },
-    { id: 'regencias', txt: 'Regencias', keyName: '5' }, { id: 'archive', txt: 'Archivadas', keyName: '6' }
+    { id: 'active', txt: 'Proyectos', keyName: '1' }, { id: 'agenda', txt: 'Agenda y rutas', keyName: '2' },
+    { id: 'archive', txt: 'Archivadas', keyName: '3' }
   ];
 
   useEffect(() => {
@@ -160,26 +158,14 @@ export default function App() {
           <button className="btn" onClick={() => openEditor()}><Ic n="plus" /> Crear a mano</button></div>
       </div></div>
     ) : <>
-      <div className="filters" data-help-title="Filtros" data-help="Muestra solo un estado (Nuevas, Abiertas…), las vencidas o un color de avance. Clic otra vez para quitar el filtro. La lista se ordena por fecha: lo vencido y lo más próximo arriba.">
+      <div className="filters simple" data-help-title="Filtros" data-help="Muestra solo las vencidas, las abiertas o las que ya terminaron. Clic otra vez para quitar el filtro. La lista siempre va por fecha: lo más urgente arriba.">
         {chip('all', 'Todas', activeProjects.length)}
+        {chip('overdue', 'Vencidas', activeProjects.filter(b => nextDue(b)?.overdue).length, 'warn')}
         {chip('new', 'Nuevas', r.new, 'status-new')}
         {chip('open', 'Abiertas', r.open, 'status-open')}
         {chip('closing', 'Sol. cierre', r.closing, 'status-closing')}
-        {chip('finished', 'Terminadas', r.finishedCount, 'status-finished')}
-        {chip('overdue', 'Vencidas', activeProjects.filter(b => nextDue(b)?.overdue).length, 'warn')}
-        <span className="sep" />
-        <span className="color-filter" title="Filtrar por avance">
-          {d.labels.map(e => (
-            <button key={e.id} className={labelFilter === e.id ? 'on' : ''} style={{ ['--ec' as any]: e.color }} onClick={() => setLabelFilter(x => (x === e.id ? null : e.id))}>
-              <i /><span>{e.name}</span><b>{activeProjects.filter(b => b.labelId === e.id).length}</b></button>))}
-        </span>
-        <select className="sort" value={sortOrder} onChange={e => setSortOrder(e.target.value as SortOrder)} title="Ordenar">
-          <option value="nextDue">Prioridad (por fecha)</option>
-          <option value="openedOn">Fecha de apertura</option><option value="code">Número</option><option value="name">Proyecto</option>
-        </select>
+        {r.finished > 0 && <button className="dp-link" title="Solicitud de Cierre y Terminadas ya no generan entregas; pasan a Archivadas con todo su historial" onClick={() => archiveFinished()}>📦 Archivar {r.finished} terminada(s)</button>}
       </div>
-      {r.finished > 0 && filter !== 'finished' && filter !== 'closing' && <div className="info-bar soft"><Ic n="download" /> {r.finished} proyecto(s) en Solicitud de Cierre o Terminados siguen en la lista: ya no generan entregas; ciérralos con 📦 (pasan a Archivadas con todo su historial).
-        <button className="dp-link" onClick={() => archiveFinished()}>Archivar todos</button></div>}
       {activeList.length ? <><RowHeader />{activeList.map(b => P(b))}</> : emptyData('Ninguna bitácora coincide con el filtro.')}
     </>;
   } else if (view === 'agenda') {
@@ -258,8 +244,8 @@ export default function App() {
       <main className="project-list">{body}</main>
 
       <footer className="foot">
-        <span>I = inspección (7 días antes) · Inf = informe a SETENA · Regencia = semestral · 🚗📤 = inspección / informe</span>
-        <span className="grow" />Clic en el nombre o ✎ para ver sus entregas, la carta, su ubicación y sus fotos · ? = ayuda
+        <span>🚗 Inspección: ≤ último día · 🗓 programada &nbsp;·&nbsp; 📤 Informe a SETENA (morado = Regencia) &nbsp;·&nbsp; ✓ para marcar</span>
+        <span className="grow" />Clic en un proyecto para abrirlo · ? = ayuda
       </footer>
 
       {dropAll && <div className="drop-veil"><Ic n="upload" size={40} /><b>Suelta el PDF para importarlo</b></div>}
