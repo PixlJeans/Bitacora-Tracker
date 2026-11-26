@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react';
 import type { Project } from '../lib/types';
 import { isActiveProject } from '../lib/types';
-import { monthlyDue, regenciaDue, regenciaInMonth, dueInMonth, hasSchedule, monthlyKeysDueIn, completeIn, regenciaSubmitted, regenciaDueDates, inspectionDate } from '../lib/schedule';
+import { monthlyDue, regenciaDue, regenciaInMonth, dueInMonth, hasSchedule, monthlyKeysDueIn, completeIn, regenciaSubmitted, regenciaDueDates, inspectionDate, monthLive } from '../lib/schedule';
 import { shortDate, longDate, fromISO, monthKeyOf, monthName, todayISO } from '../lib/dates';
 import { DeliveryCard, StartLetter } from './Delivery';
 
@@ -35,7 +35,7 @@ export function ProjectCalendar({ b, live: live = false }: { b: Project; onChang
     const dates = [...new Set([...keys.flatMap(k => [monthlyDue(b, k), inspectionDate(b, k)]), ...(reg ? [regenciaDue(b, reg)] : [])]
       .filter(d => d.slice(0, 7) === m))].sort();
     const pending = keys.filter(k => !completeIn(b, k)).length + (reg && !regenciaSubmitted(b, reg) ? 1 : 0);
-    const state = !dates.length ? 'outside' : !pending ? 'done' : m < thisMonth || (m === thisMonth && dates[0] <= today) ? 'overdue' : m === thisMonth ? 'today' : 'future';
+    const state = !dates.length ? 'outside' : !pending ? 'done' : !monthLive(m, today) ? 'missed' : m < thisMonth || (m === thisMonth && dates[0] <= today) ? 'overdue' : m === thisMonth ? 'today' : 'future';
     return { keys, reg, dates, state };
   };
   const cur = dueIn(mk);
@@ -57,7 +57,7 @@ export function ProjectCalendar({ b, live: live = false }: { b: Project; onChang
           return (
             <button type="button" key={m} className={`ct st-${x.state} ${m === mk ? 'sel' : ''} ${x.reg ? 'reg' : ''}`}
               onClick={() => setMonth(new Date(y, n - 1, 1, 12))}
-              title={`${longDate(`${m}-01`).replace(/^\S+\s/, '')}${x.dates.length ? ' · entrega: ' + x.dates.map(shortDate).join(', ') : ' · sin entregas'}`}>
+              title={`${longDate(`${m}-01`).replace(/^\S+\s/, '')}${x.dates.length ? ' · entrega: ' + x.dates.map(shortDate).join(', ') : ' · sin entregas'}${x.state === 'missed' ? ' · sin anotación en SETENA (ya pasó: queda como historia)' : ''}`}>
               <span>{MONTHS_SHORT[n - 1]}{n === 1 ? <small>{String(y).slice(2)}</small> : null}</span>
               {m === b.openedOn.slice(0, 7) && <small className="ct-day" title="Mes de inicio: carta de Inicio de obras">🏗️ {fromISO(b.openedOn).getDate()}</small>}
               {x.dates.length > 0 && <small className="ct-day">{x.dates.map(d => fromISO(d).getDate()).join('·')}</small>}

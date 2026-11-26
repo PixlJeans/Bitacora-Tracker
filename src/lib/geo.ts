@@ -103,3 +103,35 @@ export function groupNearby<T extends { b: Project }>(l: T[], radiusKm: number):
   withGps.forEach((x, i) => { const r = root(i); map.set(r, [...(map.get(r) ?? []), x]); });
   return { groups: [...map.values()], withoutLocation: withoutLocation };
 }
+
+/** Costa Rica's official grid (CRTM05: Transverse Mercator, central meridian 84° W, scale 0.9999, false easting
+ *  500 000 m, GRS80) → latitude / longitude. Used for the «Coordenadas» printed in the regencia reports. */
+export function crtm05ToLatLng(e: number, n: number): { lat: number; lng: number } {
+  const a = 6378137, f = 1 / 298.257222101, k0 = 0.9999, lon0 = -84 * Math.PI / 180, FE = 500000;
+  const e2 = f * (2 - f), ep2 = e2 / (1 - e2);
+  const M = n / k0;
+  const mu = M / (a * (1 - e2 / 4 - 3 * e2 * e2 / 64 - 5 * e2 ** 3 / 256));
+  const e1 = (1 - Math.sqrt(1 - e2)) / (1 + Math.sqrt(1 - e2));
+  const phi1 = mu + (3 * e1 / 2 - 27 * e1 ** 3 / 32) * Math.sin(2 * mu) + (21 * e1 * e1 / 16 - 55 * e1 ** 4 / 32) * Math.sin(4 * mu)
+    + (151 * e1 ** 3 / 96) * Math.sin(6 * mu) + (1097 * e1 ** 4 / 512) * Math.sin(8 * mu);
+  const s = Math.sin(phi1), c = Math.cos(phi1), t = Math.tan(phi1);
+  const N1 = a / Math.sqrt(1 - e2 * s * s), R1 = a * (1 - e2) / (1 - e2 * s * s) ** 1.5;
+  const C1 = ep2 * c * c, T1 = t * t, D = (e - FE) / (N1 * k0);
+  const lat = phi1 - (N1 * t / R1) * (D * D / 2 - (5 + 3 * T1 + 10 * C1 - 4 * C1 * C1 - 9 * ep2) * D ** 4 / 24
+    + (61 + 90 * T1 + 298 * C1 + 45 * T1 * T1 - 252 * ep2 - 3 * C1 * C1) * D ** 6 / 720);
+  const lng = lon0 + (D - (1 + 2 * T1 + C1) * D ** 3 / 6 + (5 - 2 * C1 + 28 * T1 - 3 * C1 * C1 + 8 * ep2 + 24 * T1 * T1) * D ** 5 / 120) / c;
+  return { lat: +(lat * 180 / Math.PI).toFixed(6), lng: +(lng * 180 / Math.PI).toFixed(6) };
+}
+
+/** The «Coordenadas …» of a report: two numbers in any order (easting ≈ 300–700 thousand, northing ≈ 0.88–1.25 million). */
+export function crtmFromText(s: string): { lat: number; lng: number } | null {
+  // «504036.866», «1088322.602», «1.090.745,261», «510 054,024»
+  const nums = [...s.matchAll(/\d{1,3}(?:[ .]\d{3})+(?:,\d+)?|\d{6,7}(?:[.,]\d+)?/g)].map(m => {
+    const t = m[0];
+    return /^\d{1,3}(?:[ .]\d{3})+/.test(t) && !/^\d{6,7}[.,]/.test(t) ? Number(t.replace(/[ .]/g, '').replace(',', '.')) : Number(t.replace(',', '.'));
+  });
+  const e = nums.find(x => x >= 270000 && x <= 730000), n = nums.find(x => x >= 880000 && x <= 1250000);
+  if (e === undefined || n === undefined) return null;
+  const p = crtm05ToLatLng(e, n);
+  return p.lat > 8 && p.lat < 11.3 && p.lng > -86 && p.lng < -82.5 ? p : null;
+}

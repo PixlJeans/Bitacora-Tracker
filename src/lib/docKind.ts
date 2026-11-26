@@ -8,6 +8,8 @@
 //  · «Cartago, 07 de agosto del 2024 … Señores Secretaría Técnica Nacional Ambiental»       → carta del regente
 //  · a regencia whose expediente is ANOTHER project's                                       → otro proyecto
 //  · scans without text (transfers, guarantees, signed letters)                             → sin texto (not moved)
+import { crtmFromText } from './geo';
+
 export type DocKind = 'regencia' | 'receipt' | 'setena' | 'letter' | 'foreign' | 'other' | 'notext';
 
 export interface DocInfo {
@@ -17,6 +19,11 @@ export interface DocInfo {
   expediente?: string;      // «D1-0170-2020» (as written in the document)
   period?: string;          // «Agosto 2023 - Enero 2024»
   number?: string;          // correspondence number «02271-2024»
+  project?: string;         // regencia: the project's name as written on its cover («Proyecto: …»)
+  place?: string;           // regencia: «Cartago, El Guarco, Tejar» (Provincia / Cantón / Distrito)
+  lat?: number;             // regencia: its «Coordenadas» (CRTM05) converted to latitude / longitude
+  lng?: number;
+  noPlace?: boolean;        // regencia read for its place, and it has none
 }
 
 /** Folder (inside the month) where each kind goes. `null` = leave it where it is. */
@@ -53,7 +60,9 @@ export function classifyDoc(text: string, code: string): DocInfo {
       kind: exp && codeKey(exp) !== codeKey(code) ? 'foreign' : 'regencia',
       final: /Final|Consolidado/i.test(head.slice(0, 120)) || undefined,
       ira: ira ? `IRA-${ira[1].toUpperCase()}-${ira[2]}` : undefined,
-      expediente: exp, period: per ? per[1].replace(/\s*[-–]\s*/, ' - ') : undefined
+      expediente: exp, period: per ? per[1].replace(/\s*[-–]\s*/, ' - ') : undefined,
+      project: /Proyecto\s*:\s*(.{3,160}?)\s*(?=Expediente|[A-ZÁÉÍÓÚ][a-záéíóúñ]+(?: [a-záéíóúñ]+)?\s*:)/.exec(text.replace(/\s+/g, ' ').slice(0, 2000))?.[1]?.trim() || undefined,
+      ...placeOf(text)
     };
     return JSON.parse(JSON.stringify(info));
   }
@@ -62,4 +71,18 @@ export function classifyDoc(text: string, code: string): DocInfo {
   // ---- letters TO SETENA ----
   if (/Senores\s*(?:de la\s*)?Secretaria Tecnica Nacional Ambiental/i.test(head)) return exp ? { kind: 'letter', expediente: exp } : { kind: 'letter' };
   return { kind: 'other' };
+}
+
+/** «Ubicación del Proyecto» of a regencia: Provincia / Cantón / Distrito and its CRTM05 «Coordenadas». */
+export function placeOf(text: string): Pick<DocInfo, 'place' | 'lat' | 'lng' | 'noPlace'> {
+  const flat = text.replace(/\s+/g, ' ');
+  const stop = '(?=\\s+(?:No\\.|Coordenadas|Hoja|Direcci|[ÁA]rea|Plano|Finca|Propietario)|$)';
+  const pv = new RegExp(`Provincia\\s*:\\s*(.{2,25}?)\\s+Cant[oó]n\\s*:\\s*(.{2,30}?)\\s+Distrito\\s*:\\s*(.{2,30}?)${stop}`).exec(flat);
+  const c = /Coordenadas[^:]{0,20}:?(.{0,110})/i.exec(flat);
+  const ll = c ? crtmFromText(c[1]) : null;
+  const out: Pick<DocInfo, 'place' | 'lat' | 'lng' | 'noPlace'> = {};
+  if (pv) out.place = `${pv[1]}, ${pv[2]}, ${pv[3]}`.trim();
+  if (ll) { out.lat = ll.lat; out.lng = ll.lng; }
+  if (!pv && !ll) out.noPlace = true;
+  return out;
 }

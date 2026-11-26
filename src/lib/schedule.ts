@@ -48,6 +48,15 @@ export function openingFrom(nextInforme: string, nextRegencia: string, code: str
 /** Everything since the opening counts: earlier months can be checked off as done too. */
 export const trackingStart = (b: Project) => b.openedOn;
 
+// ---------------- What is still pending vs. history (v52) ----------------
+// The app follows what is actually done in SETENA. Monthly tasks from before LAST month can't be done any more:
+// they are history (shown in the calendar and the Línea de tiempo as «sin anotación»), not pending work.
+// A Regencia stays pending until the next one is due; after that it is history too.
+/** First month whose tasks are still pending work: last month. */
+export const liveMonth = (today: string) => addMonths(`${today.slice(0, 7)}-01`, -1).slice(0, 7);
+export const monthLive = (mk: string, today: string) => mk >= liveMonth(today);
+export const regenciaLive = (b: Project, key: string, today: string) => regenciaDue(b, addMonths(key, 6)) > today;
+
 // ---------------- Informe Regencial (mensual) ----------------
 /** Automatic due date of the month's Informe Regencial (same day as the opening). */
 export function monthlyDueAuto(b: Project, mk: string): string {
@@ -110,7 +119,7 @@ export function nextRegencia(b: Project, today = todayISO()): RegenciaInfo | nul
   const from = trackingStart(b);
   for (let k = 1; k < 200; k++) {
     const key = addMonths(b.openedOn, 6 * k);
-    if (key < from || regenciaSubmitted(b, key)) continue;
+    if (key < from || regenciaSubmitted(b, key) || !regenciaLive(b, key, today)) continue;
     const due = regenciaDue(b, key);
     const ad = reminderFrom(due);
     const status: RegenciaState = due < today ? 'overdue' : today >= ad ? 'dueSoon' : 'future';
@@ -136,7 +145,7 @@ export function pendingOf(b: Project, today = todayISO(), until = addMonths(toda
   if (!hasSchedule(b)) return [];
   const out: PendingItem[] = [];
   for (const mk of monthsSinceOpening(b, until)) {
-    if (!dueInMonth(b, mk) || completeIn(b, mk)) continue;
+    if (!dueInMonth(b, mk) || completeIn(b, mk) || !monthLive(mk, today)) continue;
     const date = monthlyDue(b, mk);
     const insp = visitedIn(b, mk) ? null : inspectionDate(b, mk);
     const first = [insp, uploadedIn(b, mk) ? null : date].filter((x): x is string => !!x).sort()[0];
@@ -145,7 +154,7 @@ export function pendingOf(b: Project, today = todayISO(), until = addMonths(toda
   }
   const from = trackingStart(b);
   for (const key of regenciaDueDates(b, from, addMonths(until, 6))) {
-    if (regenciaSubmitted(b, key)) continue;
+    if (regenciaSubmitted(b, key) || !regenciaLive(b, key, today)) continue;
     const date = regenciaDue(b, key), planned = b.deliveries?.[`r:${key}`]?.planned ?? null;
     if (date > until && !(planned && planned <= until)) continue;
     out.push({ b, type: 'semiannual', key: `r:${key}`, date, planned, overdue: date < today, days: daysBetween(today, date) });
@@ -185,28 +194,28 @@ export function taskColumns(b: Project, today = todayISO()): Record<TaskKind, Ta
   };
   const until = addMonths(today, 14);
   for (const mk of monthsSinceOpening(b, until)) {
-    if (!dueInMonth(b, mk)) continue;
+    if (!dueInMonth(b, mk) || !monthLive(mk, today)) continue;
     if (!visitedIn(b, mk)) add('inspection', `m:${mk}`, inspectionDate(b, mk));
     if (!uploadedIn(b, mk)) add('bitacora', `m:${mk}`, monthlyDue(b, mk));
   }
   for (const key of regenciaDueDates(b, b.openedOn, addMonths(until, 6)))
-    if (!regenciaSubmitted(b, key)) add('regencia', `r:${key}`, regenciaDue(b, key));
+    if (!regenciaSubmitted(b, key) && regenciaLive(b, key, today)) add('regencia', `r:${key}`, regenciaDue(b, key));
   return r;
 }
 
 /** Everything dated before `before` that is still pending (to check it all off at once). */
-export function pendingBefore(b: Project, before: string): { key: string; step: 'visit' | 'uploaded'; date: string }[] {
+export function pendingBefore(b: Project, before: string, today = todayISO()): { key: string; step: 'visit' | 'uploaded'; date: string }[] {
   if (!hasSchedule(b)) return [];
   const out: { key: string; step: 'visit' | 'uploaded'; date: string }[] = [];
   for (const mk of monthsSinceOpening(b, before)) {
-    if (!dueInMonth(b, mk)) continue;
+    if (!dueInMonth(b, mk) || !monthLive(mk, today)) continue;
     const i = inspectionDate(b, mk), u = monthlyDue(b, mk);
     if (!visitedIn(b, mk) && i < before) out.push({ key: `m:${mk}`, step: 'visit', date: i });
     if (!uploadedIn(b, mk) && u < before) out.push({ key: `m:${mk}`, step: 'uploaded', date: u });
   }
   for (const key of regenciaDueDates(b, b.openedOn, before)) {
     const d = regenciaDue(b, key);
-    if (!regenciaSubmitted(b, key) && d < before) out.push({ key: `r:${key}`, step: 'uploaded', date: d });
+    if (!regenciaSubmitted(b, key) && regenciaLive(b, key, today) && d < before) out.push({ key: `r:${key}`, step: 'uploaded', date: d });
   }
   return out;
 }
@@ -255,11 +264,12 @@ export const upcomingRegencias = (d: AppData, today = todayISO()) =>
   d.projects.map(b => nextRegencia(b, today)).filter((x): x is RegenciaInfo => !!x).sort((a, c) => a.due.localeCompare(c.due));
 
 // ---------------- State of a month (for each project's calendar) ----------------
-export type MonthState = 'outside' | 'done' | 'partial' | 'overdue' | 'today' | 'future';
+export type MonthState = 'outside' | 'done' | 'partial' | 'missed' | 'overdue' | 'today' | 'future';
 export function monthState(b: Project, mk: string, today = todayISO()): MonthState {
   if (!dueInMonth(b, mk)) return 'outside';
   if (completeIn(b, mk)) return 'done';
   const f = monthlyDue(b, mk);
+  if (!monthLive(mk, today)) return uploadedIn(b, mk) || visitedIn(b, mk) ? 'partial' : 'missed';
   if (mk < today.slice(0, 7)) return uploadedIn(b, mk) || visitedIn(b, mk) ? 'partial' : 'overdue';
   if (mk === today.slice(0, 7)) return f <= today ? (uploadedIn(b, mk) || visitedIn(b, mk) ? 'partial' : 'overdue') : 'today';
   return uploadedIn(b, mk) || visitedIn(b, mk) ? 'partial' : 'future';
@@ -314,7 +324,7 @@ export function computeReminders(d: AppData, now = Date.now()): Reminder[] {
     // Bitácora (monthly) and Inspección (monthly): both on the opening day unless moved
     for (let i = -3; i < 12; i++) {
       const mk = monthKeyOf(new Date(base.getFullYear(), base.getMonth() + i, 1, 12));
-      if (!dueInMonth(b, mk)) continue;
+      if (!dueInMonth(b, mk) || !monthLive(mk, today)) continue;
       if (!uploadedIn(b, mk)) {
         const date = monthlyDue(b, mk);
         const monthDate = fromISO(date);
@@ -343,7 +353,7 @@ export function computeReminders(d: AppData, now = Date.now()): Reminder[] {
     }
     // Regencia (semestral)
     for (const key of regenciaDueDates(b, addMonths(today, -8), addMonths(today, 14))) {
-      if (regenciaSubmitted(b, key)) continue;
+      if (regenciaSubmitted(b, key) || !regenciaLive(b, key, today)) continue;
       const due = regenciaDue(b, key);
       if (due < addDays(today, -60)) continue;
       const points = [reminderFrom(due), addDays(due, -14), addDays(due, -7), addDays(due, -1), due, addDays(due, 7)];
@@ -407,13 +417,13 @@ export function reportTasks(d: AppData, today: string, until: string) {
   for (const b of d.projects) {
     if (!hasSchedule(b)) continue;
     for (const mk of monthsSinceOpening(b, until)) {
-      if (!dueInMonth(b, mk)) continue;
+      if (!dueInMonth(b, mk) || !monthLive(mk, today)) continue;
       if (!visitedIn(b, mk)) all.push({ b, kind: 'inspection', key: `m:${mk}`, step: 'visit', date: inspectionDate(b, mk), month: mk });
       if (!uploadedIn(b, mk)) all.push({ b, kind: 'bitacora', key: `m:${mk}`, step: 'uploaded', date: monthlyDue(b, mk), month: mk });
     }
     for (const key of regenciaDueDates(b, b.openedOn, addMonths(until, 6))) {
       const date = regenciaDue(b, key), e = b.deliveries?.[`r:${key}`];
-      if (regenciaSubmitted(b, key)) continue;
+      if (regenciaSubmitted(b, key) || !regenciaLive(b, key, today)) continue;
       if (!e?.letter) all.push({ b, kind: 'regElab', key: `r:${key}`, step: 'letter', date, month: key.slice(0, 7) });
       all.push({ b, kind: 'regUpload', key: `r:${key}`, step: 'uploaded', date, month: key.slice(0, 7) });
     }

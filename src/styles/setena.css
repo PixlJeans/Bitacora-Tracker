@@ -1,0 +1,176 @@
+/* ===== SETENA look (v52) =====
+   Colors and type of the SETENA «Bitácora Digital Ambiental» portal (navy #28343b, blue #007dc4,
+   white boxes with a fine blue-gray border, Helvetica/Arial), laid out cleaner than the portal.
+   Loaded last: it only restyles, the layout lives in app.css. */
+
+:root{
+  --s-navy:#1f2f3a; --s-navy-2:#28343b; --s-blue:#007dc4; --s-blue-dark:#084973; --s-sky:#e8f3fb;
+  --on-accent:#fff; --radius:8px;
+}
+body.theme-light{
+  --bg:#f2f5f8; --card:#fff; --text:#1f2a33; --muted:#5f6d78; --border:#d7e0e7;
+  --open:#15803d; --new:#0069a8; --closing:#b45309; --finished:#64748b; --danger:#c62828;
+}
+body.theme-dark{
+  --bg:#111a21; --card:#18242d; --text:#e4ebf0; --muted:#8fa1ad; --border:#2b3b47;
+  --s-sky:#16303f;
+}
+*{font-family:'Segoe UI','Helvetica Neue',Helvetica,Arial,sans-serif}
+.mono{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace}
+/* headings: the portal's plain bold sans instead of the old poster font */
+.modal h3,.settings-header h3,.brand h1,.empty h2,.mini-head span{font-family:'Segoe UI','Helvetica Neue',Helvetica,Arial,sans-serif;font-weight:700;letter-spacing:0}
+
+/* ---------- Top bar: SETENA navy ---------- */
+body .top{background:linear-gradient(90deg,var(--s-navy) 0%,var(--s-navy-2) 55%,var(--s-blue-dark) 100%);border-bottom:3px solid var(--s-blue);
+  color:#fff;padding:.5rem 1rem;gap:1rem}
+body .brand{align-items:center;gap:.6rem}
+.brand-mark{width:34px;height:34px;color:#fff;flex-shrink:0}
+.brand-txt{display:flex;flex-direction:column;line-height:1.1}
+body .brand h1{font-size:1.08rem;color:#fff}
+body .brand small{color:#9fd3f3;font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;font-weight:700}
+body .top .search{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.22);border-radius:6px;max-width:380px}
+body .top .search:focus-within{background:#fff;border-color:#fff}
+body .top .search input{color:#fff}
+body .top .search input::placeholder{color:rgba(255,255,255,.65)}
+body .top .search .ic{color:rgba(255,255,255,.75)}
+body .top .search:focus-within input{color:#1f2a33}
+body .top .search:focus-within input::placeholder{color:#7b8a95}
+body .top .search:focus-within .ic{color:var(--s-blue)}
+body .top .btn{border-radius:6px;border-color:rgba(255,255,255,.28);color:#fff;background:rgba(255,255,255,.06)}
+body .top .btn:hover{background:rgba(255,255,255,.16)}
+body .top .btn.primary{background:var(--s-blue);border-color:#3aa5e6;color:#fff;box-shadow:0 1px 0 rgba(0,0,0,.25)}
+body .top .btn.primary:hover{background:#0a8ad6}
+
+/* ---------- Tabs: portal-style nav with a blue underline ---------- */
+body .bar{background:var(--card);border-bottom:1px solid var(--border);padding:0 1rem;gap:1rem;min-height:46px}
+body .seg{background:transparent;border-radius:0;padding:0;gap:.2rem;align-self:stretch}
+body .seg button{border-radius:0;padding:.85rem .95rem .7rem;font-size:.84rem;font-weight:600;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-1px}
+body .seg button:hover{color:var(--s-blue);background:color-mix(in srgb,var(--s-blue) 5%,transparent)}
+body .seg button.on{background:transparent;color:var(--s-blue);box-shadow:none;border-bottom-color:var(--s-blue)}
+body.theme-dark .seg button.on,body.theme-dark .seg button:hover{color:#5cb8ee}
+body.theme-dark .seg button.on{border-bottom-color:#5cb8ee}
+body .stats{font-size:.76rem}
+body .stats span{background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:.18rem .6rem}
+
+/* ---------- Content ---------- */
+body .project-list{padding-top:.8rem}
+body .btn{border-radius:6px}
+body .btn.primary,body .modal-btn.ok,body .dp-day.sel{color:var(--on-accent)}
+body .pop-opt.chk.on .cb,body .pop-opt.chk .cb .ic,body .mday.sel .n{color:var(--on-accent)}
+body .dp-link{color:var(--accent)}
+body .modal{border-radius:10px;border-color:var(--border);box-shadow:0 18px 50px -12px rgba(16,40,60,.45)}
+body.theme-light .modal-input{background:#fff}
+body .modal-input:focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent)}
+
+/* section headings (Atrasadas, Esta semana…) like the portal's blue titles */
+body .tk-sec h3{color:var(--s-blue-dark);font-size:.95rem;font-weight:700;border-bottom:2px solid color-mix(in srgb,var(--s-blue) 25%,transparent);padding-bottom:.3rem;margin-bottom:.45rem}
+body.theme-dark .tk-sec h3{color:#7cc4ee}
+
+/* rows: white boxes with a fine border, status color on the left */
+body .prow3,body .tk-row{border-radius:var(--radius);border-color:var(--border);box-shadow:0 1px 2px rgba(16,40,60,.05)}
+body .prow3:hover,body .tk-row:hover{border-color:color-mix(in srgb,var(--s-blue) 45%,var(--border));box-shadow:0 2px 8px -2px rgba(0,125,196,.25)}
+body .prow3-h{color:var(--s-blue-dark);font-weight:700}
+body.theme-dark .prow3-h{color:#7cc4ee}
+body .tk-proj .mono,body .prow3 .c-code{color:var(--s-blue-dark)}
+body.theme-dark .tk-proj .mono,body.theme-dark .prow3 .c-code{color:#7cc4ee}
+
+/* status chips with the portal's names, solid and readable */
+body .status-chip{border-radius:4px;font-weight:700;letter-spacing:.01em}
+body.theme-light .status-chip.status-open{background:#e3f4e8;color:#15803d}
+body.theme-light .status-chip.status-new{background:#e1f0fa;color:#0069a8}
+body.theme-light .status-chip.status-closing{background:#fdf0e1;color:#b45309}
+
+/* filter chips: blue when selected */
+body .fchip{border-radius:6px}
+body .fchip.on{background:var(--s-blue);border-color:var(--s-blue);color:#fff}
+
+/* info bars */
+body .info-bar,body .tk-catchup{border-radius:var(--radius);border-left:4px solid var(--s-blue);background:var(--s-sky)}
+body .tk-catchup.warn{border-left-color:var(--closing);background:color-mix(in srgb,var(--closing) 10%,var(--card))}
+
+/* ---------- Project window ---------- */
+body .ed-top{flex-wrap:wrap;row-gap:.35rem}
+body .ed-top h2{flex:1 1 100%;white-space:normal;overflow:visible;text-overflow:clip;color:var(--text)}
+body .ed-top h2 .mono{color:var(--s-blue-dark)}
+body.theme-dark .ed-top h2 .mono{color:#7cc4ee}
+body .ed-tabs{border-radius:6px;background:transparent;border:none;border-bottom:1px solid var(--border);padding:0;gap:.2rem;margin-left:auto}
+body .ed-tabs button{border-radius:0;flex:0 0 auto;padding:.45rem .8rem;border-bottom:3px solid transparent;font-weight:600}
+body .ed-tabs button.on{box-shadow:none;background:transparent;color:var(--s-blue);border-bottom-color:var(--s-blue)}
+body .setena-line{border-radius:6px;background:var(--s-sky);border:1px solid color-mix(in srgb,var(--s-blue) 22%,transparent)}
+body .sl-bar i{background:var(--s-blue)}
+
+/* floating help / settings buttons in SETENA blue */
+body .fab,body .help-fab{background:var(--s-blue)}
+
+/* ---------- Timeline (Línea de tiempo) ---------- */
+.tl{display:flex;flex-direction:column;gap:.2rem}
+.tl-tools{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;margin-bottom:.5rem}
+.tl-tools .grow{flex:1}
+.tl-tools input{max-width:220px;padding:.32rem .55rem;font-size:.8rem}
+.tl-month{position:sticky;top:-1px;z-index:1;background:var(--card);font-weight:700;color:var(--s-blue-dark);font-size:.82rem;padding:.55rem 0 .3rem;border-bottom:2px solid color-mix(in srgb,var(--s-blue) 22%,transparent);margin-top:.3rem}
+body.theme-dark .tl-month{color:#7cc4ee}
+.tl-list{position:relative;margin:.25rem 0 .2rem;padding-left:26px}
+.tl-list::before{content:'';position:absolute;left:10px;top:4px;bottom:4px;width:2px;background:color-mix(in srgb,var(--s-blue) 25%,var(--border))}
+.tl-item{position:relative;display:flex;gap:.6rem;align-items:flex-start;padding:.38rem .55rem;border-radius:6px;font-size:.8rem}
+.tl-item:hover{background:color-mix(in srgb,var(--s-blue) 6%,transparent)}
+.tl-dot{position:absolute;left:-22px;top:.45rem;width:16px;height:16px;border-radius:50%;background:var(--card);border:2px solid var(--tc,var(--s-blue));display:grid;place-items:center;font-size:.55rem}
+.tl-date{flex:0 0 52px;color:var(--muted);font-weight:700;font-size:.74rem;padding-top:.05rem}
+.tl-body{flex:1;min-width:0}
+.tl-body b{color:var(--text)}
+.tl-body p{margin-top:.15rem;color:var(--muted);white-space:pre-wrap;word-break:break-word;line-height:1.4}
+.tl-body p.clip{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
+.tl-tag{display:inline-block;margin-left:.35rem;padding:0 .4rem;border-radius:4px;font-size:.66rem;font-weight:700;background:color-mix(in srgb,var(--tc,var(--s-blue)) 14%,transparent);color:var(--tc,var(--s-blue))}
+.tl-item.k-setena{--tc:#007dc4}.tl-item.k-visit{--tc:#15803d}.tl-item.k-bitacora{--tc:#0f766e}
+.tl-item.k-regencia{--tc:#7c3aed}.tl-item.k-receipt{--tc:#b45309}.tl-item.k-doc{--tc:#475569}.tl-item.k-start{--tc:#c2410c}
+.tl-empty{padding:1.2rem;text-align:center;color:var(--muted)}
+.tl-more{align-self:center;margin-top:.4rem}
+
+/* ---------- Tareas: tasks of the same project and day drawn as one block ---------- */
+body .tk-row.more{margin-bottom:0;border-bottom-left-radius:0;border-bottom-right-radius:0;border-bottom-style:dashed}
+body .tk-row.cont{border-top:none;border-top-left-radius:0;border-top-right-radius:0;padding-top:.35rem}
+body .tk-row.cont .tk-proj,body .tk-row.cont .tk-date{visibility:hidden}
+body .tk-row.cont:hover,body .tk-row.more:hover{box-shadow:none}
+
+/* project window: the status chip fits its text */
+body .ed-summary .status-chip{width:auto;padding:.2rem .65rem}
+.tl-date.approx{font-style:italic;font-weight:600;opacity:.8}
+.tl-note{font-size:.72rem;color:var(--muted);margin:-.2rem 0 .2rem}
+body .ed-top{padding-top:.4rem}
+
+/* months that already passed without SETENA activity: history, not pending (grey, dashed) */
+body .ct.st-missed{background:repeating-linear-gradient(135deg,transparent 0 5px,color-mix(in srgb,var(--muted) 10%,transparent) 5px 10px);color:var(--muted);border:1px dashed color-mix(in srgb,var(--muted) 45%,transparent)}
+.tl-gap{font-size:.74rem;color:var(--muted);padding:.3rem 0 .3rem 26px;border-left:2px dashed color-mix(in srgb,var(--muted) 35%,transparent);margin-left:10px}
+.tl-gap span{font-weight:700;margin-right:.3rem}
+
+/* ---------- Tareas: «En SETENA» (what was done lately) ---------- */
+.sf{background:var(--card);border:1px solid var(--border);border-top:3px solid var(--s-blue);border-radius:var(--radius);padding:.65rem .8rem .7rem;margin-bottom:.9rem}
+.sf-h{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap}
+.sf-h h3{font-size:.95rem;color:var(--s-blue-dark);font-weight:700}
+body.theme-dark .sf-h h3{color:#7cc4ee}
+.sf-h h3 small{font-weight:600;color:var(--muted);font-size:.72rem;margin-left:.25rem}
+.sf-sum{font-size:.8rem;color:var(--muted)}
+.sf-sum b{color:var(--text)}
+.sf-read{font-size:.72rem}
+.sf-list{display:flex;flex-direction:column;margin-top:.45rem}
+.sf-item{all:unset;display:grid;grid-template-columns:52px 20px 118px minmax(0,1fr);gap:.4rem;align-items:center;padding:.3rem .4rem;border-radius:6px;cursor:pointer;font-size:.8rem}
+.sf-item:hover{background:color-mix(in srgb,var(--s-blue) 7%,transparent)}
+.sf-date{color:var(--muted);font-weight:700;font-size:.74rem}
+.sf-code{color:var(--s-blue-dark);font-weight:700;font-size:.76rem}
+body.theme-dark .sf-code{color:#7cc4ee}
+.sf-txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sf-txt b{font-weight:500}
+.sf-item.k-regencia .sf-txt b{color:#7c3aed;font-weight:700}.sf-item.k-receipt .sf-txt b{color:#b45309;font-weight:700}
+.sf-more{align-self:flex-start;margin:.2rem 0 0 .3rem}
+.sf-empty{font-size:.8rem;margin-top:.35rem}
+.sf-quiet{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;margin-top:.55rem;padding-top:.5rem;border-top:1px dashed var(--border);font-size:.78rem}
+.sf-chip{border:1px solid color-mix(in srgb,var(--closing) 45%,var(--border));background:color-mix(in srgb,var(--closing) 8%,transparent);border-radius:999px;padding:.12rem .55rem;cursor:pointer;font-size:.72rem}
+.sf-chip small{color:var(--muted);margin-left:.15rem}
+.sf-chip:hover{background:color-mix(in srgb,var(--closing) 18%,transparent)}
+
+/* project list: SETENA activity under the name */
+body .prow3 .c-name{display:flex;flex-direction:column;min-width:0;line-height:1.2}
+.c-name-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c-setena{font-weight:500;font-size:.7rem;color:var(--muted);display:flex;align-items:center;gap:.4rem;margin-top:.12rem;white-space:nowrap;overflow:hidden}
+.c-setena.quiet{color:var(--danger)}
+.c-av{display:inline-block;width:46px;height:4px;border-radius:2px;background:color-mix(in srgb,var(--muted) 25%,transparent);overflow:hidden;flex-shrink:0}
+.c-av i{display:block;height:100%;background:var(--s-blue)}

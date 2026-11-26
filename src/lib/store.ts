@@ -14,14 +14,15 @@ export const DEFAULT_SETTINGS: Settings = {
   reminderTime: '08:00',
   notifications: true,
   autoStart: true,
-  theme: 'dark',
-  accent: '#4ade80',
+  theme: 'light',
+  accent: '#007dc4',
   textSize: 100,
   csvSeparator: ';',
   tutorialSeen: false,
   radiusKm: 15,
   home: null,
-  roundTrip: true
+  roundTrip: true,
+  look: 1
 };
 
 // ---------- Loading saved data ----------
@@ -50,7 +51,7 @@ function normLocation(u: any): ProjectLocation | null {
   const lat = num(u.lat), lng = num(u.lng);
   if (lat === null || lng === null || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
   const source = pick(u, 'source', 'fuente');
-  return { lat, lng, text: String(pick(u, 'text', 'texto') || ''), source: source === 'photo' || source === 'foto' ? 'photo' : 'manual' };
+  return { lat, lng, text: String(pick(u, 'text', 'texto') || ''), source: source === 'photo' || source === 'foto' ? 'photo' : source === 'regencia' ? 'regencia' : 'manual' };
 }
 
 function normDeliveries(raw: any): Record<string, Delivery> {
@@ -149,8 +150,11 @@ export function normalize(raw: any): AppData {
     tutorialSeen: !!pick(s, 'tutorialSeen', 'tutorialVisto'),
     radiusKm: Number(pick(s, 'radiusKm', 'radioKm')) > 0 ? Number(pick(s, 'radiusKm', 'radioKm')) : DEFAULT_SETTINGS.radiusKm,
     home: s.home && Number.isFinite(Number(s.home.lat)) && Number.isFinite(Number(s.home.lng)) ? { lat: Number(s.home.lat), lng: Number(s.home.lng), text: String(s.home.text || '') } : null,
-    roundTrip: s.roundTrip ?? true
+    roundTrip: s.roundTrip ?? true,
+    look: Number(s.look) || 0
   };
+  // v52: one-time switch to the SETENA look (light + SETENA blue); can be changed back in Ajustes
+  if ((d.settings.look ?? 0) < 1) { d.settings.theme = 'light'; d.settings.accent = '#007dc4'; d.settings.look = 1; }
 
   // Progress labels (v1 called them priorities: Urgente / Pendiente próximo / Al día)
   const rawLabels = pick(raw, 'labels', 'etiquetas');

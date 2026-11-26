@@ -29,7 +29,11 @@ export const docReader = {
   }
 };
 
-export interface SortResult { read: number; moved: number; kinds: Record<string, number> }
+export interface SortResult { read: number; moved: number; kinds: Record<string, number>; renamed?: string; located?: boolean }
+
+/** A project name that is really an error the SETENA page showed («Problema al consultar información…»), or empty. */
+export const isBrokenName = (b: Pick<Project, 'code' | 'name'>) =>
+  !b.name.trim() || b.name.trim().toUpperCase() === b.code.toUpperCase() || /problema al consultar|remote server|error al|no se pudo/i.test(b.name);
 
 /** Reads and places the new SETENA PDFs of one project. `files` = its tree (paths relative to the data folder). */
 export async function sortDocuments(b: Project, files: { path: string }[], budget = { left: MAX_PER_RUN }): Promise<SortResult> {
@@ -37,15 +41,37 @@ export async function sortDocuments(b: Project, files: { path: string }[], budge
   const known = b.docs ?? {};
   const found: Record<string, DocInfo & { placed: boolean }> = {};
   const unchecks: { key: string; step: 'uploaded' | 'received'; date: string }[] = [];
-  for (const f of files) {
+  // a broken name is fixed from the cover of one of its regencias (read again if it was read before this existed)
+  let needName = isBrokenName(b);
+  let newName: string | null = null;
+  // a project without a location takes it from its regencia's «Coordenadas» (same: read again if needed)
+  let needPlace = !b.location;
+  let place: { lat: number; lng: number; text: string } | null = null;
+  if (needPlace) {
+    const withLl = Object.entries(known).filter(([, x]) => x.kind === 'regencia' && x.lat !== undefined && x.lng !== undefined).sort(([a], [c]) => c.localeCompare(a))[0];
+    if (withLl) { place = { lat: withLl[1].lat!, lng: withLl[1].lng!, text: withLl[1].place ?? '' }; needPlace = false; }
+  }
+  // already read with its name: no need to open anything
+  if (needName) {
+    const named = Object.entries(known).filter(([, x]) => x.kind === 'regencia' && x.project).sort(([a], [c]) => c.localeCompare(a))[0];
+    if (named) { newName = named[1].project!; needName = false; }
+  }
+  const newest = [...files].sort((a, c) => c.path.localeCompare(a.path));
+  for (const f of needName || needPlace ? newest : files) {
     const m = SETENA_PDF.exec(f.path);
-    if (!m || known[m[3]]) continue;
+    if (!m) continue;
+    const k = known[m[3]];
+    const reread = !!k && k.kind === 'regencia' && ((needName && !k.project) || (needPlace && k.lat === undefined && !k.noPlace));
+    if (k && !reread) continue;
     if (budget.left <= 0) break;
     budget.left--;
     const [, month, sub, name, date] = m;
     let info: DocInfo;
     try { info = classifyDoc(await docReader.text(f.path), b.code); } catch { info = { kind: 'notext' }; }
     res.read++;
+    if (needName && info.kind === 'regencia' && info.project) { newName = info.project; needName = false; }
+    if (needPlace && info.kind === 'regencia' && info.lat !== undefined && info.lng !== undefined) { place = { lat: info.lat, lng: info.lng, text: info.place ?? '' }; needPlace = false; }
+    if (k) { found[m[3]] = { ...k, ...info, placed: k.placed }; continue; } // read again only for the name / place
     res.kinds[info.kind] = (res.kinds[info.kind] ?? 0) + 1;
     const to = KIND_FOLDER[info.kind] ?? 'Documentos';
     if (to !== sub) {
@@ -57,11 +83,13 @@ export async function sortDocuments(b: Project, files: { path: string }[], budge
     }
     found[name] = { ...info, placed: true };
   }
-  if (res.read) {
+  if (res.read || newName || place) {
     mutate(d => {
       const x = d.projects.find(y => y.id === b.id);
       if (!x) return;
       x.docs = { ...(x.docs ?? {}), ...found };
+      if (newName && isBrokenName(x)) { x.name = newName; res.renamed = newName; }
+      if (place && !x.location) { x.location = { ...place, source: 'regencia' }; res.located = true; }
       for (const u of unchecks) {
         if (deliveryOf(x, u.key)[u.step] !== u.date) continue;
         applyStep(x, u.key, u.step, null);

@@ -27,7 +27,7 @@ const ACCOUNT_ICON = (
 const SIZES = [85, 92, 100, 108, 116, 125];
 
 export const APP_COLORS: { c: string; n: string }[] = [
-  { c: '#4ade80', n: 'Verde' }, { c: '#2dd4bf', n: 'Turquesa' }, { c: '#60a5fa', n: 'Azul' }, { c: '#a78bfa', n: 'Morado' },
+  { c: '#007dc4', n: 'Azul SETENA' }, { c: '#4ade80', n: 'Verde' }, { c: '#2dd4bf', n: 'Turquesa' }, { c: '#60a5fa', n: 'Azul' }, { c: '#a78bfa', n: 'Morado' },
   { c: '#f472b6', n: 'Rosa' }, { c: '#f87171', n: 'Rojo' }, { c: '#fb923c', n: 'Naranja' }, { c: '#facc15', n: 'Amarillo' }
 ];
 const THEMES: { id: SettingsData['theme']; n: string; i: string }[] = [{ id: 'light', n: 'Claro', i: '☀️' }, { id: 'dark', n: 'Oscuro', i: '🌙' }, { id: 'system', n: 'Sistema', i: '💻' }];
@@ -36,14 +36,25 @@ const THEMES: { id: SettingsData['theme']; n: string; i: string }[] = [{ id: 'li
 export const effectiveTheme = (t: SettingsData['theme']): 'light' | 'dark' =>
   t === 'system' ? (window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : t;
 
+/** Relative luminance (0 black … 1 white) of a #rrggbb color. */
+function luminance(hex: string): number {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return 0.5;
+  const [r, g, b] = [0, 2, 4].map(i => { const c = parseInt(m[1].slice(i, i + 2), 16) / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
 /** Applies theme, color and size (App calls it on every change). */
 export function applyAppearance(a: SettingsData) {
   const t = effectiveTheme(a.theme);
   document.body.classList.toggle('theme-light', t === 'light');
   document.body.classList.toggle('theme-dark', t === 'dark');
   document.documentElement.style.colorScheme = t;
-  // In light mode, very light colors (yellow, lime) are darkened a bit so they stay readable
-  document.documentElement.style.setProperty('--accent', t === 'light' ? `color-mix(in srgb, ${a.accent} 78%, #000)` : a.accent);
+  const lum = luminance(a.accent);
+  // In light mode, very light colors (yellow, lime) are darkened a bit so they stay readable; dark ones (SETENA blue) stay as they are
+  document.documentElement.style.setProperty('--accent', t === 'light' && lum > 0.3 ? `color-mix(in srgb, ${a.accent} 78%, #000)` : a.accent);
+  // text on accent-colored buttons: white on dark accents, near-black on light ones
+  document.documentElement.style.setProperty('--on-accent', lum > 0.3 ? '#121212' : '#fff');
   document.documentElement.style.setProperty('--accent-raw', a.accent);
   document.documentElement.style.fontSize = a.textSize === 100 ? '' : a.textSize + '%';
 }

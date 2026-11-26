@@ -271,7 +271,7 @@ export default function App() {
       onDrop={e => { setDropAll(false); const f = e.dataTransfer.files?.[0]; if (f && /pdf$/i.test(f.name)) { e.preventDefault(); openImport(f); } }}>
 
       <header className="top">
-        <div className="brand"><span className="logo">🌿</span><h1>Bitácora Tracker</h1><small>SETENA</small></div>
+        <div className="brand"><BrandMark /><div className="brand-txt"><h1>Bitácora Tracker</h1><small>Bitácora Digital Ambiental · SETENA</small></div></div>
         <div className={`search ${searching ? 'active' : ''}`} data-help-title="Buscar" data-help="Busca por número (con o sin guiones), nombre del proyecto o estado. No importan acentos ni mayúsculas, y busca también en las archivadas. Atajo: / o Ctrl+F."><Ic n="search" />
           <input ref={searchRef} placeholder="Buscar número, proyecto o estado  ( / )" value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setQ(''); }} />
           {q && <button className="icon-btn sm" onClick={() => setQ('')} title="Limpiar"><Ic n="close" /></button>}</div>
@@ -328,5 +328,17 @@ export default function App() {
       <ToastHost />
       <ModalHost />
     </div>
+  );
+}
+
+/** App mark: an open logbook with a leaf (original drawing, not SETENA's logo). */
+function BrandMark() {
+  return (
+    <svg className="brand-mark" viewBox="0 0 32 32" aria-hidden>
+      <rect x="1" y="1" width="30" height="30" rx="8" fill="currentColor" opacity=".14" />
+      <path d="M7 10.5c3-1.2 6-1 9 1v12c-3-2-6-2.2-9-1z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M25 10.5c-3-1.2-6-1-9 1v12c3-2 6-2.2 9-1z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M19 19.5c0-3.5 2.2-5.6 5-6-.3 3.6-2.2 5.6-5 6zm0 0 3-3" fill="#7dd3fc" stroke="#7dd3fc" strokeWidth="1" strokeLinecap="round" />
+    </svg>
   );
 }

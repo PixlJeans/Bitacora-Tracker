@@ -38,6 +38,10 @@ export interface Backend {
   listFolder(folder: string): Promise<string[]>;
   /** Moves all the files of one folder to another (a date moved to another month). */
   moveFolderFiles(from: string, to: string): Promise<number>;
+  /** Moves empty project folders to «Carpetas vacías (se pueden borrar)»; returns how many. */
+  tidyEmptyFolders(): Promise<number>;
+  /** Moves old «<code> - <old name>» folders into the project's current folder; returns how many items moved. */
+  adoptProjectFolder(code: string, folder: string): Promise<number>;
   /** Every file under a folder (path relative to the data folder, size, modified ms). */
   listTree(folder: string): Promise<{ path: string; size: number; modified: number }[]>;
   /** First `max` bytes of a file, base64 (photo EXIF). */
@@ -145,6 +149,8 @@ const tauri: Backend = {
   async openSubfolder(folder) { const { invoke } = await import('@tauri-apps/api/core'); await invoke('open_folder', { folder }); },
   async listFolder(folder) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<string[]>('list_folder', { folder }); },
   async moveFolderFiles(from, to) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<number>('move_folder_files', { from, to }); },
+  async tidyEmptyFolders() { const { invoke } = await import('@tauri-apps/api/core'); return invoke<number>('tidy_empty_folders'); },
+  async adoptProjectFolder(code, folder) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<number>('adopt_project_folder', { code, folder }); },
   async listTree(folder) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<{ path: string; size: number; modified: number }[]>('list_tree', { folder }); },
   async readHead(path, max) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<string>('read_head', { path, max }); },
   async setenaOpen(url) { const { invoke } = await import('@tauri-apps/api/core'); await invoke('setena_open', { url: url ?? null }); },
@@ -221,6 +227,8 @@ const web: Backend = {
   async openSubfolder() { /* solo escritorio */ },
   async listFolder() { return []; },
   async moveFolderFiles() { return 0; },
+  async tidyEmptyFolders() { return 0; },
+  async adoptProjectFolder() { return 0; },
   async listTree() { return []; },
   async readHead() { return ''; },
   async setenaOpen(url) { window.open(url || 'https://bitacora.setena.go.cr/', '_blank'); },
@@ -304,6 +312,8 @@ const server: Backend = {
   async openSubfolder() { /* solo escritorio */ },
   async listFolder() { return []; },
   async moveFolderFiles() { return 0; },
+  async tidyEmptyFolders() { return 0; },
+  async adoptProjectFolder() { return 0; },
   async listTree() { return []; },
   async readHead() { return ''; },
   async setenaOpen(url) { window.open(url || 'https://bitacora.setena.go.cr/', '_blank'); },

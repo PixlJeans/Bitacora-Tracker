@@ -7,6 +7,7 @@ import { Login } from './ui/Login';
 import './styles/base.css';
 import './styles/cognose.css';
 import './styles/app.css';
+import './styles/setena.css';
 
 const root = createRoot(document.getElementById('root')!);
 

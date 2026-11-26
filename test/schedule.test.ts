@@ -1,4 +1,4 @@
-import { computeReminders, monthState, monthlyDue, pendingThisMonth, nextRegencia, summary, dueInMonth } from '../src/lib/schedule';
+import { computeReminders, monthState, monthlyDue, pendingThisMonth, nextRegencia, summary, dueInMonth, reportTasks, taskColumns } from '../src/lib/schedule';
 import { normalize } from '../src/lib/store';
 import assert from 'node:assert';
 
@@ -36,7 +36,14 @@ assert.equal(new Date(av.find(x => x.key.startsWith('i:a:2026-07-15'))!.at).toDa
 // month states (calendar)
 a.uploads.push('2026-04'); a.visits.push('2026-04'); a.uploads.push('2026-05');
 assert.equal(monthState(a, '2026-01', '2026-06-20'), 'outside');
-assert.equal(monthState(a, '2026-03', '2026-06-20'), 'overdue');
+// v52: tasks from before last month are history («missed»), not pending work
+assert.equal(monthState(a, '2026-03', '2026-06-20'), 'missed');
+const r = reportTasks(d, '2026-06-20', '2026-06-30');
+assert.deepEqual([...new Set(r.overdue.filter(x => x.b.id === 'a').map(x => x.month))], ['2026-05', '2026-06'], 'only last month and this month are late');
+assert.equal(taskColumns(a, '2026-06-20').inspection.behind, 2, 'May + June inspections behind, not Feb–Mar');
+// a Regencia stays pending until the next one is due
+assert.equal(nextRegencia(a, '2026-12-20')!.key, '2026-07-15');
+assert.equal(nextRegencia(a, '2027-01-20')!.key, '2027-01-15', 'July 2026 regencia became history once January 2027 was due');
 assert.equal(monthState(a, '2026-04', '2026-06-20'), 'done');
 assert.equal(monthState(a, '2026-05', '2026-06-20'), 'partial');
 assert.equal(monthState(a, '2026-06', '2026-06-10'), 'today');

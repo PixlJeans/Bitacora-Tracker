@@ -446,6 +446,140 @@ fn list_tree(folder: String, state: State<'_, AppState>) -> Result<Vec<TreeFile>
     Ok(out)
 }
 
+/// `name` inside `dir`, or «name (2)», «name (3)»… if taken (the extension stays at the end).
+fn unused_in(dir: &Path, name: &str) -> PathBuf {
+    let first = dir.join(name);
+    if !first.exists() {
+        return first;
+    }
+    let (stem, ext) = match name.rfind('.') {
+        Some(i) if i > 0 => (&name[..i], &name[i..]),
+        _ => (name, ""),
+    };
+    (2..10_000).map(|n| dir.join(format!("{stem} ({n}){ext}"))).find(|p| !p.exists()).unwrap_or(first)
+}
+
+/// Moves everything in `src` into `dst`, folder by folder, never replacing a file (a taken name gets « (2)»).
+fn merge_into(src: &Path, dst: &Path) -> u32 {
+    let mut n = 0;
+    if fs::create_dir_all(dst).is_err() {
+        return 0;
+    }
+    let Ok(rd) = fs::read_dir(src) else { return 0 };
+    for e in rd.flatten() {
+        let p = e.path();
+        let name = e.file_name().to_string_lossy().to_string();
+        let target = dst.join(&name);
+        if p.is_dir() && target.is_dir() {
+            n += merge_into(&p, &target);
+        } else if fs::rename(&p, unused_in(dst, &name)).is_ok() {
+            n += 1;
+        }
+    }
+    n
+}
+
+/// A project's files must live in Proyectos/<Código - Nombre actual>. When the name changed (edited by hand, or
+/// fixed from a regencia PDF), the old «<Código> - <nombre viejo>» folders are moved into the current one.
+/// Nothing is replaced or deleted; the old folder is left empty (and later goes to «Carpetas vacías»).
+#[tauri::command]
+fn adopt_project_folder(code: String, folder: String, state: State<'_, AppState>) -> Result<u32, String> {
+    let base = data_dir(&state)?;
+    let target = base.join(clean_folder(&folder));
+    let root = base.join("Proyectos");
+    let prefix = format!("{} - ", code.trim().to_uppercase());
+    let Ok(rd) = fs::read_dir(&root) else { return Ok(0) };
+    let mut moved = 0;
+    for e in rd.flatten() {
+        let p = e.path();
+        let name = e.file_name().to_string_lossy().to_string();
+        if !p.is_dir() || p == target || !name.to_uppercase().starts_with(&prefix) {
+            continue;
+        }
+        if !target.exists() {
+            if fs::rename(&p, &target).is_ok() {
+                moved += 1;
+            }
+        } else {
+            moved += merge_into(&p, &target);
+        }
+    }
+    Ok(moved)
+}
+
+/// Where empty project folders go, so they can be deleted by hand (the app never deletes folders itself).
+const EMPTY_BIN: &str = "Carpetas vacías (se pueden borrar)";
+
+/// True if `dir` holds no real file at any depth (Windows' desktop.ini / Thumbs.db don't count).
+fn holds_nothing(dir: &Path) -> bool {
+    let Ok(rd) = fs::read_dir(dir) else { return false };
+    for e in rd.flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            if !holds_nothing(&p) {
+                return false;
+            }
+        } else {
+            let n = e.file_name().to_string_lossy().to_lowercase();
+            if n != "desktop.ini" && n != "thumbs.db" && n != ".ds_store" {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// Moves every empty folder inside Proyectos/ to «Carpetas vacías (se pueden borrar)/», keeping its path, so the
+/// project folders only show folders with files. Folders touched in the last 15 minutes are left alone
+/// (just opened with 📂 to drop files in). Returns how many were moved.
+#[tauri::command]
+fn tidy_empty_folders(state: State<'_, AppState>) -> Result<u32, String> {
+    let base = data_dir(&state)?;
+    let root = base.join("Proyectos");
+    if !root.is_dir() {
+        return Ok(0);
+    }
+    let recent = SystemTime::now().checked_sub(Duration::from_secs(15 * 60)).unwrap_or(UNIX_EPOCH);
+    let mut moved = 0u32;
+    // top-most empty folders first: a whole empty year goes as one folder
+    let mut stack = vec![root.clone()];
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = fs::read_dir(&dir) else { continue };
+        for e in rd.flatten() {
+            let p = e.path();
+            if !p.is_dir() || e.file_name().to_string_lossy().starts_with('.') {
+                continue;
+            }
+            if !holds_nothing(&p) {
+                stack.push(p);
+                continue;
+            }
+            let fresh = e.metadata().and_then(|m| m.modified()).map(|t| t > recent).unwrap_or(true);
+            if fresh {
+                continue;
+            }
+            let rel = p.strip_prefix(&base).map(|r| r.to_path_buf()).unwrap_or_default();
+            let mut target = base.join(EMPTY_BIN).join(&rel);
+            if let Some(parent) = target.parent() {
+                if fs::create_dir_all(parent).is_err() {
+                    continue;
+                }
+            }
+            // the same folder was moved here before: keep both («Fotos (2)»), nothing is deleted
+            let name = target.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+            let mut n = 2;
+            while target.exists() && n < 1000 {
+                target.set_file_name(format!("{name} ({n})"));
+                n += 1;
+            }
+            if fs::rename(&p, &target).is_ok() {
+                moved += 1;
+            }
+        }
+    }
+    Ok(moved)
+}
+
 /// The first bytes of a file (base64): enough to read a photo's EXIF date and GPS without loading it all.
 #[tauri::command]
 fn read_head(path: String, max: u64, state: State<'_, AppState>) -> Result<String, String> {
@@ -701,6 +835,8 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            tidy_empty_folders,
+            adopt_project_folder,
             load_data,
             save_data,
             schedule_reminders,

@@ -57,12 +57,19 @@ export async function scanFolders(force = false): Promise<string> {
   const docKinds: Record<string, number> = {};
   let docsRead = 0, docsMoved = 0;
   const budget = { left: 30 };
+  // empty project folders (made by 📂 or by moves) go to «Carpetas vacías (se pueden borrar)»
+  let tidied = 0, adopted = 0;
+  const renamed: string[] = [], locatedByDoc: string[] = [];
+  try { tidied = await backend.tidyEmptyFolders(); } catch { /* not on desktop */ }
+  const tidyMsg = tidied ? `${tidied} carpeta(s) vacía(s) movidas a «Carpetas vacías (se pueden borrar)»` : '';
   try {
     for (const b0 of getData().projects) {
       if (b0.archived) continue;
       let b = b0;
       const scheduled = isActiveProject(b) && hasSchedule(b);
       let files: { path: string; size: number; modified: number }[];
+      // files of an older name of the project («<código> - <nombre viejo>») come into the current folder
+      try { adopted += await backend.adoptProjectFolder(b.code, projectFolder(b)); } catch { /* not on desktop */ }
       try { files = await backend.listTree(projectFolder(b)); } catch { continue; }
       if (!files.length) continue;
       // ---- PDFs from SETENA: read what each one is and put it in its folder (every project, once per file) ----
@@ -72,7 +79,13 @@ export async function scanFolders(force = false): Promise<string> {
           docsRead += r.read; docsMoved += r.moved;
           for (const [k, n] of Object.entries(r.kinds)) docKinds[k] = (docKinds[k] ?? 0) + n;
           b = getData().projects.find(x => x.id === b.id) ?? b;
-          if (r.moved) { try { files = await backend.listTree(projectFolder(b)); } catch { continue; } }
+          if (r.located) locatedByDoc.push(b.code);
+          if (r.renamed) {
+            // the name came from its regencia's cover: the folder takes the new name too (files moved, nothing replaced)
+            renamed.push(`${b.code} → ${r.renamed}`);
+            try { await backend.adoptProjectFolder(b.code, projectFolder(b)); } catch { /* next scan */ }
+          }
+          if (r.moved || r.renamed) { try { files = await backend.listTree(projectFolder(b)); } catch { continue; } }
         }
       }
       if (!scheduled && b.location) continue;
@@ -188,7 +201,7 @@ export async function scanFolders(force = false): Promise<string> {
     }
     const docsMsg = docsRead ? `${docsRead} PDF de SETENA leídos (${Object.entries(docKinds).map(([k, n]) => `${n} ${KIND_NAME[k as DocKind]}`).join(', ')})${docsMoved ? `, ${docsMoved} movidos a su carpeta` : ''}` : '';
     if (!visits.length && !regs.length && !starts.length && !places.length && !bits.length)
-      return [sorted && `${sorted} archivo(s) de SETENA ordenados en Fotos / Regencias`, docsMsg].filter(Boolean).join(' · ');
+      return [sorted && `${sorted} archivo(s) de SETENA ordenados en Fotos / Regencias`, docsMsg, tidyMsg, renamed.length && `nombre corregido desde su regencia: ${renamed.join(', ')}`, locatedByDoc.length && `ubicación tomada de las coordenadas de su regencia: ${locatedByDoc.join(', ')}`, adopted && `${adopted} archivo(s) de una carpeta con el nombre viejo del proyecto pasados a la actual`].filter(Boolean).join(' · ');
     mutate(d => {
       for (const v of visits) { const b = d.projects.find(x => x.id === v.id); if (b && !deliveryOf(b, v.key).visit) { applyStep(b, v.key, 'visit', v.date); applyStep(b, v.key, 'photos', v.date); } }
       for (const r of regs) {
@@ -205,6 +218,6 @@ export async function scanFolders(force = false): Promise<string> {
       for (const p of places) { const b = d.projects.find(x => x.id === p.id); if (b && !b.location) b.location = { lat: p.lat, lng: p.lng, text: '', source: 'photo' }; }
     }, { undo: true });
     return [docsMsg, sorted && `${sorted} archivo(s) de SETENA ordenados`, bits.length && `${bits.length} bitácora(s) marcadas por SETENA`, visits.length && `${visits.length} inspección(es) marcadas por sus fotos`, regs.length && `${regs.length} regencia(s) / nota(s) de recibido marcadas`,
-      starts.length && `${starts.length} carta(s) de inicio`, places.length && `ubicación de ${places.length} proyecto(s) tomada del GPS`].filter(Boolean).join(' · ');
+      starts.length && `${starts.length} carta(s) de inicio`, places.length && `ubicación de ${places.length} proyecto(s) tomada del GPS`, tidyMsg, renamed.length && `nombre corregido desde su regencia: ${renamed.join(', ')}`, locatedByDoc.length && `ubicación tomada de las coordenadas de su regencia: ${locatedByDoc.join(', ')}`, adopted && `${adopted} archivo(s) de una carpeta con el nombre viejo del proyecto pasados a la actual`].filter(Boolean).join(' · ');
   } finally { busy = false; }
 }

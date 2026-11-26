@@ -2,6 +2,7 @@
 // The user only sets code + project, opening date, status, progress and location.
 // Delivery dates are calculated from the opening date; each one can then be adjusted in the calendar.
 import { useState } from 'react';
+import { Timeline } from './Timeline';
 import type { Project, Status, ProjectLocation } from '../lib/types';
 import { STATUSES, isActiveProject, isFinished } from '../lib/types';
 import { codeExists, getData, mutate, labelForStatus, archive, useAppData, markAllBefore } from '../lib/store';
@@ -36,7 +37,7 @@ export async function deleteProject(b: Project): Promise<boolean> {
   return true;
 }
 
-type Tab = 'details' | 'log' | 'notes' | 'location';
+type Tab = 'details' | 'timeline' | 'log' | 'notes' | 'location';
 
 export function openEditor(b?: Project, initial?: Partial<Project>, initialTab: Tab = 'details') {
   openModal(<ProjectEditor b={b} initial={initial} initialTab={initialTab} />, 'create-modal editor');
@@ -112,12 +113,14 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
         {b && (
           <div className="ed-tabs" role="tablist">
             <button type="button" role="tab" className={tab === 'details' ? 'on' : ''} onClick={() => setTab('details')}>📋 Entregas</button>
+            <button type="button" role="tab" className={tab === 'timeline' ? 'on' : ''} onClick={() => setTab('timeline')}>🕘 Línea de tiempo</button>
             <button type="button" role="tab" className={tab === 'notes' || tab === 'log' ? 'on' : ''} onClick={() => setTab('notes')}>📝 Notas</button>
             <button type="button" role="tab" className={tab === 'location' ? 'on' : ''} onClick={() => setTab('location')}>📍 Ubicación{view.location ? '' : <b className="tab-badge">!</b>}</button>
           </div>
         )}
       </div>
-      {b && (tab === 'notes' || tab === 'log') ? <MonthNotes b={view} f={f} setNotes={v => set('notes', v)} />
+      {b && tab === 'timeline' ? <Timeline b={view} />
+        : b && (tab === 'notes' || tab === 'log') ? <MonthNotes b={view} f={f} setNotes={v => set('notes', v)} />
         : b && tab === 'location' ? <div className="ed-location"><LocationField b={view} onChange={setLoc} /></div> : <>
       {b && !editFields && (
         <div className="ed-summary">
@@ -231,7 +234,7 @@ function LocationField({ b, onChange }: { b: Project; onChange: (u: ProjectLocat
       {u ? (
         <div className="loc-row">
           <span className="loc-coord mono">{u.lat.toFixed(5)}, {u.lng.toFixed(5)}</span>
-          <small className="muted">{u.source === 'photo' ? 'del GPS de las fotos' : 'puesta a mano'}</small>
+          <small className="muted">{u.source === 'photo' ? 'del GPS de las fotos' : u.source === 'regencia' ? `de las coordenadas de su regencia${u.text ? ` (${u.text})` : ''}` : 'puesta a mano'}</small>
           <button type="button" className="dp-link" onClick={() => backend.openMap(mapLink(u)).catch(e => toast(String(e)))}>Ver en el mapa</button>
           <button type="button" className="dp-link danger" onClick={() => onChange(null)}>Quitar</button>
         </div>

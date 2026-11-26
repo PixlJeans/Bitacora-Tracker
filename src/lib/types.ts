@@ -37,7 +37,7 @@ export interface ProjectLocation {
   lat: number;
   lng: number;
   text: string;           // optional address / landmark
-  source: 'manual' | 'photo';
+  source: 'manual' | 'photo' | 'regencia';
 }
 
 // ===== Deliveries: each Informe Regencial (monthly) and each Regencia (every 6 months) =====
@@ -166,6 +166,7 @@ export interface Settings {
   radiusKm: number;           // distance to group nearby projects on the same day
   home: { lat: number; lng: number; text: string } | null;  // where the routes start (and end)
   roundTrip: boolean;         // the route goes back to the start point
+  look?: number;              // visual style version (1 = SETENA style, v52)
 }
 
 /** A PDF row inside an import reviewed one by one. */

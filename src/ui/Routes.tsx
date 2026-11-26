@@ -156,7 +156,7 @@ function RouteCard({ r, home, back, mode, mon }: { r: { title: string; day?: str
     <section className="rt-card">
       <div className="rt-card-h">
         <b>{r.title}</b>
-        <span className="muted">{r.stops.length} proyecto(s){order.length > 0 && ` · ~${kmTxt(km * ROAD)} aprox.`}</span>
+        <span className="muted">{r.stops.length} proyecto(s){order.length > 0 && km * ROAD >= 0.5 && ` · ~${kmTxt(km * ROAD)} aprox.`}</span>
         <span className="grow" />
         {mode === 'suggest' && r.stops.length > 0 && <span className="rt-sched">
           <select value={day} onChange={e => setDay(e.target.value)}>

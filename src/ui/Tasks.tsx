@@ -9,13 +9,17 @@ import { getData, markAllBefore, markStep } from '../lib/store';
 import { Ic, toast } from './core';
 import { openEditor } from './ProjectEditor';
 import { daysText, daysUntil, FolderButton } from './Delivery';
+import { SetenaFeed } from './SetenaFeed';
 
 const WEEKDAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
 const SHOW_LATE = 12;
 
 const what = (t: ReportTask) => REPORT_LABEL[t.kind] + (t.kind === 'inspection' || t.kind === 'bitacora' ? ` · ${monthNameOf(t.month).split(' ')[0].toLowerCase()}` : '');
 
-function TaskRow({ t, today }: { t: ReportTask; today: string }) {
+/** Same project and same day as the task before / after it: drawn as one block (project and date shown once). */
+const sameSlot = (a?: ReportTask, c?: ReportTask) => !!a && !!c && a.b.id === c.b.id && a.date === c.date;
+
+function TaskRow({ t, today, cont = false, more = false }: { t: ReportTask; today: string; cont?: boolean; more?: boolean }) {
   const [done, setDone] = useState(false);
   const tick = () => {
     setDone(true);
@@ -26,13 +30,13 @@ function TaskRow({ t, today }: { t: ReportTask; today: string }) {
   };
   const days = daysUntil(t.date, today);
   return (
-    <div className={`tk-row ${done ? 'done' : ''} ${days < 0 ? 'late' : ''} k-${t.kind}`}>
+    <div className={`tk-row ${done ? 'done' : ''} ${days < 0 ? 'late' : ''} k-${t.kind} ${cont ? 'cont' : ''} ${more ? 'more' : ''}`}>
       <label className="cl-check tk-check" title="Marcar hecha">
         <input type="checkbox" checked={done} onChange={tick} />
         <span className="cl-box">{done && <Ic n="check" size={14} />}</span>
         <span className="tk-what">{what(t)}</span>
       </label>
-      <button type="button" className="tk-proj" title="Abrir el proyecto" onClick={() => openEditor(getData().projects.find(b => b.id === t.b.id) ?? t.b)}>
+      <button type="button" className="tk-proj" title="Abrir el proyecto" tabIndex={cont ? -1 : undefined} aria-hidden={cont || undefined} onClick={() => openEditor(getData().projects.find(b => b.id === t.b.id) ?? t.b)}>
         <b className="mono">{t.b.code}</b> <span>{t.b.name}</span>
       </button>
       <span className="tk-date"><b>{WEEKDAYS[fromISO(t.date).getDay()]} {shortDate(t.date)}{t.date.slice(0, 4) !== today.slice(0, 4) ? ` ${t.date.slice(2, 4)}` : ''}</b><small>{daysText(days)}</small></span>
@@ -56,13 +60,14 @@ export function TasksView({ d }: { d: AppData }) {
     <section className={`tk-sec ${cls}`}>
       <h3>{title} <span className="tk-n">{list.length}</span></h3>
       {!list.length && <p className="muted tk-empty">{empty}</p>}
-      {(limit ? list.slice(0, limit) : list).map(t => <TaskRow key={`${t.key}:${t.kind}`} t={t} today={today} />)}
+      {(limit ? list.slice(0, limit) : list).map((t, i, arr) => <TaskRow key={`${t.b.id}:${t.key}:${t.kind}`} t={t} today={today} cont={sameSlot(arr[i - 1], t)} more={sameSlot(t, arr[i + 1])} />)}
       {limit && list.length > limit && <button type="button" className="dp-link tk-more" onClick={() => setAllLate(true)}>Ver las {list.length - limit} restantes</button>}
     </section>
   );
 
   return (
     <div className="tasks">
+      <SetenaFeed d={d} />
       {oldOnes > 0 && (
         <div className="tk-catchup">
           {ask ? <>¿Ya estaba hecho todo lo anterior a {monthWord}? Se marcan {oldOnes} tareas, cada una con su fecha (se puede deshacer).

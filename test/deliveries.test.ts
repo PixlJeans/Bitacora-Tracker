@@ -4,11 +4,13 @@ import { readFileSync } from 'node:fs';
 import { applySetena } from '../src/lib/setenaImport';
 import { quietInSetena } from '../src/lib/setenaInfo';
 import { deliveryFolder, folderOf } from '../src/lib/folders';
-import { normalize, applyStep, emptyData, fileLogIntoDeliveries, replaceAll, getData, markStep } from '../src/lib/store';
+import { normalize, applyStep, emptyData, fileLogIntoDeliveries, replaceAll, getData, markStep, mutate } from '../src/lib/store';
 import { emptyDelivery } from '../src/lib/types';
 import { backend } from '../src/lib/backend';
 import { scanFolders } from '../src/lib/scan';
 import { docReader } from '../src/lib/docSort';
+import { placeOf } from '../src/lib/docKind';
+import { crtm05ToLatLng, crtmFromText } from '../src/lib/geo';
 import { classifyDoc } from '../src/lib/docKind';
 // the PDFs of the scanner tests are regencias of their own project
 docReader.text = async (p: string) => `Informe de Regencia Ambiental IRA-I-2026 Proyecto: X Expediente Administrativo: ${/(D\d-\d+-\d{4})/.exec(p)?.[1]}-SETENA Periodo de Regencia Enero - Junio 2026`;
@@ -53,9 +55,9 @@ assert(!completeIn(a, '2026-06') && a.deliveries!['m:2026-06'].uploaded === null
 const today = '2026-06-10';
 const ag = agenda(d, today, '2026-07-31');
 assert(ag.every((x, i) => i === 0 || sortDate(ag[i - 1]) <= sortDate(x)), 'agenda sorted by date');
-assert.equal(ag[0].date, '2026-02-03', 'overdue first (B, day 3, every month since the opening)');
+assert.equal(ag[0].date, '2026-05-03', 'overdue first (B, day 3; v52: from last month, older months are history)');
 assert(ag[0].overdue);
-assert.equal(nextDue(c, today)!.date, '2026-02-10', 'the most overdue one not done');
+assert.equal(nextDue(c, today)!.date, '2026-05-10', 'the most overdue one not done (from last month)');
 // reminders use the adjusted date and the original key
 const av = computeReminders(d, new Date(2026, 5, 10, 12).getTime());
 const am = av.find(x => x.key === 'm:a:2026-06')!;
@@ -114,21 +116,21 @@ assert(routeLink([{ lat: 1, lng: 2 }, { lat: 3, lng: 4 }]).includes('waypoints=1
 const insp = normalize({ projects: [{ id: 'i', code: 'D1-0009-2025', name: 'I', status: 'open', openedOn: '2025-01-15', createdOn: '2026-11-01' }] }).projects[0];
 assert.equal(inspectionDate(insp, '2026-12'), '2026-12-15', 'inspection on the opening day');
 const cols = taskColumns(insp, '2026-11-25');
-assert.equal(cols.inspection.next!.date, '2025-02-15', 'old months count too (from the opening)');
-assert.equal(cols.bitacora.behind, 22, 'Feb 2025 … Nov 2026 behind');
-assert.equal(cols.regencia.next!.date, '2025-07-15');
+assert.equal(cols.inspection.next!.date, '2026-10-15', 'v52: older months are history, last month is the oldest pending');
+assert.equal(cols.bitacora.behind, 2, 'Oct + Nov 2026 behind');
+assert.equal(cols.regencia.next!.date, '2026-07-15', 'the latest regencia due; older ones are history');
 insp.deliveries = { 'm:2026-12': { planned: '2027-01-03', due: null, visit: null, photos: null, letter: null, uploaded: null, letterText: '', files: [] } };
 assert.equal(inspectionDate(insp, '2026-12'), '2027-01-03', 'inspection moved to another month');
 assert.deepEqual(monthlyKeysDueIn(insp, '2027-01', true), ['2026-12', '2027-01'], 'calendar shows it in January');
 const rem = computeReminders({ ...emptyData(), projects: [insp] }, new Date(2026, 11, 20, 12).getTime());
 assert(rem.some(r => r.key.startsWith('v:i:2026-12:2027-01-03')), 'reminder follows the moved inspection');
-// catch up: everything before November 2026 checked with its own date
-const before = pendingBefore(insp, '2026-11-01');
-assert.equal(before.filter(t => t.step === 'visit').length, 21);
-assert.equal(before.filter(t => t.key.startsWith('r:')).length, 3, 'Jul 25, Jan 26, Jul 26');
+// catch up: what is still pending before November 2026 (v52: only October; older months are history) checked with its own date
+const before = pendingBefore(insp, '2026-11-01', '2026-11-25');
+assert.equal(before.filter(t => t.step === 'visit').length, 1);
+assert.equal(before.filter(t => t.key.startsWith('r:')).length, 1, 'Jul 26 (the latest regencia due)');
 for (const t of before) applyStep(insp, t.key, t.step, t.date);
 assert.equal(taskColumns(insp, '2026-11-25').bitacora.next!.date, '2026-11-15', 'only November left');
-assert.equal(insp.deliveries['m:2025-03']!.uploaded, '2025-03-15', 'done on its own date');
+assert.equal(insp.deliveries['m:2026-10']!.uploaded, '2026-10-15', 'done on its own date');
 // ---------- photos from the general log go into their month ----------
 const lg = normalize({ projects: [{ id: 'l', code: 'D1-0011-2026', name: 'L', status: 'open', openedOn: '2026-01-15', createdOn: '2026-01-15',
   entries: [
@@ -201,7 +203,7 @@ console.log('deliveries OK');
   ] });
   const r = reportTasks(dd, '2026-11-26', '2026-12-02');
   assert.deepEqual(r.upcoming.map(t => t.kind), ['inspection', 'bitacora', 'regElab', 'regUpload'], 'Nov 28: inspection, bitácora and the Regencia');
-  assert.equal(r.overdue.filter(t => t.kind === 'bitacora').length, 5, 'Jun … Oct');
+  assert.equal(r.overdue.filter(t => t.kind === 'bitacora').length, 1, 'Oct only (v52: Jun … Sep are history)');
   assert.deepEqual(r.noDate.map(b => b.id), ['z']);
 }
 // ---- routes ----
@@ -380,7 +382,9 @@ console.log('deliveries OK');
 // ---- what a SETENA PDF is, from its own first page (texts as pdf.js reads the real ones) ----
 {
   const reg = classifyDoc('Informe de Regencia Ambiental IRA-I-2024 Proyecto: CONDOMINIO VISTA DEL BOSQUE Propietario: Urbanizadora HJH del Este S.A. Expediente Administrativo: D1-0170-2020-SETENA CARLOS JIMENEZ PEREZ (FIRMA) Periodo de Informe Regencial: Agosto 2023 - Enero 2024 Firmado', 'D1-0170-2020');
-  assert.deepEqual(reg, { kind: 'regencia', ira: 'IRA-I-2024', expediente: 'D1-0170-2020', period: 'Agosto 2023 - Enero 2024' });
+  assert.deepEqual(reg, { kind: 'regencia', ira: 'IRA-I-2024', expediente: 'D1-0170-2020', period: 'Agosto 2023 - Enero 2024', project: 'CONDOMINIO VISTA DEL BOSQUE', noPlace: true });
+  assert.equal(fin_project(), 'PUENTE LA GRAN VÍA');
+  function fin_project() { return classifyDoc('Informe Final Consolidado de Regencia Ambiental IRA-II-2025 Proyecto: PUENTE LA GRAN VÍA Propietario: LAURA UREÑA ALFARO Expediente Administrativo: D1-0848-2022-SETENA', 'D1-0848-2022').project; }
   const fin = classifyDoc('Informe Final Consolidado de Regencia Ambiental IRA-II-2025 Proyecto: PUENTE LA GRAN VÍA Propietario: LAURA UREÑA ALFARO Expediente Administrativo: D1-0848-2022-SETENA Periodo de la Regencia Febrero 2025 - Julio 2025', 'D1-0848-2022');
   assert.equal(fin.kind, 'regencia'); assert.equal(fin.final, true); assert.equal(fin.period, 'Febrero 2025 - Julio 2025');
   assert.equal(classifyDoc('Informe de Regencia Ambiental IRA-I-2022 Proyecto: CONDOMINIO ALMAZARA Expediente Administrativo: D1-0550-2020-SETENA Periodo de Regencia Abril - Mayo del 2022', 'D1-0170-2020').kind, 'foreign', 'another project\'s regencia');
@@ -431,7 +435,33 @@ console.log('deliveries OK');
   moves.length = 0;
   await scanFolders(true);
   assert.equal(moves.length, 0);
+  // a name that is really a SETENA error is fixed from its regencia's cover (read again just for that), and the
+  // folder follows (adopt), the PDF's other data is kept
+  const adopts: string[] = [];
+  (backend as any).adoptProjectFolder = async (code: string, folder: string) => { adopts.push(`${code}|${folder}`); return 0; };
+  // (its regencia was read before names were taken from covers)
+  mutate(dd2 => { dd2.projects[0].name = 'Problema al consultar información The remote server'; delete dd2.projects[0].docs!['2026-07-01_22222222.pdf'].project; });
+  texts['22222222'] = 'Informe de Regencia Ambiental IRA-I-2026 Proyecto: CONDOMINIO LOTE I Expediente Administrativo: D1-0007-2025-SETENA Fase: Constructiva Periodo de Regencia Enero - Junio 2026';
+  const msg2 = await scanFolders(true);
+  const p2 = getData().projects[0];
+  assert.equal(p2.name, 'CONDOMINIO LOTE I');
+  assert.equal(p2.docs!['2026-07-01_22222222.pdf'].project, 'CONDOMINIO LOTE I');
+  assert.equal(p2.docs!['2026-07-01_22222222.pdf'].ira, 'IRA-I-2026');
+  assert(adopts.includes('D1-0007-2025|Proyectos/D1-0007-2025 - CONDOMINIO LOTE I'), adopts.join());
+  assert(msg2.includes('nombre corregido'), msg2);
+  await scanFolders(true);
+  assert.equal(getData().projects[0].name, 'CONDOMINIO LOTE I', 'a good name is never changed again');
   docReader.text = before;
+}
+// ---- where a project is, from its regencia («Ubicación del Proyecto»; CRTM05 checked against a photo's GPS) ----
+{
+  const v = placeOf('Ubicación del Proyecto Provincia: Cartago Cantón: Cartago Distrito: Oriental Coordenadas: Latitud: 1.090.745,261, Longitud 510 054,024 Hoja cartográfica: Tejar 1:10000');
+  assert.equal(v.place, 'Cartago, Cartago, Oriental');
+  assert(Math.abs(v.lat! - 9.864553) < 0.001 && Math.abs(v.lng! + 83.908403) < 0.001, 'within ~25 m of the photos of D1-0170-2020: ' + JSON.stringify(v));
+  const t = placeOf('Provincia: Cartago Cantón: El Guarco Distrito: Tejar No. Plano Catastrado: C-23681-2022 Coordenadas: Long 504036.866 / Lat. 1088322.602 Propietario');
+  assert.equal(t.place, 'Cartago, El Guarco, Tejar'); assert(Math.abs(t.lat! - 9.8425) < 0.001);
+  assert.deepEqual(crtmFromText('Coordenadas Geográficas: 1088387.4704 Lat / 504367.9293 Long (CRTM05)'), crtm05ToLatLng(504367.9293, 1088387.4704), 'order does not matter');
+  assert.deepEqual(placeOf('Informe sin ubicación'), { noPlace: true });
 }
 console.log('moved / no-date OK');
 process.exit(0); // store.ts leaves an hourly timer running

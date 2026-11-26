@@ -11,6 +11,7 @@ import { shortDate, monthNameOf, todayISO } from '../lib/dates';
 import { archive, markStep, mutate } from '../lib/store';
 import { Ic, Popover, toast } from './core';
 import { openEditor } from './ProjectEditor';
+import { agoText, daysSince } from '../lib/setenaInfo';
 
 export type Mode = { type: 'normal' } | { type: 'month'; mk: string } | { type: 'regencia' };
 
@@ -65,7 +66,10 @@ export function ProjectRow({ d: _d, b, data }: { d: AppData; b: Project; mode?: 
     <div className={`prow3 status-${b.status} ${b.archived ? 'archived' : ''} ${late ? 'late' : ''}`} data-tour={data}
       onClick={() => openEditor(b)} title="Abrir el proyecto">
       <span className="c-code mono">{b.code}</span>
-      <span className="c-name" title={b.name}>{b.name}</span>
+      <span className="c-name" title={b.name}>
+        <span className="c-name-t">{b.name}</span>
+        {b.setena && <SetenaActivity b={b} />}
+      </span>
 
       {active && b.noOpeningDate ? (
         <span className="c-missing" title="El PDF no traía la fecha de apertura: ábrelo para ponerla">📅 Falta la fecha de apertura · clic para ponerla</span>
@@ -98,5 +102,17 @@ export function ProjectRow({ d: _d, b, data }: { d: AppData; b: Project; mode?: 
         </span>
       )}
     </div>
+  );
+}
+
+/** Under the name: when this project was last written in SETENA (red after a month without entries). */
+function SetenaActivity({ b }: { b: Project }) {
+  const s = b.setena!, today = todayISO();
+  const quiet = isActiveProject(b) && b.status === 'open' && !s.participationClosed && (!s.lastEntry || daysSince(s.lastEntry, today) > 35);
+  return (
+    <small className={`c-setena ${quiet ? 'quiet' : ''}`} title={`SETENA: ${s.entries} anotaciones${s.avance !== null ? ` · avance ${s.avance}%` : ''} (leído el ${s.readAt.slice(0, 10)})`}>
+      🌐 {s.lastEntry ? `última anotación ${shortDate(s.lastEntry)}${s.lastEntry.slice(0, 4) !== today.slice(0, 4) ? ' ' + s.lastEntry.slice(0, 4) : ''} · ${agoText(s.lastEntry, today)}` : 'sin anotaciones en SETENA'}
+      {s.avance !== null && <span className="c-av"><i style={{ width: `${s.avance}%` }} /></span>}
+    </small>
   );
 }
