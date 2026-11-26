@@ -1,12 +1,12 @@
 // ===== Project row (tabs) =====
 // One line per project, in columns:
-//   Progress · Code · Name · Next date · Status · V · S · Regencia · Edit
-//   V = visit for the month's Informe Regencial · S = uploaded to SETENA · Regencia = semiannual one uploaded
+//   Progress · Code · Name · Next date · Status · I · Inf · Regencia · Edit
+//   I = inspection (site visit) for the month · Inf = Informe Regencial presented to SETENA · Regencia = semiannual one presented
 // The delivery calendar lives INSIDE the editor (see ProjectCalendar.tsx).
 import { useState } from 'react';
 import type { Project, AppData, Status } from '../lib/types';
 import { STATUSES, statusName, isActiveProject, isFinished } from '../lib/types';
-import { monthlyDue, regenciaSubmitted, visitedIn, nextDue, nextRegencia, uploadedIn, dueInMonth } from '../lib/schedule';
+import { monthlyDue, regenciaSubmitted, visitedIn, nextDue, nextRegencia, uploadedIn, dueInMonth, inspectionDeadline } from '../lib/schedule';
 import { StepsMini, daysUntil, daysText } from './Delivery';
 import { shortDate, monthNameOf, todayISO } from '../lib/dates';
 import { archive, markRegencia, markMonth, mutate } from '../lib/store';
@@ -19,7 +19,7 @@ export function RowHeader() {
   return (
     <div className="prow-h" aria-hidden>
       <span>Avance</span><span>Código</span><span>Proyecto</span><span>Próxima fecha</span><span>Estado</span>
-      <span title="Visita del Informe Regencial del mes">V</span><span title="Informe Regencial subido a SETENA">S</span><span>Regencia</span><span />
+      <span title="Inspección (visita al proyecto), al menos 7 días antes del informe">I</span><span title="Informe Regencial presentado a SETENA">Inf</span><span>Regencia</span><span />
     </div>
   );
 }
@@ -68,22 +68,25 @@ export function ProjectRow({ d, b, mode: mode = { type: 'normal' }, data }: { d:
       <span className="c-code mono" data-help-title="Código" data-help="Número de bitácora de SETENA (D1-XXXX-AAAA). Clic para abrir el proyecto." onClick={() => openEditor(b)}>{b.code}</span>
       <span className="c-name" data-help-title="Proyecto" data-help="Nombre del proyecto. Clic para abrirlo: datos, calendario de revisiones y su bitácora con fotos y notas." onClick={() => openEditor(b)} title={b.name}>{b.name}{toUpload > 0 && <span className="c-photos" title="Anotaciones con fotos o notas que faltan subir a SETENA"
         onClick={ev => { ev.stopPropagation(); openEditor(b, undefined, 'log'); }}>⬆ {toUpload} por subir</span>}</span>
-      <span className={`c-date ${date?.overdue ? 'overdue' : ''} ${date?.type === 'Regencia' ? 'reg' : ''}`} title={date ? `${date.type}: ${date.f}` : ''} data-help-title="Próxima fecha" data-help="Lo más urgente que falta: el Informe Regencial del mes o la Regencia semestral. La lista se ordena por esta fecha (lo vencido arriba). En rojo si ya pasó. Los iconos muestran los pasos: visita, fotos, carta y subido.">
+      <span className={`c-date ${date?.overdue ? 'overdue' : ''} ${date?.type === 'Regencia' ? 'reg' : ''}`} title={date ? `${date.type}: ${date.f}` : ''} data-help-title="Próxima fecha" data-help="Lo más urgente que falta: el Informe Regencial del mes o la Regencia semestral. La lista se ordena por esta fecha (lo vencido arriba). En rojo si ya pasó. Debajo: 🚗 la inspección (programada, o el último día para hacerla: 7 días antes del informe). Los iconos 🚗📤 se marcan al hacer la inspección y presentar el informe.">
         {date ? <><b>{shortDate(date.f)}{date.f.slice(0, 4) !== today.slice(0, 4) ? ` ${date.f.slice(0, 4)}` : ''}</b>
           <small>{date.type}{done ? ' · lista' : ` · ${daysText(daysUntil(date.f, today))}`}</small>
-          <StepsMini b={b} itemKey={date.key} /></> : <small className="muted">{b.archived ? 'Archivada' : '—'}</small>}
+          <StepsMini b={b} itemKey={date.key} />
+          {date.key && !b.deliveries?.[date.key]?.visit && (b.deliveries?.[date.key]?.planned
+            ? <small className="ag-planned" title="Inspección programada">🚗 insp. {shortDate(b.deliveries[date.key].planned!)}</small>
+            : <small className={`ag-planned ${today > inspectionDeadline(date.f) ? 'red-t' : ''}`} title="Último día para la inspección (7 días antes del informe)">🚗 insp. ≤ {shortDate(inspectionDeadline(date.f))}</small>)}</> : <small className="muted">{b.archived ? 'Archivada' : '—'}</small>}
       </span>
       <button className={`status-chip status-${b.status}`} data-help-title="Estado" data-help="Estado en SETENA: Nueva, Abierta, Solicitud de Cierre o Terminada. Las de Solicitud de Cierre y Terminadas ya no generan revisiones." title="Cambiar estado" onClick={ev => setPop({ el: ev.currentTarget, type: 'status' })}>{STATUSES.find(s => s.id === b.status)?.short}</button>
       {monthApplies ? <>
-        <button className={`ck ${visited ? 'on' : ''}`} data-tour={data ? 'monthly' : undefined} data-help-title="V · Visita" data-help="Márcalo cuando hiciste la visita al proyecto para el Informe Regencial del mes. La fecha se puede corregir dentro del proyecto." title={`Visita · ${monthNameOf(mk)}`}
-          onClick={() => { markMonth(b.id, mk, 'visit', !visited); toast(visited ? `${b.code}: visita desmarcada` : `✓ ${b.code}: visita de ${monthNameOf(mk)}`, true); }}><Ic n="check" size={13} /></button>
-        <button className={`ck ${uploaded ? 'on' : ''}`} data-help-title="S · Subido" data-help="Márcalo cuando subiste el Informe Regencial del mes al portal de SETENA. Con V y S marcadas el mes queda completo y se apagan los avisos." title={`Subido a SETENA · ${monthNameOf(mk)}`}
-          onClick={() => { markMonth(b.id, mk, 'upload', !uploaded); toast(uploaded ? `${b.code}: subida desmarcada` : `✓ ${b.code}: Informe Regencial de ${monthNameOf(mk)} subido`, true); }}><Ic n="check" size={13} /></button>
+        <button className={`ck ${visited ? 'on' : ''}`} data-tour={data ? 'monthly' : undefined} data-help-title="I · Inspección" data-help="Márcalo cuando hiciste la inspección (visita al proyecto). Debe ser al menos 7 días antes del informe. La fecha se puede programar y corregir dentro del proyecto." title={`Inspección · ${monthNameOf(mk)}`}
+          onClick={() => { markMonth(b.id, mk, 'visit', !visited); toast(visited ? `${b.code}: inspección desmarcada` : `✓ ${b.code}: inspección de ${monthNameOf(mk)}`, true); }}><Ic n="check" size={13} /></button>
+        <button className={`ck ${uploaded ? 'on' : ''}`} data-help-title="Inf · Informe" data-help="Márcalo cuando presentaste el Informe Regencial del mes en SETENA. Con I e Inf marcadas el mes queda completo y se apagan los avisos." title={`Informe a SETENA · ${monthNameOf(mk)}`}
+          onClick={() => { markMonth(b.id, mk, 'upload', !uploaded); toast(uploaded ? `${b.code}: informe desmarcado` : `✓ ${b.code}: Informe Regencial de ${monthNameOf(mk)} presentado`, true); }}><Ic n="check" size={13} /></button>
       </> : <><span className="ck na">—</span><span className="ck na">—</span></>}
       {regInfo ? (
         <button className={`ent st-${regInfo.status} ${submitted ? 'on' : ''}`} data-help-title="Regencia" data-help="Regencia semestral (cada 6 meses desde la apertura). Clic cuando ya la subiste; los avisos empiezan 1 mes antes de que venza." title={`Regencia del ${regInfo.due} (avisos desde ${regInfo.from})`}
-          onClick={() => { markRegencia(b.id, regInfo.key, true); toast(`✓ ${b.code}: Regencia del ${shortDate(regInfo.due)} subida`, true); }}>
-          <Ic n="check" size={12} />Subida</button>
+          onClick={() => { markRegencia(b.id, regInfo.key, true); toast(`✓ ${b.code}: Regencia del ${shortDate(regInfo.due)} presentada`, true); }}>
+          <Ic n="check" size={12} />Presentada</button>
       ) : <span className="ent na">—</span>}
       <span className="c-acc">
         {(isFinished(b.status) || b.archived) && (

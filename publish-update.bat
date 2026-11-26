@@ -32,7 +32,7 @@ echo  New version: %VER%
 git add -A || goto :error
 git commit -m "v%VER%: %NOTE%" || goto :error
 git tag "v%VER%" || goto :error
-git push || goto :error
+git push -u origin HEAD || goto :error
 git push origin "v%VER%" || goto :error
 
 echo.

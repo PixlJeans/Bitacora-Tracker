@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAppData, isReady, Undo, mutate, reload } from './lib/store';
 import type { Project, Status } from './lib/types';
 import { isActiveProject, isFinished } from './lib/types';
-import { completeIn, nextDue, upcomingRegencias, summary, monthTasks, type RegenciaInfo } from './lib/schedule';
+import { completeIn, nextDue, upcomingRegencias, summary, monthTasks, type RegenciaInfo, sortDate } from './lib/schedule';
 import { matches } from './lib/search';
 import { monthKeyOf, monthNameOf, todayISO } from './lib/dates';
 import { ReminderCards } from './ui/ReminderCards';
@@ -117,7 +117,7 @@ export default function App() {
   const activeList = useMemo(() => {
     // Priority = DATE of the most urgent pending delivery (Informe Regencial or Regencia): overdue first
     const pf = new Map(activeProjects.map(b => [b.id, nextDue(b)]));
-    const prox = (b: Project) => pf.get(b.id)?.date ?? '9999';
+    const prox = (b: Project) => { const x = pf.get(b.id); return x ? sortDate(x) : '9999'; };
     const l = activeProjects.filter(b =>
       (filter === 'all' || (filter === 'overdue' ? !!pf.get(b.id)?.overdue : b.status === filter)) && (!labelFilter || b.labelId === labelFilter));
     const cmp: Record<SortOrder, (a: Project, b: Project) => number> = {
@@ -261,7 +261,7 @@ export default function App() {
       <main className="project-list">{body}</main>
 
       <footer className="foot">
-        <span>V = visita · S = subido a SETENA (Informe Regencial del mes) · Regencia = semestral · 🚗📷✉️⬆ = pasos</span>
+        <span>I = inspección (7 días antes) · Inf = informe a SETENA · Regencia = semestral · 🚗📤 = inspección / informe</span>
         <span className="grow" />Clic en el nombre o ✎ para ver sus entregas, la carta, su ubicación y sus fotos · ? = ayuda
       </footer>
 

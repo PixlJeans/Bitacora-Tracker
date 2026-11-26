@@ -41,21 +41,27 @@ export interface ProjectLocation {
 // Key: 'm:YYYY-MM' (monthly) or 'r:YYYY-MM-DD' (semiannual, automatic due date).
 // Each step stores the DATE it was done (editable) or null if it is still missing.
 export type Step = 'visit' | 'photos' | 'letter' | 'uploaded';
-export const STEPS: { id: Step; name: string; icon: string }[] = [
-  { id: 'visit', name: 'Visita', icon: '🚗' },
-  { id: 'photos', name: 'Fotos', icon: '📷' },
-  { id: 'letter', name: 'Carta', icon: '✉️' },
-  { id: 'uploaded', name: 'Subido a SETENA', icon: '⬆' }
+// The two checks of every delivery are INSPECCIÓN (site visit, at least 7 days before) and INFORME
+// (presented to SETENA). Photos and letter are tracked too, as supporting material.
+export const STEPS: { id: Step; name: string; icon: string; main: boolean }[] = [
+  { id: 'visit', name: 'Inspección', icon: '🚗', main: true },
+  { id: 'photos', name: 'Fotos', icon: '📷', main: false },
+  { id: 'letter', name: 'Carta', icon: '✉️', main: false },
+  { id: 'uploaded', name: 'Informe', icon: '📤', main: true }
 ];
+/** The inspection must be done at least this many days before the informe is due. */
+export const INSPECTION_LEAD_DAYS = 7;
 export interface Delivery {
+  planned: string | null;  // date the visit is SCHEDULED for (can be moved anytime; null = not scheduled)
   due: string | null;    // due date adjusted by hand (null = automatic)
   visit: string | null;
   photos: string | null;
   letter: string | null;    // date the letter was ready
   uploaded: string | null;   // date it was uploaded to SETENA (= submitted)
   letterText: string;      // the letter for SETENA (a template will fill it later)
+  files: Attachment[];     // photos and documents (letter, PDF) of this delivery, saved in proyectos/<code>/
 }
-export const emptyDelivery = (): Delivery => ({ due: null, visit: null, photos: null, letter: null, uploaded: null, letterText: '' });
+export const emptyDelivery = (): Delivery => ({ planned: null, due: null, visit: null, photos: null, letter: null, uploaded: null, letterText: '', files: [] });
 export const MONTHLY_NAME = 'Informe Regencial';
 export const SEMIANNUAL_NAME = 'Regencia';
 
@@ -169,7 +175,7 @@ export interface AppData {
   settings: Settings;
 }
 
-export type ReminderKind = 'monthly' | 'regencia' | 'semiannual' | 'group' | 'test';
+export type ReminderKind = 'monthly' | 'regencia' | 'semiannual' | 'group' | 'test' | 'visit';
 
 /** What the native process (Rust) fires as a system notification. */
 export interface Reminder {

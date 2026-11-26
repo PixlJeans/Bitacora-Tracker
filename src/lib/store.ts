@@ -56,9 +56,10 @@ function normDeliveries(raw: any): Record<string, Delivery> {
   for (const [k, e] of Object.entries<any>(raw)) {
     if (!/^(m:\d{4}-\d{2}|r:\d{4}-\d{2}-\d{2})$/.test(k) || !e || typeof e !== 'object') continue;
     out[k] = {
-      due: isoDate(pick(e, 'due', 'vence')), visit: isoDate(pick(e, 'visit', 'visita')), photos: isoDate(pick(e, 'photos', 'fotos')),
+      planned: isoDate(e.planned), due: isoDate(pick(e, 'due', 'vence')), visit: isoDate(pick(e, 'visit', 'visita')), photos: isoDate(pick(e, 'photos', 'fotos')),
       letter: isoDate(pick(e, 'letter', 'carta')), uploaded: isoDate(pick(e, 'uploaded', 'subida')),
-      letterText: String(pick(e, 'letterText', 'textoCarta') || '')
+      letterText: String(pick(e, 'letterText', 'textoCarta') || ''),
+      files: Array.isArray(e.files) ? e.files.filter((f: any) => f && pick(f, 'path', 'ruta')).map(normAttachment) : []
     };
   }
   return out;
@@ -163,7 +164,7 @@ export function normalize(raw: any): AppData {
   // Snoozed reminders (only those still pending)
   const snoozed = pick(raw, 'snoozed', 'pospuestos');
   d.snoozed = Array.isArray(snoozed) ? snoozed.filter((p: any) => p && p.at > Date.now() - 864e5)
-    .map((p: any) => ({ ...p, kind: value(p.kind, ['monthly', 'regencia', 'semiannual', 'group', 'test'] as const, LEGACY_KIND, 'monthly') })) : [];
+    .map((p: any) => ({ ...p, kind: value(p.kind, ['monthly', 'regencia', 'semiannual', 'group', 'test', 'visit'] as const, LEGACY_KIND, 'monthly') })) : [];
 
   // Projects
   const months = (v: any) => Array.isArray(v) ? [...new Set<string>(v.filter((r: any) => /^\d{4}-\d{2}$/.test(r)))] : [];
@@ -374,7 +375,7 @@ export function markStep(id: string, key: string, step: Step, date: string | nul
 }
 
 /** Changes the due date (null = back to automatic) or the letter text. */
-export function editDelivery(id: string, key: string, change: Partial<Pick<Delivery, 'due' | 'letterText'>>, opts: { undo?: boolean } = {}) {
+export function editDelivery(id: string, key: string, change: Partial<Pick<Delivery, 'planned' | 'due' | 'letterText'>>, opts: { undo?: boolean } = {}) {
   mutate(d => {
     const b = d.projects.find(x => x.id === id);
     if (!b) return;
@@ -423,6 +424,45 @@ export function recordVisit(id: string, date: string, gps: { lat: number; lng: n
     clearSnoozed(d, id);
   }, { undo: opts.undo });
   return month;
+}
+
+/** Adds photos / documents to a delivery. Photos mark «visit» and «photos» (with the date they were taken)
+ *  and give the project its location if it has none; a document marks «letter». Returns what was marked. */
+export function addDeliveryFiles(id: string, key: string, files: Attachment[]): string[] {
+  const marked: string[] = [];
+  mutate(d => {
+    const b = d.projects.find(x => x.id === id);
+    if (!b) return;
+    b.deliveries = b.deliveries ?? {};
+    const e = { ...deliveryOf(b, key) };
+    e.files = [...(e.files ?? []), ...files];
+    b.deliveries[key] = e;
+    const photos = files.filter(f => f.type === 'photo');
+    const docs = files.filter(f => f.type !== 'photo');
+    if (photos.length) {
+      const dates = photos.map(f => f.takenOn).filter(Boolean) as string[];
+      const date = dates.sort()[dates.length - 1] ?? todayISO();
+      if (!e.visit) { applyStep(b, key, 'visit', date); marked.push('visita'); }
+      if (!e.photos) { applyStep(b, key, 'photos', date); marked.push('fotos'); }
+      const gps = photos.filter(f => f.lat != null && f.lng != null);
+      if (!b.location && gps.length) {
+        b.location = { lat: +(gps.reduce((s, f) => s + f.lat!, 0) / gps.length).toFixed(6), lng: +(gps.reduce((s, f) => s + f.lng!, 0) / gps.length).toFixed(6), text: '', source: 'photo' };
+        marked.push('ubicación');
+      }
+    }
+    if (docs.length && !e.letter) { applyStep(b, key, 'letter', todayISO()); marked.push('carta'); }
+    clearSnoozed(d, id);
+  });
+  return marked;
+}
+
+/** Removes a file from a delivery (the file itself goes to the «papelera» folder, see the caller). */
+export function removeDeliveryFile(id: string, key: string, fileId: string) {
+  mutate(d => {
+    const b = d.projects.find(x => x.id === id);
+    if (!b?.deliveries?.[key]) return;
+    b.deliveries[key] = { ...b.deliveries[key], files: (b.deliveries[key].files ?? []).filter(f => f.id !== fileId) };
+  });
 }
 
 /** Saves the project location. */

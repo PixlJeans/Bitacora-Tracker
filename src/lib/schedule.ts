@@ -10,7 +10,7 @@
 // The native process only receives the flat list {key, at, until, title, body} and fires the notification.
 
 import type { Reminder, Project, AppData } from './types';
-import { isActiveProject, isFinished } from './types';
+import { INSPECTION_LEAD_DAYS, isActiveProject, isFinished } from './types';
 import { daysInMonth, shortDate, longDate, fromISO, monthKeyOf, msAt, monthNameOf, addDays, addMonths, toISO, todayISO } from './dates';
 
 const DAY = 864e5;
@@ -60,7 +60,7 @@ export function nextMonthly(b: Project, today = todayISO()): { date: string; mon
 }
 
 const missingText = (b: Project, mk: string) =>
-  [!visitedIn(b, mk) && 'visit', !uploadedIn(b, mk) && 'subirlo a SETENA'].filter(Boolean).join(' y ');
+  [!visitedIn(b, mk) && 'la inspección', !uploadedIn(b, mk) && 'presentar el informe'].filter(Boolean).join(' y ');
 
 // ---------------- Regencia (every 6 months) ----------------
 export function regenciaDueDates(b: Project, from: string, until: string): string[] {
@@ -104,6 +104,7 @@ export interface PendingItem {
   type: 'monthly' | 'semiannual';
   key: string;       // 'm:YYYY-MM' | 'r:YYYY-MM-DD'
   date: string;       // due date (adjusted)
+  planned: string | null; // scheduled visit date, if any
   overdue: boolean;
   days: number;        // days from today (negative = overdue)
 }
@@ -116,16 +117,16 @@ export function pendingOf(b: Project, today = todayISO(), until = addMonths(toda
   for (let i = -3; i < 26; i++) {
     const mk = monthKeyOf(new Date(base.getFullYear(), base.getMonth() + i, 1, 12));
     if (!dueInMonth(b, mk) || completeIn(b, mk)) continue;
-    const date = monthlyDue(b, mk);
-    if (date > until) continue;
-    out.push({ b, type: 'monthly', key: `m:${mk}`, date: date, overdue: date < today, days: daysBetween(today, date) });
+    const date = monthlyDue(b, mk), planned = b.deliveries?.[`m:${mk}`]?.planned ?? null;
+    if (date > until && !(planned && planned <= until)) continue;
+    out.push({ b, type: 'monthly', key: `m:${mk}`, date, planned, overdue: date < today, days: daysBetween(today, date) });
   }
   const from = trackingStart(b);
   for (const key of regenciaDueDates(b, from, addMonths(until, 6))) {
     if (regenciaSubmitted(b, key)) continue;
-    const date = regenciaDue(b, key);
-    if (date > until) continue;
-    out.push({ b, type: 'semiannual', key: `r:${key}`, date: date, overdue: date < today, days: daysBetween(today, date) });
+    const date = regenciaDue(b, key), planned = b.deliveries?.[`r:${key}`]?.planned ?? null;
+    if (date > until && !(planned && planned <= until)) continue;
+    out.push({ b, type: 'semiannual', key: `r:${key}`, date, planned, overdue: date < today, days: daysBetween(today, date) });
   }
   return out.sort((a, c) => a.date.localeCompare(c.date));
 }
@@ -145,10 +146,18 @@ export function nextDue(b: Project, today = todayISO()): PendingItem | null {
   return pendingOf(b, today, addMonths(today, 14))[0] ?? null;
 }
 
-/** Agenda: every pending delivery of every project, from the most urgent to the furthest away. */
+/** Last day to do the inspection: 7 days before the informe is due. */
+export const inspectionDeadline = (due: string) => addDays(due, -INSPECTION_LEAD_DAYS);
+
+/** Date an item is sorted by: while the inspection is pending, its scheduled day (or its deadline);
+ *  once inspected, the informe due date. */
+export const sortDate = (x: PendingItem) =>
+  x.b.deliveries?.[x.key]?.visit ? x.date : x.planned ?? inspectionDeadline(x.date);
+
+/** Agenda: every pending delivery of every project, by scheduled visit / due date (most urgent first). */
 export function agenda(d: AppData, today = todayISO(), until = addDays(today, 45)): PendingItem[] {
   return d.projects.flatMap(b => pendingOf(b, today, until))
-    .sort((a, c) => a.date.localeCompare(c.date) || a.b.code.localeCompare(c.b.code));
+    .sort((a, c) => sortDate(a).localeCompare(sortDate(c)) || a.b.code.localeCompare(c.b.code));
 }
 
 export const upcomingRegencias = (d: AppData, today = todayISO()) =>
@@ -224,6 +233,17 @@ export function computeReminders(d: AppData, now = Date.now()): Reminder[] {
         kind: 'monthly',
         ref: b.id
       });
+      // Inspection: 7 days before the informe, if it isn't done and not scheduled for another day
+      const e = b.deliveries?.[`m:${mk}`];
+      if (!visitedIn(b, mk) && !e?.planned) {
+        const insp = inspectionDeadline(date);
+        out.push({
+          key: `n:${b.id}:${mk}`, at: msAt(insp, time), until: msAt(date, time),
+          title: `🚗 Inspección · ${b.code}`,
+          body: `${b.name} — hacer la inspección esta semana (el informe vence el ${shortDate(date)}).`,
+          kind: 'visit', ref: b.id
+        });
+      }
     }
     // Regencia (semestral)
     const from = trackingStart(b);
@@ -245,6 +265,23 @@ export function computeReminders(d: AppData, now = Date.now()): Reminder[] {
           kind: 'regencia',
           ref: b.id
         });
+      });
+    }
+  }
+
+  // Scheduled visits: a reminder the day before (evening) and on the morning of the visit
+  for (const b of d.projects) {
+    if (!isActiveProject(b)) continue;
+    for (const [key, e] of Object.entries(b.deliveries ?? {})) {
+      if (!e.planned || e.visit || e.planned < addDays(today, -1)) continue;
+      const what = key.startsWith('m:') ? `Informe Regencial de ${monthNameOf(key.slice(2))}` : 'Regencia';
+      out.push({
+        key: `v:${b.id}:${key}:${e.planned}:0`, at: msAt(addDays(e.planned, -1), '18:00'), until: msAt(e.planned, time),
+        title: `🚗 Inspección mañana · ${b.code}`, body: `${b.name} — ${what}. Fotos con GPS y luego la carta.`, kind: 'visit', ref: b.id
+      });
+      out.push({
+        key: `v:${b.id}:${key}:${e.planned}:1`, at: msAt(e.planned, time), until: msAt(e.planned, '23:59'),
+        title: `🚗 Inspección hoy · ${b.code}`, body: `${b.name} — ${what}. Fotos con GPS y luego la carta.`, kind: 'visit', ref: b.id
       });
     }
   }

@@ -1,7 +1,7 @@
 // Tests: adjustable dates, sorting by date, EXIF reader and grouping by distance
 import assert from 'node:assert';
-import { normalize, applyStep } from '../src/lib/store';
-import { agenda, completeIn, monthlyDue, regenciaInMonth, nextDue, nextRegencia, computeReminders } from '../src/lib/schedule';
+import { normalize, applyStep, emptyData } from '../src/lib/store';
+import { agenda, completeIn, monthlyDue, regenciaInMonth, nextDue, nextRegencia, computeReminders, inspectionDeadline, sortDate, pendingOf } from '../src/lib/schedule';
 import { readExif, commonDate, gpsComun } from '../src/lib/exif';
 import { groupNearby, distanceKm, routeLink, parseCoordinates } from '../src/lib/geo';
 
@@ -41,7 +41,7 @@ assert(!completeIn(a, '2026-06') && a.deliveries!['m:2026-06'].uploaded === null
 // ---------- priority by date ----------
 const today = '2026-06-10';
 const ag = agenda(d, today, '2026-07-31');
-assert(ag.every((x, i) => i === 0 || ag[i - 1].date <= x.date), 'agenda sorted by date');
+assert(ag.every((x, i) => i === 0 || sortDate(ag[i - 1]) <= sortDate(x)), 'agenda sorted by inspection / informe date');
 assert.equal(ag[0].date, '2026-03-03', 'overdue first (B, day 3, up to 3 months back)');
 assert(ag[0].overdue);
 assert.equal(nextDue(c, today)!.date, '2026-03-10', 'the most overdue one not done');
@@ -99,5 +99,19 @@ assert.equal(g.groups.length, 2, 'A and B together, C (Guanacaste) apart');
 assert.equal(g.withoutLocation.length, 1);
 assert(routeLink([{ lat: 1, lng: 2 }, { lat: 3, lng: 4 }]).includes('waypoints=1%2C2'));
 
+// ---------- inspection: at least 7 days before the informe ----------
+assert.equal(inspectionDeadline('2026-12-15'), '2026-12-08');
+const insp = normalize({ projects: [{ id: 'i', code: 'D1-0009-2026', name: 'I', status: 'open', openedOn: '2026-01-15', createdOn: '2026-11-01' }] }).projects[0];
+const pend = pendingOf(insp, '2026-11-25', '2027-01-31');
+const dec = pend.find(x => x.key === 'm:2026-12')!;
+assert.equal(sortDate(dec), '2026-12-08', 'pending inspection sorts by its deadline');
+insp.deliveries = { 'm:2026-12': { ...dec.b.deliveries?.['m:2026-12'], planned: '2026-12-03', due: null, visit: null, photos: null, letter: null, uploaded: null, letterText: '', files: [] } };
+assert.equal(sortDate(pendingOf(insp, '2026-11-25', '2027-01-31').find(x => x.key === 'm:2026-12')!), '2026-12-03', 'scheduled inspection sorts by its day');
+const rem = computeReminders({ ...emptyData(), projects: [insp] }, new Date(2026, 10, 25, 12).getTime());
+assert(rem.some(r => r.key.startsWith('v:i:m:2026-12:2026-12-03')), 'reminder for the scheduled inspection');
+const insp2 = normalize({ projects: [{ id: 'j', code: 'D1-0010-2026', name: 'J', status: 'open', openedOn: '2026-01-15', createdOn: '2026-11-01' }] }).projects[0];
+const rem2 = computeReminders({ ...emptyData(), projects: [insp2] }, new Date(2026, 10, 25, 12).getTime());
+const n = rem2.find(r => r.key === 'n:j:2026-12')!;
+assert.equal(new Date(n.at).getDate(), 8, 'unscheduled inspection reminder 7 days before');
 console.log('deliveries OK');
 process.exit(0); // store.ts leaves an hourly timer running

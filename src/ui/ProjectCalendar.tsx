@@ -76,14 +76,14 @@ export function ProjectCalendar({ b, onChange, live: live = false }: { b: Projec
         {!live && monthlyDate && <>
           <div className="pcal-t"><span className={`pt st-${st}`} /> Informe Regencial · {shortDate(monthlyDate)}</div>
           <button type="button" className={`pop-opt chk ${b.visits.includes(mk) ? 'on' : ''}`} onClick={() => toggle('visits', mk)}>
-            <span className="cb">{b.visits.includes(mk) && <Ic n="check" size={12} />}</span>Visita</button>
+            <span className="cb">{b.visits.includes(mk) && <Ic n="check" size={12} />}</span>Inspección</button>
           <button type="button" className={`pop-opt chk ${b.uploads.includes(mk) ? 'on' : ''}`} onClick={() => toggle('uploads', mk)}>
-            <span className="cb">{b.uploads.includes(mk) && <Ic n="check" size={12} />}</span>Subido a SETENA</button>
+            <span className="cb">{b.uploads.includes(mk) && <Ic n="check" size={12} />}</span>Informe a SETENA</button>
         </>}
         {!live && regKey && regDate && <>
           <div className="pcal-t reg">◆ Regencia (semestral) · {shortDate(regDate)} <small>avisos desde {shortDate(reminderFrom(regDate))}</small></div>
           <button type="button" className={`pop-opt chk ${b.regencias.includes(regKey) ? 'on' : ''}`} onClick={() => toggle('regencias', regKey)}>
-            <span className="cb">{b.regencias.includes(regKey) && <Ic n="check" size={12} />}</span>Subida a SETENA</button>
+            <span className="cb">{b.regencias.includes(regKey) && <Ic n="check" size={12} />}</span>Presentada a SETENA</button>
         </>}
       </div>
     </div>

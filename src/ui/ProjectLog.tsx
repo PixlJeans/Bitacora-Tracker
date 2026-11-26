@@ -4,14 +4,14 @@
 // Photos and PDFs are saved in <data folder>/proyectos/<code>/.
 // From the phone: QR on the same Wi-Fi network → photos arrive by themselves as a new entry.
 import { useEffect, useRef, useState } from 'react';
-import type { LogEntry, Attachment, Project, EntryType } from '../lib/types';
+import type { LogEntry, Attachment, Project, EntryType, ProjectLocation } from '../lib/types';
 import { ENTRY_TYPES, isActiveProject } from '../lib/types';
 import { backend, esTauri, esWeb } from '../lib/backend';
 import { getData, markRegencia, mutate, recordVisit, useAppData } from '../lib/store';
 import { nextRegencia } from '../lib/schedule';
 import { shortDate, longDate, monthNameOf, todayISO, uid } from '../lib/dates';
 import { photoInfo, commonDate, gpsComun, type PhotoInfo } from '../lib/exif';
-import { distanceKm, kmTxt } from '../lib/geo';
+import { distanceKm, kmTxt, mapLink } from '../lib/geo';
 import { Ic, toast } from './core';
 
 const isPhone = typeof window !== 'undefined' && (matchMedia?.('(pointer: coarse)').matches && innerWidth < 900);
@@ -43,7 +43,7 @@ async function compress(f: File, max = 2000): Promise<string | null> {
   } catch { return null; }
 }
 
-async function saveAttachments(code: string, files: File[], date: string, progress?: (i: number) => void): Promise<Attachment[]> {
+export async function saveAttachments(code: string, files: File[], date: string, progress?: (i: number) => void): Promise<Attachment[]> {
   const out: Attachment[] = [];
   for (const [i, f] of files.entries()) {
     progress?.(i + 1);
@@ -62,17 +62,28 @@ async function saveAttachments(code: string, files: File[], date: string, progre
 
 // ---------- cached thumbnail ----------
 const cache = new Map<string, string>();
-function Thumb({ a }: { a: Attachment }) {
+export function Thumb({ a, near }: { a: Attachment; near?: ProjectLocation | null }) {
   const [src, setSrc] = useState<string | null>(a.thumb ? cache.get(a.thumb) ?? null : null);
   useEffect(() => {
     if (!a.thumb || cache.has(a.thumb)) return;
-    backend.readB64(a.thumb).then(b => { const u = `data:image/jpeg;base64,${b}`; cache.set(a.thumb!, u); setSrc(u); }).catch(() => { /* sin miniatura */ });
+    backend.readB64(a.thumb).then(b => { const u = `data:image/jpeg;base64,${b}`; cache.set(a.thumb!, u); setSrc(u); }).catch(() => { /* no thumbnail */ });
   }, [a.thumb]);
+  const hasGps = a.lat != null && a.lng != null;
+  const km = hasGps && near ? distanceKm({ lat: a.lat!, lng: a.lng! }, near) : null;
   return (
-    <button type="button" className={`att ${a.type}`} title={`Abrir ${a.name}${a.takenOn ? ` · tomada el ${a.takenOn}` : ''}${a.lat != null ? ` · GPS ${a.lat}, ${a.lng}` : ''}`} onClick={() => backend.openAttachment(a.path).catch(e => toast(String(e)))}>
-      {src ? <img src={src} alt={a.name} /> : <span>{a.type === 'pdf' ? '📄' : a.type === 'photo' ? '🖼️' : '📎'}<small>{a.name}</small></span>}
-      {a.lat != null && <i className="att-gps" aria-hidden>📍</i>}
-    </button>
+    <span className="att-wrap">
+      <button type="button" className={`att ${a.type}`} title={`Abrir ${a.name}${a.takenOn ? ` · tomada el ${longDate(a.takenOn)}` : ''}${hasGps ? ` · GPS ${a.lat}, ${a.lng}` : ''}`} onClick={() => backend.openAttachment(a.path).catch(e => toast(String(e)))}>
+        {src ? <img src={src} alt={a.name} /> : <span>{a.type === 'pdf' ? '📄' : a.type === 'photo' ? '🖼️' : '📎'}<small>{a.name}</small></span>}
+      </button>
+      {a.type === 'photo' && (
+        <span className="att-cap">
+          {a.takenOn ? shortDate(a.takenOn) : 'sin fecha'}
+          {hasGps && <button type="button" title={`Ver dónde se tomó${km !== null ? ` (a ${kmTxt(km)} del proyecto)` : ''}`}
+            className={km !== null && km > 2 ? 'red-t' : ''}
+            onClick={() => backend.openMap(mapLink({ lat: a.lat!, lng: a.lng! })).catch(e => toast(String(e)))}>📍{km !== null ? ` ${kmTxt(km)}` : ''}</button>}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -193,7 +204,7 @@ export function ProjectLog({ id }: { id: string }) {
                 </button>
               </header>
               {a.text && <p className="entry-text">{a.text}</p>}
-              {a.attachments.length > 0 && <div className="atts">{a.attachments.map(f => <Thumb key={f.id} a={f} />)}</div>}
+              {a.attachments.length > 0 && <div className="atts">{[...a.attachments].sort((x, y) => (x.takenOn ?? '9').localeCompare(y.takenOn ?? '9')).map(f => <Thumb key={f.id} a={f} near={b.location} />)}</div>}
               <footer>
                 {a.text && <button type="button" className="dp-link" onClick={() => navigator.clipboard.writeText(a.text).then(() => toast('Texto copiado: pégalo en «Escribir» de SETENA'))}>Copiar texto</button>}
                 {a.attachments.length > 0 && !esWeb && <button type="button" className="dp-link" onClick={() => backend.openProjectFolder(b.code)}>Ver archivos para «Adjunto»</button>}
