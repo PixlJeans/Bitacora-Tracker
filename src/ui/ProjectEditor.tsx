@@ -12,6 +12,8 @@ import { gpsComun } from '../lib/exif';
 import { backend } from '../lib/backend';
 import { shortDate, longDate, fromISO, todayISO, uid, monthName } from '../lib/dates';
 import { ProjectCalendar } from './ProjectCalendar';
+import { StartLetter } from './Delivery';
+import { projectFolder } from '../lib/folders';
 import { ProjectLog } from './ProjectLog';
 import { Ic, openModal, closeModal, confirmDialog, toast } from './core';
 import { openSettings } from './Settings';
@@ -100,6 +102,7 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
     <form onSubmit={e => { e.preventDefault(); save(); }}>
       <div className="ed-top">
         <h2>{b ? <><span className="mono">{b.code}</span> {b.name}</> : '🌿 Nueva bitácora'}</h2>
+        {b && <button type="button" className="dp-link" title={`Abrir ${projectFolder(b)}`} onClick={() => backend.openSubfolder(projectFolder(b)).catch(e => toast(String(e)))}>📂 Carpeta</button>}
         {b && (
           <div className="ed-tabs" role="tablist">
             <button type="button" role="tab" className={tab === 'details' ? 'on' : ''} onClick={() => setTab('details')}>📋 Entregas</button>
@@ -145,6 +148,7 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
               : <button type="button" className="dp-link catch-up" onClick={() => setAskCatchUp(true)}>✓ Marcar todo lo anterior a {monthName(fromISO(today)).toLowerCase()} como hecho ({behind})</button>)}</div>
         : <p className="ed-auto-line muted">{f.archived ? 'Archivada: sin entregas.' : 'Ya terminó: no genera entregas. Ciérrala con 📦 Archivar.'}</p>}
 
+      {b && live && <StartLetter b={view} />}
       <ProjectCalendar b={view} live={!!live} onChange={c => setF(x => ({ ...x, ...c }))} />
 
       <details className="ed-more">

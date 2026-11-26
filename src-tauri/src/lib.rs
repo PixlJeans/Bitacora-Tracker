@@ -8,7 +8,8 @@
 //     (a thread checks every 30 s).
 //  3. System tray: closing the window hides it; «Salir» really quits.
 //  4. Starts with the system (hidden, with --minimized) and single instance.
-//  5. Photos and files of each project in <data>/proyectos/<code>/ (and photos from the phone: phone.rs).
+//  5. Photos and files of each project in <data>/Proyectos/<code - name>/<year>/<month>/Fotos|Regencias
+//     (photos from the phone arrive in <data>/proyectos/<code>/ and the app moves them: phone.rs).
 // All the date logic lives in TypeScript (src/lib/schedule.ts); here we only check `at <= now < until`.
 // File and folder names on disk (bitacoras.json, respaldos/, proyectos/…) are kept from earlier
 // versions so existing data keeps working; they are also what the user sees in Documents.
@@ -276,31 +277,92 @@ struct Saved {
     thumb: Option<String>,
 }
 
-/// Saves a file (base64) in <data>/proyectos/<code>/ and, if given, its thumbnail.
-#[tauri::command]
-fn save_attachment(code: String, name: String, data: String, thumb: Option<String>, state: State<'_, AppState>) -> Result<Saved, String> {
-    let base = data_dir(&state)?;
-    let folder = project_folder(&base, &code);
-    fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
-    let mut file = safe_name(&name);
+/// Readable folder name (keeps spaces and accents; removes what Windows / macOS don't allow).
+pub(crate) fn folder_name(s: &str) -> String {
+    let clean: String = s
+        .chars()
+        .map(|c| if c.is_control() || "\\/:*?\"<>|".contains(c) { '-' } else { c })
+        .collect();
+    let clean = clean.trim().trim_matches('.').trim().to_string();
+    if clean.is_empty() { "Sin nombre".into() } else { clean.chars().take(120).collect() }
+}
+
+/// Relative folder (e.g. «Proyectos/D1-0170-2020 - CONDOMINIO/2026/11 - Noviembre/Fotos»), each part cleaned.
+fn clean_folder(rel: &str) -> PathBuf {
+    rel.split(['/', '\\']).filter(|p| !p.trim().is_empty() && *p != "..").map(folder_name).collect()
+}
+
+fn rel_string(base: &Path, p: &Path) -> String {
+    p.strip_prefix(base).unwrap_or(p).components().map(|c| c.as_os_str().to_string_lossy().to_string()).collect::<Vec<_>>().join("/")
+}
+
+/// Free file name inside `folder` (adds «2_», «3_»… if it already exists).
+fn free_name(folder: &Path, name: &str) -> String {
+    let mut file = safe_name(name);
     let mut n = 1;
     while folder.join(&file).exists() {
         n += 1;
         file = safe_name(&format!("{n}_{name}"));
     }
+    file
+}
+
+/// Saves a file (base64) in <data>/<folder>/ (organized by project, year and month) and, if given,
+/// its thumbnail in <data>/.miniaturas/ (so the project folders only hold the real files).
+#[tauri::command]
+fn save_attachment(code: String, name: String, data: String, thumb: Option<String>, folder: Option<String>, state: State<'_, AppState>) -> Result<Saved, String> {
+    let base = data_dir(&state)?;
+    let dir = match folder.as_deref() {
+        Some(f) if !f.trim().is_empty() => base.join(clean_folder(f)),
+        _ => project_folder(&base, &code),
+    };
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let file = free_name(&dir, &name);
     let bytes = STANDARD.decode(data.as_bytes()).map_err(|e| e.to_string())?;
-    fs::write(folder.join(&file), bytes).map_err(|e| e.to_string())?;
-    let rel = format!("proyectos/{}/{}", safe_name(&code), file);
+    fs::write(dir.join(&file), bytes).map_err(|e| e.to_string())?;
     let mut thumb_rel = None;
     if let Some(t) = thumb {
         if let Ok(tb) = STANDARD.decode(t.as_bytes()) {
-            let tn = format!("{file}.mini.jpg");
-            if fs::write(folder.join(&tn), tb).is_ok() {
-                thumb_rel = Some(format!("proyectos/{}/{}", safe_name(&code), tn));
+            let tdir = base.join(".miniaturas").join(safe_name(&code));
+            if fs::create_dir_all(&tdir).is_ok() {
+                let tn = free_name(&tdir, &format!("{file}.mini.jpg"));
+                if fs::write(tdir.join(&tn), tb).is_ok() {
+                    thumb_rel = Some(rel_string(&base, &tdir.join(&tn)));
+                }
             }
         }
     }
-    Ok(Saved { path: rel, thumb: thumb_rel })
+    Ok(Saved { path: rel_string(&base, &dir.join(&file)), thumb: thumb_rel })
+}
+
+/// Moves a saved file to another folder of the data folder (to keep everything organized). Returns its new path.
+#[tauri::command]
+fn move_attachment(path: String, folder: String, state: State<'_, AppState>) -> Result<String, String> {
+    let base = data_dir(&state)?;
+    let from = inside_path(&base, &path)?;
+    let dir = base.join(clean_folder(&folder));
+    if from.parent() == Some(dir.as_path()) {
+        return Ok(rel_string(&base, &from));
+    }
+    if !from.exists() {
+        return Err(format!("No existe: {path}"));
+    }
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let name = from.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "archivo".into());
+    let to = dir.join(free_name(&dir, &name));
+    if fs::rename(&from, &to).is_err() {
+        fs::copy(&from, &to).map_err(|e| e.to_string())?;
+        let _ = fs::remove_file(&from);
+    }
+    Ok(rel_string(&base, &to))
+}
+
+/// Opens a folder of the data folder in the file explorer (creates it if needed).
+#[tauri::command]
+fn open_folder(folder: String, state: State<'_, AppState>) -> Result<(), String> {
+    let dir = data_dir(&state)?.join(clean_folder(&folder));
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    open_in_system(dir.as_os_str())
 }
 
 /// Returns a small file (thumbnail) as base64 to show it in the app.
@@ -534,6 +596,8 @@ pub fn run() {
             open_attachment,
             delete_attachment,
             open_project_folder,
+            move_attachment,
+            open_folder,
             open_setena,
             open_map,
             phone::phone_start,

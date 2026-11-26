@@ -1,5 +1,6 @@
 // Tests: adjustable dates, sorting by date, EXIF reader and grouping by distance
 import assert from 'node:assert';
+import { deliveryFolder, folderOf } from '../src/lib/folders';
 import { normalize, applyStep, emptyData, fileLogIntoDeliveries } from '../src/lib/store';
 import { monthlyKeysDueIn, openingFrom, hasSchedule, agenda, completeIn, monthlyDue, regenciaInMonth, nextDue, nextRegencia, computeReminders, sortDate, pendingOf, inspectionDate, taskColumns, pendingBefore } from '../src/lib/schedule';
 import { readExif, commonDate, gpsComun } from '../src/lib/exif';
@@ -158,6 +159,26 @@ console.log('deliveries OK');
   assert.equal(o.slice(8), '10'); assert(['05', '11'].includes(o.slice(5, 7)) && o.startsWith('2025'), o);
   const rm = computeReminders({ ...dd, projects: [m] } as any, new Date('2026-12-20T12:00:00').getTime()).find(r => r.key === 'm:m:2026-12');
   assert(rm && new Date(rm.at).toISOString().startsWith('2027-01-0'), 'reminder follows the moved date');
+}
+// ---- photos only in the Inspección; the Inicio de obras letter ----
+{
+  const ph = (id: string, takenOn: string) => ({ id, name: id + '.jpg', path: 'p/' + id, type: 'photo', takenOn });
+  const dd = normalize({ projects: [{ id: 'p', code: 'D1-0003-2025', name: 'P', status: 'open', openedOn: '2025-01-15', createdOn: '2025-01-15', uploads: [], visits: [], regencias: [], noOpeningDate: false,
+    deliveries: { 'r:2025-07-15': { files: [ph('f1', '2025-07-10'), { id: 'w', name: 'regencia.docx', path: 'p/w', type: 'other' }] }, 's:start': { uploaded: '2025-01-20', files: [{ id: 's', name: 'inicio.pdf', path: 'p/s', type: 'pdf' }] } } }] });
+  const p = dd.projects[0];
+  assert.equal(p.deliveries!['s:start'].files.length, 1, 'start letter kept');
+  assert.deepEqual(p.regencias, [], 'start letter is not a regencia');
+  assert.equal(fileLogIntoDeliveries(dd), 1);
+  assert.deepEqual(p.deliveries!['r:2025-07-15'].files.map(f => f.id), ['w'], 'only the Word document stays in the Regencia');
+  assert.equal(p.deliveries!['m:2025-07'].files[0].id, 'f1', 'the photo goes to July\'s inspection');
+}
+// ---- folders on disk ----
+{
+  const pr = { code: 'D1-0170-2020', name: 'CONDOMINIO: VISTA DEL BOSQUE' };
+  assert.equal(deliveryFolder(pr, 'm:2026-11'), 'Proyectos/D1-0170-2020 - CONDOMINIO- VISTA DEL BOSQUE/2026/11 - Noviembre/Fotos');
+  assert.equal(deliveryFolder(pr, 'r:2027-01-15'), 'Proyectos/D1-0170-2020 - CONDOMINIO- VISTA DEL BOSQUE/2027/01 - Enero/Regencias');
+  assert.equal(deliveryFolder(pr, 's:start'), 'Proyectos/D1-0170-2020 - CONDOMINIO- VISTA DEL BOSQUE/Inicio de obras');
+  assert.equal(folderOf('a/b/c.jpg'), 'a/b');
 }
 console.log('moved / no-date OK');
 process.exit(0); // store.ts leaves an hourly timer running

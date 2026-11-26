@@ -43,7 +43,7 @@ async function compress(f: File, max = 2000): Promise<string | null> {
   } catch { return null; }
 }
 
-export async function saveAttachments(code: string, files: File[], date: string, progress?: (i: number) => void): Promise<Attachment[]> {
+export async function saveAttachments(code: string, files: File[], date: string, progress?: (i: number) => void, folder?: string): Promise<Attachment[]> {
   const out: Attachment[] = [];
   for (const [i, f] of files.entries()) {
     progress?.(i + 1);
@@ -54,7 +54,7 @@ export async function saveAttachments(code: string, files: File[], date: string,
     const finalName = reduced ? f.name.replace(/\.[^.]+$/, '') + '.jpg' : f.name;
     const data = reduced ?? (await readDataUrl(f)).split(',')[1];
     const thumb = type === 'photo' ? await thumbnail(f) : undefined;
-    const g = await backend.saveAttachment(code, `${date}_${finalName}`, data, thumb);
+    const g = await backend.saveAttachment(code, `${date}_${finalName}`, data, thumb, folder);
     out.push({ id: uid(), name: finalName, path: g.path, thumb: g.thumb, type: type, takenOn: meta?.date ?? null, lat: meta?.lat ?? null, lng: meta?.lng ?? null });
   }
   return out;
@@ -73,7 +73,7 @@ export function Thumb({ a, near }: { a: Attachment; near?: ProjectLocation | nul
   return (
     <span className="att-wrap">
       <button type="button" className={`att ${a.type}`} title={`Abrir ${a.name}${a.takenOn ? ` · tomada el ${longDate(a.takenOn)}` : ''}${hasGps ? ` · GPS ${a.lat}, ${a.lng}` : ''}`} onClick={() => backend.openAttachment(a.path).catch(e => toast(String(e)))}>
-        {src ? <img src={src} alt={a.name} /> : <span>{a.type === 'pdf' ? '📄' : a.type === 'photo' ? '🖼️' : '📎'}<small>{a.name}</small></span>}
+        {src ? <img src={src} alt={a.name} /> : <span>{a.type === 'pdf' ? '📄' : a.type === 'photo' ? '🖼️' : /\.docx?$/i.test(a.name) ? '📝' : '📎'}<small>{a.name}</small></span>}
       </button>
       {a.type === 'photo' && (
         <span className="att-cap">

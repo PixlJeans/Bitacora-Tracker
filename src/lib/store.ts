@@ -8,6 +8,7 @@ import { DEFAULT_LABELS, emptyDelivery } from './types';
 import { backend, esWeb } from './backend';
 import { computeReminders, deliveryKeyForDate, monthForVisit, pendingBefore } from './schedule';
 import { todayISO, uid } from './dates';
+import { deliveryFolder, folderOf } from './folders';
 
 export const DEFAULT_SETTINGS: Settings = {
   reminderTime: '08:00',
@@ -54,7 +55,7 @@ function normDeliveries(raw: any): Record<string, Delivery> {
   const out: Record<string, Delivery> = {};
   if (!raw || typeof raw !== 'object') return out;
   for (const [k, e] of Object.entries<any>(raw)) {
-    if (!/^(m:\d{4}-\d{2}|r:\d{4}-\d{2}-\d{2})$/.test(k) || !e || typeof e !== 'object') continue;
+    if (!/^(m:\d{4}-\d{2}|r:\d{4}-\d{2}-\d{2}|s:start)$/.test(k) || !e || typeof e !== 'object') continue;
     out[k] = {
       planned: isoDate(e.planned), due: isoDate(pick(e, 'due', 'vence')), visit: isoDate(pick(e, 'visit', 'visita')), photos: isoDate(pick(e, 'photos', 'fotos')),
       letter: isoDate(pick(e, 'letter', 'carta')), uploaded: isoDate(pick(e, 'uploaded', 'subida')),
@@ -285,6 +286,8 @@ export async function start() {
   emit();
   reschedule();
   if (moved) persist();
+  // Files saved before (or arriving from the phone) go into Proyectos/<Código - Nombre>/<Año>/<Mes>/…
+  if (!esWeb) void relocateFiles();
 }
 
 // ---------- Undo (Ctrl+Z), same as in Cognose ----------
@@ -356,7 +359,7 @@ export function applyStep(b: Project, key: string, step: Step, date: string | nu
     const mk = key.slice(2);
     if (step === 'visit') b.visits = set(b.visits, mk);
     if (step === 'uploaded') b.uploads = set(b.uploads, mk);
-  } else if (step === 'uploaded') b.regencias = set(b.regencias, key.slice(2));
+  } else if (key.startsWith('r:') && step === 'uploaded') b.regencias = set(b.regencias, key.slice(2));
   if (on) b.lastUpdated = todayISO();
 }
 
@@ -463,7 +466,7 @@ export function addDeliveryFiles(id: string, key: string, files: Attachment[]): 
     if (photos.length) {
       const dates = photos.map(f => f.takenOn).filter(Boolean) as string[];
       const date = dates.sort()[dates.length - 1] ?? todayISO();
-      if (!e.visit) { applyStep(b, key, 'visit', date); marked.push('visita'); }
+      if (!e.visit) { applyStep(b, key, 'visit', date); marked.push('inspección'); }
       if (!e.photos) { applyStep(b, key, 'photos', date); marked.push('fotos'); }
       const gps = photos.filter(f => f.lat != null && f.lng != null);
       if (!b.location && gps.length) {
@@ -471,7 +474,11 @@ export function addDeliveryFiles(id: string, key: string, files: Attachment[]): 
         marked.push('ubicación');
       }
     }
-    if (docs.length && !e.letter) { applyStep(b, key, 'letter', todayISO()); marked.push('carta'); }
+    // Attaching the Regencia document = elaborated and uploaded
+    if (docs.length && key.startsWith('r:')) {
+      if (!e.letter) { applyStep(b, key, 'letter', todayISO()); marked.push('elaboración'); }
+      if (!e.uploaded) { applyStep(b, key, 'uploaded', todayISO()); marked.push('subida'); }
+    }
     clearSnoozed(d, id);
   });
   return marked;
@@ -496,7 +503,8 @@ export function fileLogIntoDeliveries(d: AppData): number {
       if ((entry.type !== 'visit' && entry.type !== 'regencia') || !entry.attachments.length) continue;
       const keep: Attachment[] = [];
       for (const f of entry.attachments) {
-        const key = entry.type === 'regencia' && entry.regencia ? `r:${entry.regencia}` : deliveryKeyForDate(b, f.takenOn ?? entry.date);
+        // Photos always go to the month's Inspección; documents of a Regencia go to that Regencia
+        const key = entry.type === 'regencia' && entry.regencia && f.type !== 'photo' ? `r:${entry.regencia}` : deliveryKeyForDate(b, f.takenOn ?? entry.date);
         if (!key) { keep.push(f); continue; }
         b.deliveries = b.deliveries ?? {};
         const e = { ...deliveryOf(b, key) };
@@ -508,14 +516,59 @@ export function fileLogIntoDeliveries(d: AppData): number {
       entry.attachments = keep;
     }
     b.entries = b.entries.filter(x => x.text.trim() || x.attachments.length);
+    // Photos only belong to the Inspección: move any photo filed under a Regencia (or the start letter) to its month
+    for (const [k, e] of Object.entries(b.deliveries ?? {})) {
+      if (k.startsWith('m:')) continue;
+      const photos = (e.files ?? []).filter(f => f.type === 'photo');
+      for (const f of photos) {
+        const key = deliveryKeyForDate(b, f.takenOn ?? k.slice(2));
+        if (!key) continue;
+        const m = { ...deliveryOf(b, key) };
+        if (!(m.files ?? []).some(x => x.path === f.path)) m.files = [...(m.files ?? []), f];
+        if (!m.photos) m.photos = f.takenOn ?? null;
+        b.deliveries![key] = m;
+        b.deliveries![k] = { ...b.deliveries![k], files: (b.deliveries![k].files ?? []).filter(x => x.id !== f.id) };
+        moved++;
+      }
+    }
   }
   return moved;
+}
+
+let relocating = false;
+/** Moves every delivery file into its folder on disk (Proyectos/<Código - Nombre>/<Año>/<MM - Mes>/Fotos|Regencias,
+ *  …/Inicio de obras): files from before, photos from the phone and projects that were renamed. */
+export async function relocateFiles(): Promise<number> {
+  if (relocating) return 0;
+  relocating = true;
+  try {
+    const moves: { id: string; key: string; fileId: string; path: string }[] = [];
+    for (const b of getData().projects) {
+      for (const [key, e] of Object.entries(b.deliveries ?? {})) {
+        const target = deliveryFolder(b, key);
+        for (const f of e.files ?? []) {
+          if (folderOf(f.path) === target) continue;
+          try { moves.push({ id: b.id, key, fileId: f.id, path: await backend.moveAttachment(f.path, target) }); }
+          catch { /* file missing: leave it as it is */ }
+        }
+      }
+    }
+    const changed = moves.filter(m => getData().projects.find(b => b.id === m.id)?.deliveries?.[m.key]?.files.find(f => f.id === m.fileId)?.path !== m.path);
+    if (changed.length) mutate(d => {
+      for (const m of changed) {
+        const e = d.projects.find(b => b.id === m.id)?.deliveries?.[m.key];
+        if (e) e.files = e.files.map(f => f.id === m.fileId ? { ...f, path: m.path } : f);
+      }
+    }, { undo: false });
+    return changed.length;
+  } finally { relocating = false; }
 }
 
 /** Runs `fileLogIntoDeliveries` as a saved change (after new photos arrive). */
 export function organizeFiles() {
   let moved = 0;
   mutate(d => { moved = fileLogIntoDeliveries(d); }, { undo: false });
+  void relocateFiles();
   return moved;
 }
 

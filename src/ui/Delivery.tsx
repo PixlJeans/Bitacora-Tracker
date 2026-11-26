@@ -1,8 +1,9 @@
 // ===== One delivery: a month (Inspección + Bitácora) or a Regencia (every 6 months) =====
-// Every task falls on the opening day and can be moved to any date · photos and documents ·
-// the letter for SETENA (a template will fill it later).
+// Month: 🚗 Inspección (with its photos) and 📋 Llenado de bitácora (a check).
+// Regencia: ✍️ Elaboración (a check) and 📤 Subir (attach the Word / PDF). Dates movable to any month.
+// Files are saved in Proyectos/<Código - Nombre>/<Año>/<MM - Mes>/Fotos|Regencias.
 // Everything is saved to the data immediately.
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Project, Step } from '../lib/types';
 import { MONTHLY_NAME, SEMIANNUAL_NAME, STEPS } from '../lib/types';
 import { inspectionDate, monthlyDue, monthlyDueAuto, regenciaDue } from '../lib/schedule';
@@ -10,7 +11,8 @@ import { shortDate, longDate, fromISO, monthNameOf, todayISO } from '../lib/date
 import { addDeliveryFiles, editDelivery, deliveryOf, markStep, removeDeliveryFile } from '../lib/store';
 import { backend } from '../lib/backend';
 import { Ic, toast } from './core';
-import { SETENA_URL, Thumb, saveAttachments } from './ProjectLog';
+import { Thumb, saveAttachments } from './ProjectLog';
+import { deliveryFolder } from '../lib/folders';
 
 const DAY = 864e5;
 export const daysUntil = (iso: string, today = todayISO()) => Math.round((fromISO(iso).getTime() - fromISO(today).getTime()) / DAY);
@@ -46,27 +48,20 @@ export function DeliveryCard({ b, itemKey: key }: { b: Project; itemKey: string;
   const insp = monthly ? inspectionDate(b, key.slice(2)) : due;
   const done = monthly ? !!(e.visit && e.uploaded) : !!e.uploaded;
   const late = (!e.uploaded && due < today) || (monthly && !e.visit && insp < today);
-  const [showLetter, setShowLetter] = useState(!e.uploaded);
 
-  const step = (p: Step, date: string | null) => {
-    markStep(b.id, key, p, date);
-    const nameText = monthly ? STEPS.find(x => x.id === p)!.name : 'Regencia';
-    toast(date ? `✓ ${b.code}: ${nameText} · ${shortDate(date)}` : `${b.code}: ${nameText} desmarcada`, true);
-  };
-  const check = (p: Step, date: string) => (
-    <button type="button" className={`ent-check ${e[p] ? 'on' : ''}`} title={e[p] ? 'Clic para desmarcar' : 'Clic para marcarla hecha (con su fecha)'}
-      onClick={() => step(p, e[p] ? null : (date <= today ? date : today))}>
-      <span className="cb">{e[p] && <Ic n="check" size={12} />}</span>
-    </button>
-  );
-  const doneOn = (p: Step) => e[p] && <span className="ent-date-edit">
-    <small className="muted">hecha el</small>
-    <input type="date" className="ent-step-date" value={e[p]!} title="Fecha en que se hizo (editable)" onChange={ev => ev.target.value && step(p, ev.target.value)} />
-  </span>;
-  const letter = (
-    <div className="ent-letter">
-      <button type="button" className="dp-link" onClick={() => setShowLetter(v => !v)}>✉️ Carta {e.letter ? `lista (${shortDate(e.letter)})` : e.letterText ? `(${e.letterText.trim().split(/\s+/).length} palabras)` : '(vacía)'} {showLetter ? '▴' : '▾'}</button>
-      {showLetter && <LetterText b={b} itemKey={key} />}
+  /** One checkbox task: ☐ name · date (movable) or «hecha el …». */
+  const task = (p: Step, name: string, date: string | null, move?: (v: string | null) => void) => (
+    <div className={`task-box ${e[p] ? 'on' : date && date < today ? 'late' : ''}`}>
+      <button type="button" className={`ent-check ${e[p] ? 'on' : ''}`} title={e[p] ? 'Clic para desmarcar' : 'Clic para marcarla hecha'}
+        onClick={() => { const d = e[p] ? null : (date && date <= today ? date : today); markStep(b.id, key, p, d); toast(d ? `✓ ${b.code}: ${name}` : `${b.code}: ${name} desmarcada`, true); }}>
+        <span className="cb">{e[p] && <Ic n="check" size={12} />}</span>
+      </button>
+      <div className="task-txt">
+        <b>{name}</b>
+        {e[p] ? <span className="ent-date-edit"><small className="muted">hecha el</small>
+          <input type="date" className="ent-step-date" value={e[p]!} title="Fecha en que se hizo (editable)" onChange={ev => ev.target.value && markStep(b.id, key, p, ev.target.value)} /></span>
+          : date && move ? <DateMover b={b} itemKey={key} what={name} date={date} auto={auto} onMove={move} /> : null}
+      </div>
     </div>
   );
 
@@ -75,45 +70,22 @@ export function DeliveryCard({ b, itemKey: key }: { b: Project; itemKey: string;
       onKeyDown={ev => { if (ev.key === 'Enter' && (ev.target as HTMLElement).tagName === 'INPUT') ev.preventDefault(); }}>
       <div className="ent-h">
         <b>{monthly ? `📅 ${monthNameOf(key.slice(2))}` : '🗂️ Regencia (semestral)'}</b>
+        {!monthly && !e.uploaded && <DateMover b={b} itemKey={key} what="Regencia" date={due} auto={auto} onMove={v => editDelivery(b.id, key, { due: v })} />}
       </div>
-
-      {monthly ? (
-        <div className="ent-cols">
-          {/* LEFT · Inspección (site visit) + its photos */}
-          <section className={`ent-block ${e.visit ? 'on' : insp < today ? 'late' : ''}`}>
-            <div className="ent-row">{check('visit', insp)}<b>🚗 Inspección</b></div>
-            <div className="ent-row sub">
-              {e.visit ? doneOn('visit') : <DateMover b={b} itemKey={key} what="Inspección" date={insp} auto={auto}
-                onMove={v => editDelivery(b.id, key, { planned: v })} />}
-            </div>
-            <DeliveryFiles b={b} itemKey={key} kind="photos" />
-          </section>
-
-          {/* RIGHT · Bitácora presented to SETENA + letter and documents */}
-          <section className={`ent-block ${e.uploaded ? 'on' : due < today ? 'late' : ''}`}>
-            <div className="ent-row">{check('uploaded', due)}<b>📋 Bitácora a SETENA</b></div>
-            <div className="ent-row sub">
-              {e.uploaded ? doneOn('uploaded') : <DateMover b={b} itemKey={key} what="Bitácora" date={due} auto={auto}
-                onMove={v => editDelivery(b.id, key, { due: v })} />}
-            </div>
-            {letter}
-            <DeliveryFiles b={b} itemKey={key} kind="docs" />
-          </section>
+      {monthly ? <>
+        <div className="task-row">
+          {task('visit', '🚗 Inspección', insp, v => editDelivery(b.id, key, { planned: v }))}
+          {task('uploaded', '📋 Llenado de bitácora', due, v => editDelivery(b.id, key, { due: v }))}
         </div>
-      ) : (
-        <section className={`ent-block ${e.uploaded ? 'on' : due < today ? 'late' : ''}`}>
-          <div className="ent-row">
-            {check('uploaded', due)}<b>🗂️ Regencia presentada</b>
-            <span className="grow" />
-            {e.uploaded ? doneOn('uploaded') : <DateMover b={b} itemKey={key} what="Regencia" date={due} auto={auto}
-              onMove={v => editDelivery(b.id, key, { due: v })} />}
-          </div>
-          <div className="ent-cols">
-            <div>{letter}</div>
-            <div className="ent-reg-files"><DeliveryFiles b={b} itemKey={key} kind="docs" /><DeliveryFiles b={b} itemKey={key} kind="photos" /></div>
-          </div>
-        </section>
-      )}
+        <DeliveryFiles b={b} itemKey={key} kind="photos" />
+      </> : <>
+        <div className="task-row">
+          {task('letter', '✍️ Elaboración de la regencia', null)}
+          {task('uploaded', '📤 Subir regencia', null)}
+        </div>
+        <DeliveryFiles b={b} itemKey={key} kind="docs" label="📝 Adjuntar la regencia (Word / PDF)"
+          hint="📝 Arrastra aquí el documento Word de la regencia (o el PDF): queda marcada como subida" />
+      </>}
     </div>
   );
 }
@@ -149,7 +121,7 @@ function DateMover({ b, what, date, auto, onMove }: { b: Project; itemKey: strin
 }
 
 /** Photos and documents of a delivery: add (button or drag & drop), open, remove. */
-function DeliveryFiles({ b, itemKey: key, kind }: { b: Project; itemKey: string; kind: 'photos' | 'docs' }) {
+export function DeliveryFiles({ b, itemKey: key, kind, label, hint }: { b: Project; itemKey: string; kind: 'photos' | 'docs'; label?: string; hint?: string }) {
   const files = [...(deliveryOf(b, key).files ?? [])].filter(f => (f.type === 'photo') === (kind === 'photos'))
     .sort((x, y) => (x.takenOn ?? '9').localeCompare(y.takenOn ?? '9'));
   const photoRef = useRef<HTMLInputElement>(null);
@@ -157,10 +129,14 @@ function DeliveryFiles({ b, itemKey: key, kind }: { b: Project; itemKey: string;
   const [saving, setSaving] = useState('');
   const [over, setOver] = useState(false);
 
-  async function add(list: File[]) {
+  async function add(all: File[]) {
+    // Photos only go to the Inspección; documents only to the Bitácora / Regencia / Inicio de obras
+    const isImg = (f: File) => /^image\//.test(f.type) || /\.(jpe?g|png|heic|webp|gif)$/i.test(f.name);
+    const list = all.filter(f => isImg(f) === (kind === 'photos'));
+    if (list.length < all.length) toast(kind === 'photos' ? 'Aquí solo van fotos: los documentos van en la Bitácora o la Regencia.' : 'Aquí solo van documentos: las fotos van en la Inspección.');
     if (!list.length) return;
     try {
-      const atts = await saveAttachments(b.code, list, todayISO(), i => setSaving(`Guardando ${i} de ${list.length}…`));
+      const atts = await saveAttachments(b.code, list, todayISO(), i => setSaving(`Guardando ${i} de ${list.length}…`), deliveryFolder(b, key));
       const marked = addDeliveryFiles(b.id, key, atts);
       toast(`✓ ${b.code}: ${atts.length} archivo(s) guardado(s)` + (marked.length ? ` · marcado: ${marked.join(', ')}` : ''), true);
     } catch (e) { toast('No se pudo guardar: ' + String(e)); }
@@ -181,7 +157,7 @@ function DeliveryFiles({ b, itemKey: key, kind }: { b: Project; itemKey: string;
     <div className={`ent-files ${over ? 'over' : ''}`} title="También puedes arrastrar archivos aquí"
       onDragOver={ev => { ev.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
       onDrop={ev => { ev.preventDefault(); setOver(false); add(Array.from(ev.dataTransfer.files) as File[]); }}>
-      {!files.length && <div className="ent-files-empty">{isPhotos ? '📷 Arrastra aquí las fotos de la inspección: se leen su fecha y ubicación' : '📄 Arrastra aquí la carta firmada o los PDF'}</div>}
+      {!files.length && <div className="ent-files-empty">{hint ?? (isPhotos ? '📷 Arrastra aquí las fotos de la inspección: se leen su fecha y ubicación' : '📄 Arrastra aquí la carta firmada o los PDF')}</div>}
       {files.length > 0 && (
         <div className="ent-files-grid">
           {files.map(f => (
@@ -194,8 +170,8 @@ function DeliveryFiles({ b, itemKey: key, kind }: { b: Project; itemKey: string;
       )}
       <div className="ent-files-btns">
         <button type="button" className="btn sm" disabled={!!saving} onClick={() => ref.current?.click()}>
-          {isPhotos ? `📷 ${files.length ? 'Más fotos' : 'Agregar fotos'}` : `📄 ${files.length ? 'Más documentos' : 'Agregar carta / PDF'}`}</button>
-        {isPhotos && files.length > 0 && <button type="button" className="dp-link" onClick={() => backend.openProjectFolder(b.code).catch(e => toast(String(e)))}>Abrir carpeta</button>}
+          {isPhotos ? `📷 ${files.length ? 'Más fotos' : 'Agregar fotos'}` : files.length ? '📄 Agregar otro' : label ?? '📄 Agregar carta / PDF'}</button>
+        {files.length > 0 && <button type="button" className="dp-link" title={deliveryFolder(b, key)} onClick={() => backend.openSubfolder(deliveryFolder(b, key)).catch(e => toast(String(e)))}>📂 Abrir carpeta</button>}
         {saving && <small className="muted">{saving}</small>}
       </div>
       <input ref={photoRef} type="file" accept="image/*" multiple hidden onChange={ev => { add(Array.from(ev.target.files ?? []) as File[]); ev.target.value = ''; }} />
@@ -204,29 +180,24 @@ function DeliveryFiles({ b, itemKey: key, kind }: { b: Project; itemKey: string;
   );
 }
 
-/** Letter text area: saves itself while typing. */
-function LetterText({ b, itemKey: key }: { b: Project; itemKey: string }) {
+
+/** «Inicio de obras»: the letter sent to SETENA when the project starts (attach it, and check it presented). */
+export function StartLetter({ b }: { b: Project }) {
+  const key = 's:start';
   const e = deliveryOf(b, key);
-  const [txt, setTxt] = useState(e.letterText);
-  const t = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const last = useRef(e.letterText);
-  useEffect(() => () => { if (t.current) { clearTimeout(t.current); if (last.current !== e.letterText) editDelivery(b.id, key, { letterText: last.current }, { undo: false }); } }, []); // eslint-disable-line
-  const change = (v: string) => {
-    setTxt(v); last.current = v;
-    if (t.current) clearTimeout(t.current);
-    t.current = setTimeout(() => { t.current = null; editDelivery(b.id, key, { letterText: v }, { undo: false }); }, 600);
-  };
+  const today = todayISO();
   return (
-    <div className="letter-box">
-      <textarea className="modal-input letter" rows={8} value={txt} onChange={ev => change(ev.target.value)}
-        placeholder={`Escribe aquí la carta para SETENA de ${b.code} (${b.name}).\nMás adelante este espacio se llenará con la plantilla.`} />
-      <div className="letter-actions">
-        <small className="muted">Se guarda sola.</small>
-        <span className="grow" />
-        <button type="button" className="dp-link" disabled={!txt.trim()} onClick={() => navigator.clipboard.writeText(txt).then(() => toast('Carta copiada: pégala en «Escribir» de SETENA'))}>Copiar carta</button>
-        <button type="button" className="dp-link" disabled={!txt.trim()} onClick={() => { markStep(b.id, key, 'letter', deliveryOf(b, key).letter ?? todayISO()); toast(`✓ ${b.code}: carta lista`, true); }}>Marcar carta lista</button>
-        <button type="button" className="dp-link" onClick={() => backend.openSetena(SETENA_URL).catch(er => toast(String(er)))}>Abrir SETENA</button>
+    <section className={`ent-block start-letter ${e.uploaded ? 'on' : ''}`}>
+      <div className="ent-row">
+        <button type="button" className={`ent-check ${e.uploaded ? 'on' : ''}`} title={e.uploaded ? 'Clic para desmarcar' : 'Marcar presentada a SETENA'}
+          onClick={() => { markStep(b.id, key, 'uploaded', e.uploaded ? null : today); toast(e.uploaded ? `${b.code}: Inicio de obras desmarcado` : `✓ ${b.code}: Inicio de obras presentado`, true); }}>
+          <span className="cb">{e.uploaded && <Ic n="check" size={12} />}</span>
+        </button>
+        <b>🏗️ Carta de Inicio de obras</b>
+        {e.uploaded && <span className="ent-date-edit"><small className="muted">presentada el</small>
+          <input type="date" className="ent-step-date" value={e.uploaded} onChange={ev => ev.target.value && markStep(b.id, key, 'uploaded', ev.target.value)} /></span>}
       </div>
-    </div>
+      <DeliveryFiles b={b} itemKey={key} kind="docs" label="📄 Agregar carta de Inicio de obras" hint="📄 Arrastra aquí la carta de Inicio de obras (Word o PDF)" />
+    </section>
   );
 }

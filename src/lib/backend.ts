@@ -28,7 +28,12 @@ export interface Backend {
   /** mode 'probe' → 'exists' | 'empty'; 'move' copies the current data there; 'use' adopts the data already in the folder. */
   changeFolder(path: string, mode: 'probe' | 'move' | 'use'): Promise<string>;
   // --- project photos and files ---
-  saveAttachment(code: string, name: string, dataB64: string, thumbB64?: string): Promise<{ path: string; thumb: string | null }>;
+  /** `folder`: where to save it inside the data folder, e.g. «Proyectos/D1-… - NAME/2026/11 - Noviembre/Fotos». */
+  saveAttachment(code: string, name: string, dataB64: string, thumbB64?: string, folder?: string): Promise<{ path: string; thumb: string | null }>;
+  /** Moves a saved file into `folder` (keeps everything organized); returns its new path. */
+  moveAttachment(path: string, folder: string): Promise<string>;
+  /** Opens a folder of the data folder in the file explorer. */
+  openSubfolder(folder: string): Promise<void>;
   readB64(path: string): Promise<string>;
   openAttachment(path: string): Promise<void>;
   deleteAttachment(path: string): Promise<void>;
@@ -113,10 +118,12 @@ const tauri: Backend = {
     const { invoke } = await import('@tauri-apps/api/core');
     return invoke<string>('change_folder', { path, mode });
   },
-  async saveAttachment(code, name, data, thumb) {
+  async saveAttachment(code, name, data, thumb, folder) {
     const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<{ path: string; thumb: string | null }>('save_attachment', { code, name, data, thumb: thumb ?? null });
+    return invoke<{ path: string; thumb: string | null }>('save_attachment', { code, name, data, thumb: thumb ?? null, folder: folder ?? null });
   },
+  async moveAttachment(path, folder) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<string>('move_attachment', { path, folder }); },
+  async openSubfolder(folder) { const { invoke } = await import('@tauri-apps/api/core'); await invoke('open_folder', { folder }); },
   async readB64(path) { const { invoke } = await import('@tauri-apps/api/core'); return invoke<string>('read_file_b64', { path }); },
   async openAttachment(path) { const { invoke } = await import('@tauri-apps/api/core'); await invoke('open_attachment', { path }); },
   async deleteAttachment(path) { const { invoke } = await import('@tauri-apps/api/core'); await invoke('delete_attachment', { path }); },
@@ -181,8 +188,10 @@ const web: Backend = {
   async pickFolder() { return null; },
   async changeFolder() { return ''; },
   // In the browser (testing) files only live in memory
-  async saveAttachment(code, name, data, thumb) {
-    const path = `proyectos/${code}/${Date.now().toString(36)}_${name}`;
+  async moveAttachment(path) { return path; },
+  async openSubfolder() { /* solo escritorio */ },
+  async saveAttachment(code, name, data, thumb, folder) {
+    const path = `${folder ?? `proyectos/${code}`}/${Date.now().toString(36)}_${name}`;
     memory.set(path, data); if (thumb) memory.set(path + '.mini.jpg', thumb);
     return { path: path, thumb: thumb ? path + '.mini.jpg' : null };
   },
@@ -252,6 +261,8 @@ const server: Backend = {
   },
   async dataFolder() { return `${location.host}${location.pathname.replace(/[^/]*$/, '')} (servidor)`; },
   async backup(name, content) { await api('backup', { name, content }); return name; },
+  async moveAttachment(path) { return path; },
+  async openSubfolder() { /* solo escritorio */ },
   async saveAttachment(code, name, data, thumb) {
     const r = await api<{ path: string; thumb: string | null }>('upload', { code, name, data, thumb: thumb ?? null });
     return { path: r.path, thumb: r.thumb };
