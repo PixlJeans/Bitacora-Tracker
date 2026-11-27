@@ -183,3 +183,4 @@ body.theme-dark .tk-row.k-regSign .tk-what,body.theme-dark .tk-row.k-regElab .tk
 body.theme-dark .tk-steps .tk-what{color:#b49cff;text-shadow:0 0 10px rgba(167,139,250,.35)}
 body.theme-dark .tk-step{border-color:rgba(167,139,250,.45)}
 body.theme-dark .tk-step:hover:not(:disabled){box-shadow:0 0 12px -3px rgba(167,139,250,.8)}
+.sf-why{font-style:normal;font-weight:700;font-size:.64rem;margin-left:.3rem;padding:0 .35rem;border-radius:4px;background:color-mix(in srgb,var(--closing) 20%,transparent);color:var(--closing)}

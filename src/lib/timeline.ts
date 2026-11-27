@@ -7,7 +7,7 @@ import { KIND_NAME } from './docKind';
 import { daysInMonth, shortDate } from './dates';
 
 export type TlKind = 'setena' | 'visit' | 'bitacora' | 'regencia' | 'receipt' | 'doc' | 'start';
-export interface TlItem { date: string; kind: TlKind; title: string; text?: string; tag?: string; exact: boolean }
+export interface TlItem { date: string; kind: TlKind; title: string; text?: string; tag?: string; exact: boolean; count?: number }
 
 const SETENA_LINE = /^SETENA (\d{2})\/(\d{2})\/(\d{4}):\s?(.*)$/;
 
@@ -73,7 +73,7 @@ export function timelineOf(b: Project): TlItem[] {
     out.push({ date, kind: 'visit', title: `📷 ${n} foto${n === 1 ? '' : 's'} en SETENA`, tag: 'fotos', exact: true });
   if (b.setenaStart) out.push({ date: b.setenaStart, kind: 'start', title: 'Primera anotación en SETENA (inicio de la bitácora)', exact: true });
   const rank: Record<TlKind, number> = { receipt: 0, regencia: 1, bitacora: 2, setena: 3, visit: 4, doc: 5, start: 6 };
-  return merge(out).sort((a, c) => c.date.localeCompare(a.date) || rank[a.kind] - rank[c.kind]);
+  return merge(dedupe(out)).sort((a, c) => c.date.localeCompare(a.date) || rank[a.kind] - rank[c.kind]);
 }
 
 
@@ -107,4 +107,18 @@ function merge(items: TlItem[]): TlItem[] {
     }
   }
   return items.filter(x => !drop.has(x));
+}
+
+/** The same PDF uploaded twice to SETENA on the same day (same title and text): shown once, «PDF ×2». */
+function dedupe(items: TlItem[]): TlItem[] {
+  const seen = new Map<string, { x: TlItem; n: number }>();
+  const out: TlItem[] = [];
+  for (const x of items) {
+    if (x.tag !== 'PDF') { out.push(x); continue; }
+    const k = `${x.date}|${x.kind}|${x.title}|${x.text ?? ''}`;
+    const s = seen.get(k);
+    if (s) { s.n++; s.x.count = s.n; continue; }
+    seen.set(k, { x, n: 1 }); out.push(x);
+  }
+  return out;
 }

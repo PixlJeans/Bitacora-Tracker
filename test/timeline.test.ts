@@ -68,5 +68,10 @@ const keptSg = normalize(JSON.parse(JSON.stringify({ projects: [sg] }))).project
 assert.equal(keptSg.clientSigned, "2024-09-12"); assert.equal(keptSg.clientName, "LAURA URENA ALFARO");
 const kept2 = normalize({ projects: [{ id: 'k', code: 'D1-0004-2024', name: 'K', status: 'open', openedOn: '2024-01-01', docs: { 'a.pdf': { kind: 'regencia', project: 'LOTE I', place: 'Cartago, El Guarco, Tejar', lat: 9.84, lng: -83.96, noSig: true, placed: true } } }] }).projects[0].docs!['a.pdf'];
 assert.deepEqual([kept2.project, kept2.place, kept2.lat, kept2.lng, kept2.noSig], ['LOTE I', 'Cartago, El Guarco, Tejar', 9.84, -83.96, true]);
+// the same regencia uploaded twice the same day: one item, ×2
+const dup = normalize({ projects: [{ id: 'd', code: 'D1-0005-2020', name: 'D', status: 'closing', openedOn: '2020-11-23',
+  docs: { '2023-06-16_aaaa1111.pdf': { kind: 'regencia', ira: 'IRA-I-2023', final: true, period: 'Diciembre 2022 - Mayo 2023', placed: true }, '2023-06-16_bbbb2222.pdf': { kind: 'regencia', ira: 'IRA-I-2023', final: true, period: 'Diciembre 2022 - Mayo 2023', placed: true } } }] }).projects[0];
+const td = timelineOf(dup).filter(x => x.title.startsWith('Informe'));
+assert.equal(td.length, 1); assert.equal(td[0].count, 2);
 console.log('timeline OK:', t.length, 'events');
 process.exit(0);

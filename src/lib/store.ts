@@ -125,7 +125,7 @@ function normDocs(o: any): NonNullable<Project['docs']> {
     // everything read from the PDF is kept, so nothing has to be read again after a restart
     out[k] = JSON.parse(JSON.stringify({ kind: v.kind, final: v.final ? true : undefined, ira: s(v.ira), expediente: s(v.expediente), period: s(v.period), number: s(v.number),
       project: t(v.project), place: t(v.place), lat: n(v.lat), lng: n(v.lng), noPlace: v.noPlace ? true : undefined,
-      clientSigned: iso(v.clientSigned), clientName: t(v.clientName), regenteSigned: iso(v.regenteSigned), noSig: v.noSig ? true : undefined, placed: !!v.placed }));
+      clientSigned: iso(v.clientSigned), clientName: t(v.clientName), regenteSigned: iso(v.regenteSigned), noSig: v.noSig ? true : undefined, sigV: n(v.sigV), placed: !!v.placed }));
   }
   return out;
 }

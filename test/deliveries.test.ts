@@ -10,6 +10,7 @@ import { backend } from '../src/lib/backend';
 import { scanFolders } from '../src/lib/scan';
 import { docReader } from '../src/lib/docSort';
 import { placeOf, signaturesOf } from '../src/lib/docKind';
+import { signaturesInPdf, signatureLines } from '../src/lib/pdfSig';
 import { crtm05ToLatLng, crtmFromText } from '../src/lib/geo';
 import { classifyDoc } from '../src/lib/docKind';
 // the PDFs of the scanner tests are regencias of their own project
@@ -392,7 +393,7 @@ console.log('deliveries OK');
 // ---- what a SETENA PDF is, from its own first page (texts as pdf.js reads the real ones) ----
 {
   const reg = classifyDoc('Informe de Regencia Ambiental IRA-I-2024 Proyecto: CONDOMINIO VISTA DEL BOSQUE Propietario: Urbanizadora HJH del Este S.A. Expediente Administrativo: D1-0170-2020-SETENA CARLOS JIMENEZ PEREZ (FIRMA) Periodo de Informe Regencial: Agosto 2023 - Enero 2024 Firmado', 'D1-0170-2020');
-  assert.deepEqual(reg, { kind: 'regencia', ira: 'IRA-I-2024', expediente: 'D1-0170-2020', period: 'Agosto 2023 - Enero 2024', project: 'CONDOMINIO VISTA DEL BOSQUE', noPlace: true, noSig: true });
+  assert.deepEqual(reg, { kind: 'regencia', ira: 'IRA-I-2024', expediente: 'D1-0170-2020', period: 'Agosto 2023 - Enero 2024', project: 'CONDOMINIO VISTA DEL BOSQUE', noPlace: true, noSig: true, sigV: 2 });
   assert.equal(fin_project(), 'PUENTE LA GRAN VÍA');
   function fin_project() { return classifyDoc('Informe Final Consolidado de Regencia Ambiental IRA-II-2025 Proyecto: PUENTE LA GRAN VÍA Propietario: LAURA UREÑA ALFARO Expediente Administrativo: D1-0848-2022-SETENA', 'D1-0848-2022').project; }
   const fin = classifyDoc('Informe Final Consolidado de Regencia Ambiental IRA-II-2025 Proyecto: PUENTE LA GRAN VÍA Propietario: LAURA UREÑA ALFARO Expediente Administrativo: D1-0848-2022-SETENA Periodo de la Regencia Febrero 2025 - Julio 2025', 'D1-0848-2022');
@@ -473,12 +474,18 @@ console.log('deliveries OK');
 // ---- who signed a regencia and when (text as the real PDFs come out: jumbled around «(FIRMA)») ----
 {
   const a = signaturesOf("CARLOS JIMENEZ PEREZ (FIRMA) digitalmente LAURA UREÑA Firmado por LAURA UREÑA ALFARO (FIRMA) ALFARO Fecha: 2026.02.27 12:09:10 -06'00' (FIRMA) Firmado digitalmente por CARLOS JIMENEZ PEREZ (FIRMA) Fecha: 2026.02.27 16:54:41 -06'00'");
-  assert.deepEqual(a, { clientSigned: '2026-02-27', clientName: 'LAURA URENA ALFARO', regenteSigned: '2026-02-27' });
+  assert.deepEqual(a, { clientSigned: '2026-02-27', clientName: 'LAURA UREÑA ALFARO', regenteSigned: '2026-02-27', sigV: 2 });
   const b2 = signaturesOf("LAURA UREÑA ALFARO (FIRMA) Firmado digitalmente por CARLOS CARLOS JIMENEZ JIMENEZ PEREZ (FIRMA) PEREZ (FIRMA) Fecha: 2024.03.07 19:01:46 -06'00' Firmado digitalmente por LAURA UREÑA ALFARO (FIRMA) Fecha: 2024.03.07 09:13:51");
-  assert.equal(b2.regenteSigned, '2024-03-07'); assert.equal(b2.clientName, 'LAURA URENA ALFARO');
+  assert.equal(b2.regenteSigned, '2024-03-07'); assert.equal(b2.clientName, 'LAURA UREÑA ALFARO');
   const c = signaturesOf("Firmado digitalmente por CARLOS JIMENEZ PEREZ (FIRMA) Fecha: 2024.09.13 13:36:48 Firmado por LAURA UREÑA ALFARO (FIRMA) ALFARO Fecha: 2024.09.12 (FIRMA) 17:16:25");
   assert.equal(c.clientSigned, '2024-09-12', 'signed by the client in September (sent to SETENA in November)');
-  assert.deepEqual(signaturesOf('Informe sin firmas'), { noSig: true });
+  assert.deepEqual(signaturesOf('Informe sin firmas'), { noSig: true, sigV: 2 });
+  // the signatures as they are stored in the PDF file (pdf.js doesn't show them): «/Name (…)» + «/M (D:…)»
+  const raw = new TextEncoder().encode('<</Type/Sig/Name(LAURA URE\u00d1A ALFARO \\(FIRMA\\))/M(D:20240912121010-06\'00\')>> <</Name(CARLOS JIMENEZ PEREZ \\(FIRMA\\))/M(D:20240913)>>');
+  const lat1 = new Uint8Array([...new TextDecoder().decode(raw)].map(ch => ch.charCodeAt(0) & 255)); // as latin-1 bytes
+  assert.deepEqual(signaturesInPdf(lat1), [{ name: 'LAURA UREÑA ALFARO (FIRMA)', date: '2024-09-12' }, { name: 'CARLOS JIMENEZ PEREZ (FIRMA)', date: '2024-09-13' }]);
+  const fromFile = signaturesOf(signatureLines(lat1));
+  assert.deepEqual([fromFile.clientSigned, fromFile.clientName, fromFile.regenteSigned], ['2024-09-12', 'LAURA UREÑA ALFARO', '2024-09-13']);
 }
 // ---- where a project is, from its regencia («Ubicación del Proyecto»; CRTM05 checked against a photo's GPS) ----
 {

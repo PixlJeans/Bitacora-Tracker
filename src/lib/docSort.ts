@@ -22,10 +22,15 @@ function b64ToBuf(b64: string): ArrayBuffer {
 }
 
 /** Text of the first pages of a PDF of the data folder (replaceable in tests). */
+import { signatureLines } from './pdfSig';
+
 export const docReader = {
   async text(path: string): Promise<string> {
     const { textFromPdf } = await import('./pdf');
-    return textFromPdf(b64ToBuf(await backend.readB64(path)), 2);
+    const buf = b64ToBuf(await backend.readB64(path));
+    // the digital signatures are not in the page text: read them from the file first (pdf.js may take the buffer)
+    const sigs = signatureLines(buf);
+    return `${await textFromPdf(buf.slice(0), 2)}${sigs ? `\n\n${sigs}` : ''}`;
   }
 };
 
@@ -66,7 +71,7 @@ export async function sortDocuments(b: Project, files: { path: string }[], budge
     const k = known[m[3]];
     // read again (once) a regencia read by an older version: for the name, the place or the client's signature
     const reread = !!k && k.kind === 'regencia' && ((needName && !k.project) || (needPlace && k.lat === undefined && !k.noPlace)
-      || (!k.clientSigned && !k.regenteSigned && !k.noSig));
+      || (!k.clientSigned && !k.regenteSigned && (k.sigV ?? 0) < 2));
     if (k && !reread) continue;
     if (failedThisSession.has(f.path)) continue;
     if (budget.left <= 0) break;

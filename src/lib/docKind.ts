@@ -28,6 +28,7 @@ export interface DocInfo {
   clientName?: string;      // …and who («LAURA UREÑA ALFARO»)
   regenteSigned?: string;   // date the regente signed it
   noSig?: boolean;          // regencia read for its signatures, and none could be read
+  sigV?: number;            // version of the signature reader that read it (2 = also from the file's signature fields, v61)
 }
 
 /** Folder (inside the month) where each kind goes. `null` = leave it where it is. */
@@ -93,14 +94,14 @@ export function placeOf(text: string): Pick<DocInfo, 'place' | 'lat' | 'lng' | '
 }
 
 /** The regente of this app (Ing. Carlos Alberto Jiménez Pérez): his signature is not the client's. */
-const REGENTE = /JIMENEZ\s+(?:JIMENEZ\s+)?PEREZ/i;
+const REGENTE = /JIM[EÉ]NEZ\s+(?:JIM[EÉ]NEZ\s+)?P[EÉ]REZ/i;
 
 /** Digital signatures of a regencia («Firmado digitalmente por NOMBRE (FIRMA) Fecha: 2026.02.27 …»). The PDF text
  *  comes jumbled (names repeated, split around «(FIRMA)»), so each «Fecha:» is paired with the «(FIRMA)» just
  *  before it: the regente's (Jiménez Pérez) or the client's (anyone else). The client's earliest date is kept. */
-export function signaturesOf(text: string): Pick<DocInfo, 'clientSigned' | 'clientName' | 'regenteSigned' | 'noSig'> {
-  const flat = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
-  const out: Pick<DocInfo, 'clientSigned' | 'clientName' | 'regenteSigned' | 'noSig'> = {};
+export function signaturesOf(text: string): Pick<DocInfo, 'clientSigned' | 'clientName' | 'regenteSigned' | 'noSig' | 'sigV'> {
+  const flat = text.normalize('NFC').replace(/\s+/g, ' ');
+  const out: Pick<DocInfo, 'clientSigned' | 'clientName' | 'regenteSigned' | 'noSig' | 'sigV'> = {};
   let from = 0;
   for (const m of flat.matchAll(/Fecha:\s*(\d{4})\.(\d{2})\.(\d{2})/g)) {
     const seg = flat.slice(from, m.index!);
@@ -112,12 +113,13 @@ export function signaturesOf(text: string): Pick<DocInfo, 'clientSigned' | 'clie
     if (REGENTE.test(tail)) { if (!out.regenteSigned || date < out.regenteSigned) out.regenteSigned = date; continue; }
     if (out.clientSigned && out.clientSigned <= date) continue;
     // the name: capital words right before «(FIRMA)», repeated words removed
-    const words = (/((?:[A-Z]{2,}\s+){1,8})\(FIRMA\)\s*$/.exec(seg.slice(0, at + 7))?.[1] ?? '').trim().split(/\s+/)
+    const words = (/((?:[A-ZÁÉÍÓÚÑÜ]{2,}\s+){1,8})\(FIRMA\)\s*$/.exec(seg.slice(0, at + 7))?.[1] ?? '').trim().split(/\s+/)
       .filter(w => !/^(FIRMADO|DIGITALMENTE|POR|FECHA)$/.test(w));
     const name = words.filter((w, i) => words.indexOf(w) === i).join(' ');
     out.clientSigned = date;
     if (name) out.clientName = name;
   }
+  out.sigV = 2;
   if (!out.clientSigned && !out.regenteSigned) out.noSig = true;
   return out;
 }

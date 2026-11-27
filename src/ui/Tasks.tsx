@@ -132,8 +132,13 @@ export function TasksView({ d }: { d: AppData }) {
       <SetenaFeed d={d} />
       {/* v56: no «mark everything as done» here: the app follows SETENA, and a bulk check made history SETENA doesn't have */}
       {noDate.length > 0 && (
-        <div className="tk-catchup warn">📅 {noDate.length} proyecto(s) sin fecha de apertura:{' '}
-          {noDate.map(b => <button key={b.id} className="dp-link" onClick={() => openEditor(b)}>{b.code}</button>)}</div>
+        <div className={`tk-catchup ${noDate.some(b => (b.setena?.entries ?? 0) > 0) ? 'warn' : ''}`}>📅 {noDate.length} sin fecha de apertura:{' '}
+          {noDate.map(b => <button key={b.id} className="dp-link" onClick={() => openEditor(b)} title={b.setena?.approvedOn ? `Aprobada en SETENA el ${b.setena.approvedOn}` : undefined}>{b.code}</button>)}
+          <span className="muted">
+            {noDate.every(b => b.setena && !b.setena.entries)
+              ? ' · todavía sin anotaciones en SETENA: la fecha se pone sola con la primera anotación («📥 Descargar todo de SETENA»).'
+              : ' · ponla en ✏️ Editar datos, o se toma de la primera anotación en SETENA.'}
+          </span></div>
       )}
       {section('⚠️ Atrasadas', 'late', overdue, 'Nada atrasado. ✓', allLate ? undefined : SHOW_LATE)}
       {section('📅 Esta semana', 'week', week, 'Nada para esta semana.')}

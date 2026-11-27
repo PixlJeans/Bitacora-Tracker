@@ -52,7 +52,7 @@ export async function scanFolders(force = false): Promise<string> {
   const bits: { id: string; key: string; date: string }[] = [];
   const photoRecords: { id: string; shots: Record<string, number> }[] = [];
   const wrong: { id: string; key: string; date: string }[] = [];
-  const signFills: { id: string; key: string; date: string; fromPdf: boolean }[] = [];
+  const signFills: { id: string; key: string; date: string; fromPdf: boolean; fix?: boolean }[] = [];
   let sorted = 0;
   const starts: { id: string; date: string }[] = [];
   const places: { id: string; lat: number; lng: number }[] = [];
@@ -193,9 +193,12 @@ export async function scanFolders(force = false): Promise<string> {
       }
       // regencias sent before «Firma del cliente» existed: signed on the date of the client's digital signature
       for (const [k, e] of Object.entries(b.deliveries ?? {})) {
-        if (!k.startsWith('r:') || !e.uploaded || e.signed) continue;
+        if (!k.startsWith('r:') || !e.uploaded) continue;
         const sig = Object.entries(b.docs ?? {}).find(([n, x]) => n.startsWith(`${e.uploaded}_`) && x.kind === 'regencia' && x.clientSigned)?.[1].clientSigned;
-        signFills.push({ id: b.id, key: k, date: sig && sig <= e.uploaded ? sig : e.uploaded, fromPdf: !!sig });
+        // not signed yet → the PDF's date; signed ON the upload day (filled before the PDF's signature could be read)
+        // and the PDF says the client signed earlier → its real date
+        if (!e.signed) signFills.push({ id: b.id, key: k, date: sig && sig <= e.uploaded ? sig : e.uploaded, fromPdf: !!sig });
+        else if (sig && e.signed === e.uploaded && sig < e.uploaded) signFills.push({ id: b.id, key: k, date: sig, fromPdf: true, fix: true });
       }
       const fixing = new Set(wrong.filter(w => w.id === b.id).map(w => w.key));
       for (const [key, dates] of regDocs) {
@@ -244,7 +247,15 @@ export async function scanFolders(force = false): Promise<string> {
       return [sorted && `${sorted} archivo(s) de SETENA ordenados en Fotos / Regencias`, docsMsg, tidyMsg, renamed.length && `nombre corregido desde su regencia: ${renamed.join(', ')}`, locatedByDoc.length && `ubicación tomada de las coordenadas de su regencia: ${locatedByDoc.join(', ')}`, adopted && `${adopted} archivo(s) de una carpeta con el nombre viejo del proyecto pasados a la actual`].filter(Boolean).join(' · ');
     mutate(d => {
       for (const v of visits) { const b = d.projects.find(x => x.id === v.id); if (b && !deliveryOf(b, v.key).visit) { applyStep(b, v.key, 'visit', v.date); applyStep(b, v.key, 'photos', v.date); } }
-      for (const f of signFills) { const b = d.projects.find(x => x.id === f.id); if (b && !deliveryOf(b, f.key).signed && deliveryOf(b, f.key).uploaded) applyStep(b, f.key, 'signed', f.date); }
+      for (const f of signFills) {
+        const b = d.projects.find(x => x.id === f.id); if (!b) continue;
+        const e = deliveryOf(b, f.key);
+        if (e.uploaded && (!e.signed || (f.fix && e.signed === e.uploaded))) {
+          applyStep(b, f.key, 'signed', f.date);
+          // it can't have been elaborated after the client signed it
+          if (deliveryOf(b, f.key).letter && deliveryOf(b, f.key).letter! > f.date) applyStep(b, f.key, 'letter', f.date);
+        }
+      }
       for (const w of wrong) {
         const b = d.projects.find(x => x.id === w.id);
         if (!b || deliveryOf(b, w.key).uploaded !== w.date) continue;

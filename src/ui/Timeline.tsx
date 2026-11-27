@@ -66,7 +66,7 @@ export function Timeline({ b }: { b: Project }) {
                   <span className="tl-dot">{ICON[x.kind]}</span>
                   <span className={`tl-date ${x.exact ? '' : 'approx'}`} title={x.exact ? undefined : 'Se marcó sin guardar la fecha: se muestra el día que tocaba'}>{x.exact ? '' : '≈ '}{shortDate(x.date)}</span>
                   <div className="tl-body">
-                    <b>{x.title}</b>{x.tag && <span className={`tl-tag ${x.tag.includes('marcada en la app') ? 'tl-app' : ''}`}>{x.tag}</span>}
+                    <b>{x.title}</b>{x.count && x.count > 1 && <span className="tl-tag" title="El mismo PDF está subido varias veces en SETENA ese día">×{x.count}</span>}{x.tag && <span className={`tl-tag ${x.tag.includes('marcada en la app') ? 'tl-app' : ''}`}>{x.tag}</span>}
                     {x.text && <p className={long && !open.has(i) ? 'clip' : ''} title={long && !open.has(i) ? 'Clic para ver todo' : undefined}
                       onClick={() => long && setOpen(s => { const n = new Set(s); if (n.has(i)) n.delete(i); else n.add(i); return n; })}>{x.text}</p>}
                   </div>

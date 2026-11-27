@@ -13,6 +13,16 @@ import { toast } from './core';
 const DAYS = 45;
 const ICON: Partial<Record<TlItem['kind'], string>> = { setena: '🌐', regencia: '🗂️', receipt: '🧾', visit: '📷' };
 
+/** Why a project may have gone quiet, only from what SETENA itself says: its last entry mentions a resignation or the
+ *  closing, or the progress is at 100%. (A hint to decide whether to archive it; nothing is changed.) */
+function whyQuiet(b: Project): string {
+  const last = timelineOf(b).find(x => x.kind === 'setena')?.text ?? '';
+  if (/renuncia/i.test(last)) return 'renuncia';
+  if (/cierre|cerrar la bit[aá]cora|proyecto conclu/i.test(last)) return 'cierre';
+  if (b.setena?.avance === 100) return 'avance 100%';
+  return '';
+}
+
 export function SetenaFeed({ d }: { d: AppData }) {
   const today = todayISO();
   const [all, setAll] = useState(false);
@@ -60,8 +70,9 @@ export function SetenaFeed({ d }: { d: AppData }) {
         <div className="sf-quiet">
           <span>⏳ <b>{quiet.length}</b> abierta{quiet.length === 1 ? '' : 's'} sin anotar hace más de un mes:</span>
           {quiet.slice(0, 14).map(({ b, last }) => (
-            <button type="button" key={b.id} className="sf-chip" onClick={() => open(b)} title={`${b.name} · ${last ? 'última anotación ' + shortDate(last) + ' ' + last.slice(0, 4) : 'sin anotaciones'}`}>
+            <button type="button" key={b.id} className="sf-chip" onClick={() => open(b)} title={`${b.name} · ${last ? 'última anotación ' + shortDate(last) + ' ' + last.slice(0, 4) : 'sin anotaciones'}${whyQuiet(b) ? ' · ' + whyQuiet(b) : ''}`}>
               <span className="mono">{b.code}</span> <small>{last ? agoText(last, today).replace('hace ', '') : 'nunca'}</small>
+              {whyQuiet(b) && <em className="sf-why">{whyQuiet(b)}</em>}
             </button>
           ))}
           {quiet.length > 14 && <small className="muted">y {quiet.length - 14} más (📊 Informe)</small>}
