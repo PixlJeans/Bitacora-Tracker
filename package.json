@@ -1,7 +1,7 @@
 {
   "name": "bitacora-tracker",
   "private": true,
-  "version": "1.6.31",
+  "version": "1.6.28",
   "type": "module",
   "description": "Tracking of SETENA environmental logbooks (bitácoras)",
   "scripts": {
@@ -12,7 +12,7 @@
     "tauri": "tauri",
     "app:dev": "tauri dev",
     "app:build": "tauri build",
-    "test": "tsx test/parser.test.ts && tsx test/schedule.test.ts && tsx test/search.test.ts && tsx test/deliveries.test.ts && tsx test/timeline.test.ts",
+    "test": "tsx test/parser.test.ts && tsx test/schedule.test.ts && tsx test/search.test.ts && tsx test/deliveries.test.ts && tsx test/timeline.test.ts && tsx test/plan.test.ts",
     "build:web": "vite build --mode web",
     "version:bump": "node scripts/bump-version.mjs"
   },

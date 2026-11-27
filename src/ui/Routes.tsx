@@ -1,11 +1,13 @@
 // ===== Rutas: weekly routes on Google Maps, from project to project =====
-// The week's pending inspections, each project once. «Por día»: one route per day (by the inspection
-// date). «Sugeridas»: nearby projects grouped into trips, to schedule each trip on a day.
+// The week's pending inspections, each project once. «Plan de la semana» (default): every pending inspection,
+// late ones included, spread over the days left in the week as trips of nearby projects (lib/plan.ts).
+// «Por fecha»: one route per day by the inspection date. «Sugeridas»: nearby projects grouped into trips.
 // Every route starts at the start point (home / office), visits the projects in the shortest order
 // found and (optionally) comes back. «Abrir en Google Maps» opens the route ready to drive.
 import { useEffect, useState } from 'react';
 import type { AppData, Project } from '../lib/types';
 import { reportTasks, type ReportTask } from '../lib/schedule';
+import { planDays, planWeek } from '../lib/plan';
 import { addDays, fromISO, longDate, monthNameOf, shortDate, todayISO } from '../lib/dates';
 import { distanceKm, groupNearby, kmTxt, parseCoordinates, planRoute, routeKm, routeLink, type Point } from '../lib/geo';
 import { editDelivery, getData, markStep, mutate } from '../lib/store';
@@ -34,7 +36,7 @@ function stopsOf(list: ReportTask[]): Stop[] {
 export function RoutesView({ d }: { d: AppData }) {
   const today = todayISO();
   const [mon, setMon] = useState(() => mondayOf(today));
-  const [mode, setMode] = useState<'day' | 'suggest'>('day');
+  const [mode, setMode] = useState<Mode>('plan');
   const [withLate, setWithLate] = useState(false);
   useEffect(() => {
     const f = (e: Event) => setMon(mondayOf(String((e as CustomEvent).detail)));
@@ -48,12 +50,18 @@ export function RoutesView({ d }: { d: AppData }) {
 
   const { overdue, upcoming } = reportTasks(d, today, sun);
   const inWeek = [...overdue, ...upcoming].filter(t => t.kind === 'inspection' && t.date >= mon && t.date <= sun);
-  const late = withLate ? overdue.filter(t => t.kind === 'inspection' && t.date < mon) : [];
+  // the plan always includes what is late (catching up is the point); the other views only when ticked
+  const late = withLate || mode === 'plan' ? overdue.filter(t => t.kind === 'inspection' && t.date < mon) : [];
   const stops = stopsOf([...inWeek, ...late]);
   const lateCount = new Set(overdue.filter(t => t.kind === 'inspection' && t.date < mon).map(t => t.b.id)).size;
 
-  const routes: { title: string; day?: string; stops: Stop[] }[] = [];
-  if (mode === 'day') {
+  const routes: Route[] = [];
+  if (mode === 'plan') {
+    const plan = planWeek(stops, planDays(mon, today), radius);
+    for (const x of plan.days) routes.push({ title: `${DAYS[fromISO(x.day).getDay()]} ${shortDate(x.day)}`, day: x.day, stops: x.stops });
+    if (plan.withoutLocation.length) routes.push({ title: 'Sin ubicación', stops: plan.withoutLocation });
+    if (plan.overflow.length) routes.push({ title: 'Para la semana siguiente', stops: plan.overflow, later: true });
+  } else if (mode === 'day') {
     const lateStops = stops.filter(s => s.date < mon);
     if (lateStops.length) routes.push({ title: '⚠️ Atrasadas (sin día)', stops: lateStops });
     for (let i = 0; i < 7; i++) {
@@ -77,7 +85,8 @@ export function RoutesView({ d }: { d: AppData }) {
           {mon !== mondayOf(today) && <button className="dp-link" onClick={() => setMon(mondayOf(today))}>esta semana</button>}
         </div>
         <div className="ed-tabs">
-          <button className={mode === 'day' ? 'on' : ''} onClick={() => setMode('day')}>📅 Por día</button>
+          <button className={mode === 'plan' ? 'on' : ''} onClick={() => setMode('plan')} title="Todas las inspecciones pendientes (también las atrasadas), repartidas en los días que quedan, juntando proyectos cercanos">🗓️ Plan de la semana</button>
+          <button className={mode === 'day' ? 'on' : ''} onClick={() => setMode('day')}>📅 Por fecha</button>
           <button className={mode === 'suggest' ? 'on' : ''} onClick={() => setMode('suggest')}>✨ Sugeridas</button>
         </div>
       </div>
@@ -85,11 +94,12 @@ export function RoutesView({ d }: { d: AppData }) {
       <div className="rt-opts">
         <HomePoint home={home} />
         <label className="rt-opt"><input type="checkbox" checked={back} onChange={e => mutate(dd => { dd.settings.roundTrip = e.target.checked; }, { undo: false })} /> volver a la salida</label>
-        {mode === 'suggest' && <label className="rt-opt">juntar a menos de <select value={radius} onChange={e => mutate(dd => { dd.settings.radiusKm = Number(e.target.value); }, { undo: false })}>
+        {mode !== 'day' && <label className="rt-opt">juntar a menos de <select value={radius} onChange={e => mutate(dd => { dd.settings.radiusKm = Number(e.target.value); }, { undo: false })}>
           {[5, 10, 15, 25, 40, 60].map(k => <option key={k} value={k}>{k} km</option>)}</select></label>}
-        {lateCount > 0 && <label className="rt-opt"><input type="checkbox" checked={withLate} onChange={e => setWithLate(e.target.checked)} /> incluir {lateCount} atrasada(s)</label>}
+        {lateCount > 0 && mode !== 'plan' && <label className="rt-opt"><input type="checkbox" checked={withLate} onChange={e => setWithLate(e.target.checked)} /> incluir {lateCount} atrasada(s)</label>}
       </div>
 
+      {mode === 'plan' && stops.length > 0 && <div className="rt-plan-note muted">🗓️ {stops.length} inspección(es) por hacer{lateCount ? ` (${lateCount} atrasada(s))` : ''}, repartidas en {planDays(mon, today).length} día(s), hasta 6 por día, juntando los proyectos cercanos. «📅 Programar» guarda el día en cada proyecto.{!home ? ' Pon tu 🏠 punto de salida para ordenar mejor las rutas.' : ''}</div>}
       {!stops.length && <div className="rt-empty muted">No hay inspecciones pendientes esta semana.{lateCount > 0 && !withLate ? ' Marca «incluir atrasadas» para planear las que quedaron pendientes.' : ''}</div>}
       {routes.map(r => <RouteCard key={r.title} r={r} home={home} back={back} mode={mode} mon={mon} />)}
     </div>
@@ -121,7 +131,10 @@ function HomePoint({ home }: { home: AppData['settings']['home'] }) {
   );
 }
 
-function RouteCard({ r, home, back, mode, mon }: { r: { title: string; day?: string; stops: Stop[] }; home: Point | null; back: boolean; mode: 'day' | 'suggest'; mon: string }) {
+type Mode = 'plan' | 'day' | 'suggest';
+type Route = { title: string; day?: string; stops: Stop[]; later?: boolean };
+
+function RouteCard({ r, home, back, mode, mon }: { r: Route; home: Point | null; back: boolean; mode: Mode; mon: string }) {
   const today = todayISO();
   const withGps = r.stops.filter(s => s.b.location);
   const noGps = r.stops.filter(s => !s.b.location);
@@ -158,13 +171,14 @@ function RouteCard({ r, home, back, mode, mon }: { r: { title: string; day?: str
         <b>{r.title}</b>
         <span className="muted">{r.stops.length} proyecto(s){order.length > 0 && km * ROAD >= 0.5 && ` · ~${kmTxt(km * ROAD)} aprox.`}</span>
         <span className="grow" />
-        {mode === 'suggest' && r.stops.length > 0 && <span className="rt-sched">
+        {r.later && <span className="muted rt-later">no caben en los días que quedan: salen en el plan de la semana siguiente (›)</span>}
+        {mode !== 'day' && !r.later && r.stops.length > 0 && r.title !== 'Sin ubicación' && <span className="rt-sched">
           <select value={day} onChange={e => setDay(e.target.value)}>
             {Array.from({ length: 7 }, (_, i) => addDays(mon, i)).map(x => <option key={x} value={x}>{DAYS[fromISO(x).getDay()]} {shortDate(x)}</option>)}
           </select>
           <button className="btn sm" onClick={schedule} title="Mueve la inspección de estos proyectos a ese día">📅 Programar</button>
         </span>}
-        {parts.map((p, i) => <button key={i} className="btn sm primary" onClick={() => open(p, i)}>🗺️ {parts.length > 1 ? `Parte ${i + 1}` : 'Abrir en Google Maps'}</button>)}
+        {!r.later && parts.map((p, i) => <button key={i} className="btn sm primary" onClick={() => open(p, i)}>🗺️ {parts.length > 1 ? `Parte ${i + 1}` : 'Abrir en Google Maps'}</button>)}
         {order.length > 0 && <button className="btn sm" onClick={copy} title="Copiar la lista y el enlace">📋</button>}
       </div>
       <div className="rt-body">
