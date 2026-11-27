@@ -1,0 +1,99 @@
+/* ===== Dark mode: the neon look (v58) =====
+   The app's original dark style (Cognose: near-black, the accent color glowing, pill tabs, poster headings),
+   polished, and with the newer parts (En SETENA, Línea de tiempo, firma) drawn in the same neon language.
+   Light mode keeps the SETENA look (setena.css). Colors follow the accent chosen in Ajustes. */
+
+body.theme-dark{
+  --bg:#0b0d10; --card:#14171c; --text:#e9edf1; --muted:#8a94a0; --border:#262b33;
+  --open:#4ade80; --new:#60a5fa; --closing:#fbbf24; --finished:#94a3b8; --danger:#ff5470;
+  --glow:color-mix(in srgb,var(--accent) 55%,transparent);
+  --k-setena:#38bdf8; --k-visit:#4ade80; --k-bitacora:#2dd4bf; --k-regencia:#a78bfa; --k-receipt:#fbbf24; --k-doc:#94a3b8; --k-start:#fb923c;
+}
+body.theme-dark{background:
+  radial-gradient(900px 500px at 100% -10%,color-mix(in srgb,var(--accent) 9%,transparent),transparent 60%),
+  radial-gradient(700px 420px at -10% 110%,color-mix(in srgb,#a78bfa 7%,transparent),transparent 60%),var(--bg)}
+
+/* ---------- top bar ---------- */
+body.theme-dark .top{background:color-mix(in srgb,var(--card) 55%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid transparent;
+  border-image:linear-gradient(90deg,transparent,var(--accent) 30%,color-mix(in srgb,#a78bfa 80%,transparent) 70%,transparent) 1}
+body.theme-dark .brand{align-items:center;gap:.6rem}
+body.theme-dark .brand-mark{color:var(--accent);filter:drop-shadow(0 0 6px var(--glow))}
+body.theme-dark .brand h1{font-size:1.2rem;text-shadow:0 0 18px color-mix(in srgb,var(--accent) 35%,transparent)}
+body.theme-dark .brand small{font-size:.58rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+body.theme-dark .top .search{background:color-mix(in srgb,var(--bg) 70%,transparent)}
+body.theme-dark .top .search:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent),0 0 16px -4px var(--glow)}
+body.theme-dark .btn.primary{color:var(--on-accent);box-shadow:0 0 18px -4px var(--glow)}
+body.theme-dark .btn.primary:hover{box-shadow:0 0 24px -2px var(--glow);filter:brightness(1.08)}
+
+/* ---------- pill tabs ---------- */
+body.theme-dark .seg button.on{box-shadow:0 0 0 1px var(--accent),0 0 14px -3px var(--glow);color:var(--text)}
+body.theme-dark .stats span{text-shadow:none}
+body.theme-dark .stats i{box-shadow:0 0 8px currentColor}
+body.theme-dark .stats i.red{color:var(--danger)} body.theme-dark .stats i.purple{color:#a78bfa} body.theme-dark .stats i:not(.red):not(.purple){color:var(--accent)}
+
+/* ---------- headings ---------- */
+body.theme-dark .tk-sec h3{font-family:'Tallhaus','Anton',sans-serif;font-weight:400;letter-spacing:.6px;font-size:1.05rem;padding-bottom:.25rem;
+  border-bottom:1px solid transparent;border-image:linear-gradient(90deg,var(--accent),transparent 60%) 1}
+body.theme-dark .tk-sec.late h3{border-image:linear-gradient(90deg,var(--danger),transparent 60%) 1}
+body.theme-dark .prow3-h{color:color-mix(in srgb,var(--accent) 70%,var(--muted))}
+
+/* ---------- rows ---------- */
+body.theme-dark .prow3,body.theme-dark .tk-row{background:linear-gradient(180deg,color-mix(in srgb,var(--card) 100%,#fff 2%),var(--card));border-color:var(--border);transition:border-color .15s, box-shadow .15s, transform .25s, opacity .25s}
+body.theme-dark .prow3:hover,body.theme-dark .tk-row:hover{border-color:color-mix(in srgb,var(--accent) 55%,var(--border));box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 25%,transparent),0 0 22px -8px var(--glow)}
+body.theme-dark .prow3.late,body.theme-dark .tk-row.late{border-left-color:var(--danger);box-shadow:-6px 0 14px -10px var(--danger)}
+body.theme-dark .prow3 .c-code,body.theme-dark .tk-proj .mono{color:var(--accent);text-shadow:0 0 10px color-mix(in srgb,var(--accent) 30%,transparent)}
+body.theme-dark .c-task.overdue{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--danger) 35%,transparent)}
+body.theme-dark .c-task.overdue .ck{box-shadow:0 0 10px -2px color-mix(in srgb,var(--danger) 70%,transparent)}
+body.theme-dark .cl-box{transition:box-shadow .15s}
+body.theme-dark .cl-check:hover .cl-box{box-shadow:0 0 10px -2px var(--glow);border-color:var(--accent)}
+body.theme-dark .tk-row.done .cl-box{box-shadow:0 0 12px #22c55e}
+body.theme-dark .status-chip{box-shadow:inset 0 0 0 1px currentColor}
+body.theme-dark .status-chip.status-open{text-shadow:0 0 8px color-mix(in srgb,var(--open) 60%,transparent)}
+body.theme-dark .fchip.on{box-shadow:0 0 12px -3px color-mix(in srgb,var(--text) 50%,transparent)}
+body.theme-dark .fchip.warn.on{box-shadow:0 0 14px -3px var(--danger)}
+
+/* SETENA activity under each name */
+body.theme-dark .c-setena{color:var(--muted)}
+body.theme-dark .c-setena.quiet{color:var(--danger);text-shadow:0 0 10px color-mix(in srgb,var(--danger) 45%,transparent)}
+body.theme-dark .c-av i{background:var(--accent);box-shadow:0 0 6px var(--glow)}
+
+/* info bars */
+body.theme-dark .info-bar,body.theme-dark .tk-catchup{border-left:3px solid var(--accent);box-shadow:-4px 0 14px -10px var(--glow)}
+body.theme-dark .tk-catchup.warn{border-left-color:var(--closing);border-color:color-mix(in srgb,var(--closing) 45%,var(--border))}
+
+/* ---------- «🌐 En SETENA» ---------- */
+body.theme-dark .sf{background:radial-gradient(120% 90% at 0% 0%,color-mix(in srgb,var(--k-setena) 8%,transparent),transparent 55%),var(--card);
+  border:1px solid var(--border);border-radius:14px;box-shadow:0 0 0 1px color-mix(in srgb,var(--k-setena) 12%,transparent),0 10px 30px -18px color-mix(in srgb,var(--k-setena) 60%,transparent)}
+body.theme-dark .sf-h h3{font-family:'Tallhaus','Anton',sans-serif;font-weight:400;letter-spacing:.6px;font-size:1.1rem;color:var(--k-setena);text-shadow:0 0 14px color-mix(in srgb,var(--k-setena) 55%,transparent)}
+body.theme-dark .sf-code{color:var(--accent);text-shadow:0 0 8px color-mix(in srgb,var(--accent) 30%,transparent)}
+body.theme-dark .sf-item:hover{background:color-mix(in srgb,var(--k-setena) 8%,transparent);box-shadow:inset 2px 0 0 var(--k-setena)}
+body.theme-dark .sf-item.k-regencia .sf-txt b{color:var(--k-regencia)} body.theme-dark .sf-item.k-receipt .sf-txt b{color:var(--k-receipt)}
+body.theme-dark .sf-chip{border-color:color-mix(in srgb,var(--danger) 45%,var(--border));background:color-mix(in srgb,var(--danger) 8%,transparent)}
+body.theme-dark .sf-chip:hover{box-shadow:0 0 12px -4px var(--danger)}
+
+/* ---------- project window ---------- */
+body.theme-dark .modal{background:linear-gradient(180deg,color-mix(in srgb,var(--card) 100%,#fff 2%),var(--card));border-color:color-mix(in srgb,var(--accent) 22%,var(--border));
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 10%,transparent),0 20px 60px -20px #000,0 0 40px -22px var(--glow)}
+body.theme-dark .ed-top h2 .mono{color:var(--accent);text-shadow:0 0 12px color-mix(in srgb,var(--accent) 35%,transparent)}
+body.theme-dark .ed-tabs button.on{box-shadow:inset 0 0 0 1.5px var(--accent),0 0 14px -4px var(--glow)}
+body.theme-dark .setena-line{background:color-mix(in srgb,var(--k-setena) 7%,var(--bg));border:1px solid color-mix(in srgb,var(--k-setena) 25%,transparent);border-radius:10px}
+body.theme-dark .sl-bar i{background:var(--k-setena);box-shadow:0 0 6px var(--k-setena)}
+body.theme-dark .ct.st-overdue{box-shadow:0 0 10px -3px var(--danger)}
+body.theme-dark .ct.st-done{box-shadow:0 0 10px -4px var(--glow)}
+body.theme-dark .ct.sel{box-shadow:0 0 0 2px var(--text),0 0 16px -4px var(--glow)}
+
+/* ---------- Línea de tiempo ---------- */
+body.theme-dark .tl-month{background:var(--card);color:var(--accent);font-family:'Tallhaus','Anton',sans-serif;font-weight:400;letter-spacing:.6px;font-size:.95rem;
+  border-bottom:1px solid transparent;border-image:linear-gradient(90deg,var(--accent),transparent 70%) 1;text-shadow:0 0 12px color-mix(in srgb,var(--accent) 35%,transparent)}
+body.theme-dark .tl-list::before{background:linear-gradient(180deg,var(--accent),color-mix(in srgb,#a78bfa 70%,transparent));opacity:.55;box-shadow:0 0 8px var(--glow)}
+body.theme-dark .tl-item.k-setena{--tc:var(--k-setena)} body.theme-dark .tl-item.k-visit{--tc:var(--k-visit)} body.theme-dark .tl-item.k-bitacora{--tc:var(--k-bitacora)}
+body.theme-dark .tl-item.k-regencia{--tc:var(--k-regencia)} body.theme-dark .tl-item.k-receipt{--tc:var(--k-receipt)} body.theme-dark .tl-item.k-doc{--tc:var(--k-doc)} body.theme-dark .tl-item.k-start{--tc:var(--k-start)}
+body.theme-dark .tl-dot{background:var(--bg);box-shadow:0 0 10px -1px var(--tc)}
+body.theme-dark .tl-item:hover{background:color-mix(in srgb,var(--tc) 7%,transparent)}
+body.theme-dark .tl-tag{background:color-mix(in srgb,var(--tc) 16%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--tc) 35%,transparent)}
+body.theme-dark .tl-tag.tl-app{background:transparent;color:var(--muted);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--muted) 35%,transparent)}
+body.theme-dark .tl-gap{border-left-color:color-mix(in srgb,var(--muted) 30%,transparent)}
+body.theme-dark .ct.st-missed{border-color:color-mix(in srgb,var(--muted) 35%,transparent)}
+
+/* floating buttons */
+body.theme-dark .help-fab{box-shadow:0 0 22px -4px var(--glow)}

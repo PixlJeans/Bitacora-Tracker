@@ -1,12 +1,12 @@
 // ===== One delivery: a month (Inspección + Bitácora) or a Regencia (every 6 months) =====
 // Month: 🚗 Inspección (with its photos) and 📋 Llenado de bitácora (a check).
-// Regencia: ✍️ Elaboración (a check) and 📤 Subir (attach the Word / PDF). Dates movable to any month.
+// Regencia: ✍️ Elaboración → 🖊️ Firma del cliente (the developer signs it) → 📤 Subir (your mom sends it to SETENA) → 🧾 Nota de recibido.
 // Files are saved in Proyectos/<Código - Nombre>/<Año>/<MM - Mes>/Fotos|Regencias.
 // Everything is saved to the data immediately.
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { Project, Step } from '../lib/types';
 import { MONTHLY_NAME, SEMIANNUAL_NAME, STEPS } from '../lib/types';
-import { inspectionDate, monthlyDue, monthlyDueAuto, regenciaDue } from '../lib/schedule';
+import { inspectionDate, monthlyDue, monthlyDueAuto, regenciaDue, monthLive, regenciaLive } from '../lib/schedule';
 import { shortDate, longDate, fromISO, monthNameOf, todayISO } from '../lib/dates';
 import { addDeliveryFiles, editDelivery, deliveryOf, getData, markStep, relocateFiles, removeDeliveryFile } from '../lib/store';
 import { backend } from '../lib/backend';
@@ -67,6 +67,7 @@ export function DeliveryCard({ b, itemKey: key }: { b: Project; itemKey: string;
       </> : <>
         <RegenciaInfo b={b} itemKey={key} />
         <CheckRow b={b} itemKey={key} step="letter" name="✍️ Elaboración de la regencia" today={today} />
+        <CheckRow b={b} itemKey={key} step="signed" name="🖊️ Firma del cliente" today={today} />
         <CheckRow b={b} itemKey={key} step="uploaded" name="📤 Subir regencia" today={today} date={due} />
         <CheckRow b={b} itemKey={key} step="received" name="🧾 Nota de recibido" today={today}
           extra={<FolderButton b={b} itemKey={key} folder={receiptFolder(b, key)} label="Notas de recibido" />} />
@@ -87,8 +88,10 @@ export function CheckRow({ b, itemKey: key, step, name, date, auto, today, onMov
     markStep(b.id, key, step, d);
     toast(d ? `✓ ${b.code}: ${name.replace(/^\S+\s/, '')}` : `${b.code}: ${name.replace(/^\S+\s/, '')} desmarcada`, true);
   };
+  // already history (v53): a month before last month, or a regencia whose next one is already due — grey, not red
+  const past = !on && (key.startsWith('m:') ? !monthLive(key.slice(2), today) : key.startsWith('r:') ? !regenciaLive(b, key.slice(2), today) : false);
   return (
-    <div className={`cl-row ${on ? 'on' : date && date < today ? 'late' : ''}`}>
+    <div className={`cl-row ${on ? 'on' : past ? 'past' : date && date < today ? 'late' : ''}`} title={past ? 'Ya pasó: queda en la historia como «sin anotación en SETENA»' : undefined}>
       <label className="cl-check">
         <input type="checkbox" checked={on} onChange={toggle} />
         <span className="cl-box">{on && <Ic n="check" size={14} />}</span>
@@ -98,7 +101,7 @@ export function CheckRow({ b, itemKey: key, step, name, date, auto, today, onMov
         {on ? <span className="ent-date-edit"><small className="muted">hecha el</small>
           <input type="date" className="ent-step-date" value={e[step]!} title="Fecha en que se hizo (editable)" onChange={ev => ev.target.value && markStep(b.id, key, step, ev.target.value)} /></span>
           : date && onMove && auto ? <DateMover b={b} itemKey={key} what={name.replace(/^\S+\s/, '')} date={date} auto={auto} onMove={onMove} />
-          : date ? <small className={date < today ? 'red-t' : 'muted'}>{longDate(date)} · {daysText(daysUntil(date, today))}</small> : null}
+          : date ? <small className={past ? 'muted' : date < today ? 'red-t' : 'muted'}>{longDate(date)} · {past ? 'ya pasó' : daysText(daysUntil(date, today))}</small> : null}
         {extra}
       </span>
     </div>

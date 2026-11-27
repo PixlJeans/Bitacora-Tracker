@@ -13,14 +13,14 @@ when the window is closed to the tray. The app's screens are in Spanish; the cod
 | | |
 |---|---|
 | **Projects** | Each project = code `D1-XXXX-YYYY` **+** project name, **opening date**, status (*Nueva*, *Abierta*, *Solicitud de Cierre*, *Terminada*), progress label, **location** and notes. |
-| **Deliveries** | Computed from the opening date, each one adjustable by hand: **Informe Regencial** every month (same day as the opening) and **Regencia** every 6 months (reminders from 1 month before). Each delivery has 4 steps with the date each was done — 🚗 visit · 📷 photos · ✉️ letter · ⬆ uploaded to SETENA — and a space to **write the letter** (a template will fill it later). New and Open: always. Closing request (already finished), Finished or archived: none. |
+| **Deliveries** | From the opening date, each adjustable: monthly 🚗 **Inspección** (photos) and 📋 **Llenado de bitácora** (a SETENA entry), and every 6 months the **Regencia**: ✍️ Elaboración → 🖊️ Firma del cliente → 📤 Subir → 🧾 Nota de recibido. Pending = last month + this month (older months are history); a regencia is pending until the next one is due. Detected from the files downloaded from SETENA (photos, entries, regencia PDFs with their period and the client's digital signature). Every project with an opening date keeps its history, also «Solicitud de Cierre». |
 | **Priority by date** | The list is sorted by the most urgent pending delivery (overdue first). |
 | **Agenda y rutas** tab | Everything pending by date, and **trips** that group projects less than X km apart (configurable), with the route in Google Maps. |
 | **Photos** | Date and GPS are read from the photos (EXIF): they set the visit date, tick the month's visit + photos, fill in the project location, and warn if the photos were taken far from the project. |
 | **Photos from the phone** | «Fotos desde el celular» shows a QR. With the phone on the same Wi‑Fi, a page opens to pick the project, take or choose photos and write a note; they arrive in the app as a new entry (with date and GPS). |
 | **Project log** | Entries with date, type, text and **photos / PDFs**, saved in `Documents/Bitácora Tracker/proyectos/<code>/`. Each one stays «Por subir a SETENA» until marked as uploaded. |
 | **Closing projects** | Finished projects are archived with 📦: they leave the list and the reminders, keep all their history, and can be restored. |
-| **Tabs** | **Activas · Agenda y rutas · Mes actual · Mes próximo · Regencias · Archivadas** (keys 1–6). |
+| **Tabs** | **Tareas** (with «🌐 En SETENA»: latest entries and projects without entries for a month) · **Proyectos** · **Rutas** · **Archivadas**. Each project: Entregas · 🕘 Línea de tiempo · Notas · Ubicación. Light mode = SETENA look, dark mode = neon. |
 | **Search** | Code (with or without dashes or zeros), project, status, progress and notes, ignoring case and accents; also searches archived projects. |
 | **Notifications** | Native on Windows / macOS. Closing the window leaves it in the **tray**; reminders keep arriving. Starts with the system (hidden). |
 | **PDF import** | In 3 steps: file → summary → **one by one**. Each project is saved when confirmed. Can be **paused** and resumed another day. |

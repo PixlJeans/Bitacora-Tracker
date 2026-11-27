@@ -45,6 +45,7 @@ export function timelineOf(b: Project): TlItem[] {
     } else if (key.startsWith('r:')) {
       const due = key.slice(2);
       if (dl.letter) out.push({ date: dl.letter, kind: 'regencia', title: 'Elaboración de regencia', tag: `vence ${shortDate(due)} ${due.slice(2, 4)}`, exact: true });
+      if (dl.signed) out.push({ date: dl.signed, kind: 'regencia', title: '🖊️ Firmada por el cliente', exact: true });
       if (dl.uploaded) out.push({ date: dl.uploaded, kind: 'regencia', title: 'Regencia subida a SETENA', tag: `vence ${shortDate(due)} ${due.slice(2, 4)}`, exact: true });
       if (dl.received) out.push({ date: dl.received, kind: 'receipt', title: 'Nota de recibido de la regencia', exact: true });
     } else if (key === 's:start' && dl.uploaded) {
@@ -63,29 +64,46 @@ export function timelineOf(b: Project): TlItem[] {
     const title = info.kind === 'regencia' ? `Informe de regencia${info.ira ? ' ' + info.ira : ''}${info.final ? ' (final)' : ''}`
       : info.kind === 'receipt' ? `Nota de recibido${info.number ? ' ' + info.number : ''}` : `Documento: ${KIND_NAME[info.kind]}`;
     out.push({ date, kind, title, text: info.period ? `Periodo ${info.period}` : undefined, tag: 'PDF', exact: true });
+    // the client's digital signature inside the regencia (they sign it, then it is sent to SETENA)
+    if (info.kind === 'regencia' && info.clientSigned)
+      out.push({ date: info.clientSigned, kind: 'regencia', title: `🖊️ Firmada por el cliente${info.clientName ? ` (${info.clientName})` : ''}`, tag: 'firma digital', exact: true });
   }
+  // photos uploaded to SETENA (counted by the folder scanner, by the date of their entry)
+  for (const [date, n] of Object.entries(b.setenaPhotos ?? {}))
+    out.push({ date, kind: 'visit', title: `📷 ${n} foto${n === 1 ? '' : 's'} en SETENA`, tag: 'fotos', exact: true });
   if (b.setenaStart) out.push({ date: b.setenaStart, kind: 'start', title: 'Primera anotación en SETENA (inicio de la bitácora)', exact: true });
   const rank: Record<TlKind, number> = { receipt: 0, regencia: 1, bitacora: 2, setena: 3, visit: 4, doc: 5, start: 6 };
   return merge(out).sort((a, c) => c.date.localeCompare(a.date) || rank[a.kind] - rank[c.kind]);
 }
 
 
-/** The same thing seen twice is shown once: a ticked task on the same day as the SETENA entry or PDF that proves it
- *  disappears, and that entry gets a «✓» tag (the task stays checked in Entregas). */
+/** The same thing seen twice is shown once: a ticked task proven by a SETENA entry (bitácora: any entry that month)
+ *  or PDF (regencia / receipt: same day) disappears and that entry gets a «✓» tag (the task stays checked in Entregas).
+ *  A task with no proof in SETENA is kept, tagged «marcada en la app · sin anotación en SETENA». */
 function merge(items: TlItem[]): TlItem[] {
   const drop = new Set<TlItem>();
   const on = (date: string, f: (x: TlItem) => boolean) => items.find(x => x.date === date && x.exact && f(x));
+  const APP = 'marcada en la app · sin anotación en SETENA';
   for (const x of items) {
-    if (!x.exact) continue;
-    if (x.kind === 'bitacora') {
-      const e = on(x.date, y => y.kind === 'setena');
-      if (e) { drop.add(x); e.tag = '✓ bitácora'; }
+    if (x.kind === 'visit' && x.title === 'Inspección' && x.exact) {
+      // an inspection is proven by the photos uploaded to SETENA that day
+      const ph = on(x.date, y => y.kind === 'visit' && y.tag === 'fotos');
+      if (ph) { drop.add(x); ph.tag = '✓ inspección'; }
+    } else if (x.title === '🖊️ Firmada por el cliente' && x.exact) {
+      // the check of that day = the digital signature read from the PDF
+      if (on(x.date, y => y.tag === 'firma digital')) drop.add(x);
+    } else if (x.kind === 'bitacora') {
+      // the bitácora IS the SETENA entry: any entry that month proves it; none = only ticked in the app
+      const e = items.find(y => y.kind === 'setena' && y.date === x.date) ?? items.find(y => y.kind === 'setena' && y.date.slice(0, 7) === x.date.slice(0, 7));
+      if (e) { drop.add(x); e.tag = '✓ bitácora'; } else x.tag = APP;
+    } else if (!x.exact) {
+      continue;
     } else if (x.kind === 'regencia' && (x.title === 'Regencia subida a SETENA' || x.title === 'Elaboración de regencia')) {
       const pdf = on(x.date, y => y.kind === 'regencia' && y.tag?.startsWith('PDF') === true);
-      if (pdf) { drop.add(x); pdf.tag = 'PDF · ✓ subida'; }
+      if (pdf) { drop.add(x); pdf.tag = 'PDF · ✓ subida'; } else if (x.title === 'Regencia subida a SETENA') x.tag = `${x.tag ? x.tag + ' · ' : ''}${APP}`;
     } else if (x.kind === 'receipt' && x.title === 'Nota de recibido de la regencia') {
       const pdf = on(x.date, y => y.kind === 'receipt' && y.tag?.startsWith('PDF') === true);
-      if (pdf) { drop.add(x); pdf.tag = 'PDF · ✓ recibida'; }
+      if (pdf) { drop.add(x); pdf.tag = 'PDF · ✓ recibida'; } else x.tag = APP;
     }
   }
   return items.filter(x => !drop.has(x));

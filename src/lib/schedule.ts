@@ -73,6 +73,10 @@ export const uploadedIn = (b: Project, mk: string) => b.uploads.includes(mk);
 export const visitedIn = (b: Project, mk: string) => b.visits.includes(mk);
 export const completeIn = (b: Project, mk: string) => uploadedIn(b, mk) && visitedIn(b, mk);
 
+/** Does month `mk` have its own informe at all (after the opening), whatever the status? For history: what was
+ *  done in SETENA is recorded for every project, also «Solicitud de Cierre» / terminadas. */
+export const monthExists = (b: Project, mk: string) => !b.noOpeningDate && monthlyDueAuto(b, mk) > b.openedOn;
+
 /** Is there an Informe Regencial in `mk`? (active, after the opening and within tracking) */
 export const dueInMonth = (b: Project, mk: string) => {
   if (!hasSchedule(b)) return false;
@@ -383,7 +387,7 @@ export function computeReminders(d: AppData, now = Date.now()): Reminder[] {
     const next = r.upcoming.filter(t => t.date >= mon);
     const insp = next.filter(t => t.kind === 'inspection').length;
     const bit = next.filter(t => t.kind === 'bitacora').length;
-    const reg = new Set(next.filter(t => t.kind === 'regElab' || t.kind === 'regUpload').map(t => t.key)).size;
+    const reg = new Set(next.filter(t => t.kind === 'regElab' || t.kind === 'regSign' || t.kind === 'regUpload').map(t => t.key)).size;
     const late = r.overdue.length;
     out.push({
       key: `w:${fri}`, at: msAt(fri, time), until: msAt(fri, '23:59') + 2 * DAY,
@@ -405,10 +409,10 @@ export function upcomingReminders(d: AppData, n = 5, now = Date.now()) {
 }
 
 // ---------------- Informe de estado: what is pending and what comes next ----------------
-export type ReportKind = 'inspection' | 'bitacora' | 'regElab' | 'regUpload';
+export type ReportKind = 'inspection' | 'bitacora' | 'regElab' | 'regSign' | 'regUpload';
 export interface ReportTask { b: Project; kind: ReportKind; key: string; step: Step; date: string; month: string }
 export const REPORT_LABEL: Record<ReportKind, string> = {
-  inspection: '🚗 Inspección', bitacora: '📋 Llenado de bitácora', regElab: '✍️ Elaboración de regencia', regUpload: '📤 Subir regencia'
+  inspection: '🚗 Inspección', bitacora: '📋 Llenado de bitácora', regElab: '✍️ Elaboración de regencia', regSign: '🖊️ Firma del cliente', regUpload: '📤 Subir regencia'
 };
 
 /** Every task not done yet with a date up to `until`: `overdue` (before today) and `upcoming` (today … until), by date. */
@@ -425,6 +429,7 @@ export function reportTasks(d: AppData, today: string, until: string) {
       const date = regenciaDue(b, key), e = b.deliveries?.[`r:${key}`];
       if (regenciaSubmitted(b, key) || !regenciaLive(b, key, today)) continue;
       if (!e?.letter) all.push({ b, kind: 'regElab', key: `r:${key}`, step: 'letter', date, month: key.slice(0, 7) });
+      if (!e?.signed) all.push({ b, kind: 'regSign', key: `r:${key}`, step: 'signed', date, month: key.slice(0, 7) });
       all.push({ b, kind: 'regUpload', key: `r:${key}`, step: 'uploaded', date, month: key.slice(0, 7) });
     }
   }

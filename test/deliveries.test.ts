@@ -9,11 +9,17 @@ import { emptyDelivery } from '../src/lib/types';
 import { backend } from '../src/lib/backend';
 import { scanFolders } from '../src/lib/scan';
 import { docReader } from '../src/lib/docSort';
-import { placeOf } from '../src/lib/docKind';
+import { placeOf, signaturesOf } from '../src/lib/docKind';
 import { crtm05ToLatLng, crtmFromText } from '../src/lib/geo';
 import { classifyDoc } from '../src/lib/docKind';
 // the PDFs of the scanner tests are regencias of their own project
-docReader.text = async (p: string) => `Informe de Regencia Ambiental IRA-I-2026 Proyecto: X Expediente Administrativo: ${/(D\d-\d+-\d{4})/.exec(p)?.[1]}-SETENA Periodo de Regencia Enero - Junio 2026`;
+// stub reader: a regencia whose period is the 6 months before the month it was uploaded (like the real ones)
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+docReader.text = async (p: string) => {
+  const d = /(\d{4})-(\d{2})-\d{2}_/.exec(p), i = d ? +d[1] * 12 + (+d[2] - 1) - 1 : 0, j = i - 5;
+  const per = d ? `${MESES[j % 12]} ${Math.floor(j / 12)} - ${MESES[i % 12]} ${Math.floor(i / 12)}` : 'Enero - Junio 2026';
+  return `Informe de Regencia Ambiental IRA-I-2026 Proyecto: X Expediente Administrativo: ${/(D\d-\d+-\d{4})/.exec(p)?.[1]}-SETENA Periodo de Regencia ${per}`;
+};
 import { monthlyKeysDueIn, openingFrom, hasSchedule, agenda, completeIn, monthlyDue, regenciaInMonth, nextDue, nextRegencia, computeReminders, reportTasks, sortDate, pendingOf, inspectionDate, taskColumns, pendingBefore } from '../src/lib/schedule';
 import { readExif, commonDate, gpsComun } from '../src/lib/exif';
 import { groupNearby, distanceKm, routeLink, parseCoordinates, planRoute, routeKm } from '../src/lib/geo';
@@ -202,7 +208,7 @@ console.log('deliveries OK');
     { id: 'z', code: 'D1-0005-2026', name: 'Z', status: 'open', openedOn: '2026-11-26', createdOn: '2026-11-26', uploads: [], visits: [], regencias: [] }
   ] });
   const r = reportTasks(dd, '2026-11-26', '2026-12-02');
-  assert.deepEqual(r.upcoming.map(t => t.kind), ['inspection', 'bitacora', 'regElab', 'regUpload'], 'Nov 28: inspection, bitácora and the Regencia');
+  assert.deepEqual(r.upcoming.map(t => t.kind), ['inspection', 'bitacora', 'regElab', 'regSign', 'regUpload'], 'Nov 28: inspection, bitácora and the Regencia (elaborated, signed by the client, sent)');
   assert.equal(r.overdue.filter(t => t.kind === 'bitacora').length, 1, 'Oct only (v52: Jun … Sep are history)');
   assert.deepEqual(r.noDate.map(b => b.id), ['z']);
 }
@@ -274,7 +280,7 @@ console.log('deliveries OK');
   assert.equal(f('76aad41f').name, '2023-08-28_76aad41f.jpg');
   assert.equal(f('553a394a').folder, 'Proyectos/D1-0170-2020 - CONDOMINIO VISTA DEL BOSQUE/2024/02 - Febrero/Regencias', 'documents always go to their month\'s Regencias');
   assert.equal(f('473fa0af').folder, 'Proyectos/D1-0607-2026 - AMPLIACION DE BODEGA/2026/11 - Noviembre/Regencias');
-  assert.equal(f('solicitudcierre').folder, 'Proyectos/D1-0550-2020 - Condominio Almazara/2026/04 - Abril/SETENA');
+  assert.equal(f('solicitudcierre').folder, 'Proyectos/D1-0550-2020 - Condominio Almazara/2026/04 - Abril/Regencias', 'closing projects are sorted too (their history counts); the PDF reader then puts it where it belongs');
   assert.equal(r.downloads.length, 7);
   // running it again changes nothing
   const before = JSON.stringify(dd);
@@ -328,14 +334,18 @@ console.log('deliveries OK');
   ];
   getData().projects[0].deliveries = { 'm:2026-03': { ...emptyDelivery(), notes: 'SETENA 05/03/2026: Avance de obra' } } as any;
   (backend as any).readHead = async () => b64;
+  // each regencia says which semester it covers: the February one is the late report of Jul–Dec 2025
+  const textBefore = docReader.text;
+  docReader.text = async (pth: string) => `Informe de Regencia Ambiental IRA-I-2026 Proyecto: GPS Expediente Administrativo: D1-0002-2025-SETENA Periodo de Regencia ${pth.includes('0a1b2c3d') ? 'Julio - Diciembre 2025' : 'Enero - Junio 2026'}`;
   const msg = await scanFolders(true);
+  docReader.text = textBefore;
   const p = getData().projects[0];
   assert(p.location && Math.abs(p.location.lng + 84.075) < 0.001, 'location from SETENA photo GPS');
   assert.equal(p.deliveries?.['m:2026-11']?.visit, '2026-11-04', 'SETENA photos → that month\'s inspection, on the entry date');
   assert.equal(p.deliveries?.['m:2026-11']?.uploaded, '2026-11-04', 'SETENA entry → that month\'s bitácora');
   assert(msg.includes('ubicación'), msg);
   assert.equal(p.deliveries?.['r:2026-07-10']?.uploaded, '2026-07-22', 'PDF in the Regencia\'s month');
-  assert.equal(p.deliveries?.['r:2026-01-10']?.uploaded, '2026-02-27', 'PDF in another month → closest Regencia');
+  assert.equal(p.deliveries?.['r:2026-01-10']?.uploaded, '2026-02-27', 'PDF in another month → the Regencia of the period it covers');
   assert.equal(p.deliveries?.['m:2026-03']?.uploaded, '2026-03-05', 'text-only SETENA entry → bitácora');
 }
 // ---- SETENA files sorted by the month of their entry ----
@@ -382,7 +392,7 @@ console.log('deliveries OK');
 // ---- what a SETENA PDF is, from its own first page (texts as pdf.js reads the real ones) ----
 {
   const reg = classifyDoc('Informe de Regencia Ambiental IRA-I-2024 Proyecto: CONDOMINIO VISTA DEL BOSQUE Propietario: Urbanizadora HJH del Este S.A. Expediente Administrativo: D1-0170-2020-SETENA CARLOS JIMENEZ PEREZ (FIRMA) Periodo de Informe Regencial: Agosto 2023 - Enero 2024 Firmado', 'D1-0170-2020');
-  assert.deepEqual(reg, { kind: 'regencia', ira: 'IRA-I-2024', expediente: 'D1-0170-2020', period: 'Agosto 2023 - Enero 2024', project: 'CONDOMINIO VISTA DEL BOSQUE', noPlace: true });
+  assert.deepEqual(reg, { kind: 'regencia', ira: 'IRA-I-2024', expediente: 'D1-0170-2020', period: 'Agosto 2023 - Enero 2024', project: 'CONDOMINIO VISTA DEL BOSQUE', noPlace: true, noSig: true });
   assert.equal(fin_project(), 'PUENTE LA GRAN VÍA');
   function fin_project() { return classifyDoc('Informe Final Consolidado de Regencia Ambiental IRA-II-2025 Proyecto: PUENTE LA GRAN VÍA Propietario: LAURA UREÑA ALFARO Expediente Administrativo: D1-0848-2022-SETENA', 'D1-0848-2022').project; }
   const fin = classifyDoc('Informe Final Consolidado de Regencia Ambiental IRA-II-2025 Proyecto: PUENTE LA GRAN VÍA Propietario: LAURA UREÑA ALFARO Expediente Administrativo: D1-0848-2022-SETENA Periodo de la Regencia Febrero 2025 - Julio 2025', 'D1-0848-2022');
@@ -451,7 +461,24 @@ console.log('deliveries OK');
   assert(msg2.includes('nombre corregido'), msg2);
   await scanFolders(true);
   assert.equal(getData().projects[0].name, 'CONDOMINIO LOTE I', 'a good name is never changed again');
+  // a PDF that can't be opened (OneDrive still downloading it) changes nothing: still a regencia, nothing unchecked
+  mutate(dd3 => { const x = dd3.projects[0].docs!['2026-07-01_22222222.pdf']; delete x.clientSigned; delete x.noSig; delete x.regenteSigned; });
+  const dl0 = JSON.stringify(getData().projects[0].deliveries);
+  docReader.text = async () => { throw new Error('busy'); };
+  await scanFolders(true);
+  assert.equal(getData().projects[0].docs!['2026-07-01_22222222.pdf'].kind, 'regencia', 'a read error is not «no text»');
+  assert.equal(JSON.stringify(getData().projects[0].deliveries), dl0, 'nothing unchecked');
   docReader.text = before;
+}
+// ---- who signed a regencia and when (text as the real PDFs come out: jumbled around «(FIRMA)») ----
+{
+  const a = signaturesOf("CARLOS JIMENEZ PEREZ (FIRMA) digitalmente LAURA UREÑA Firmado por LAURA UREÑA ALFARO (FIRMA) ALFARO Fecha: 2026.02.27 12:09:10 -06'00' (FIRMA) Firmado digitalmente por CARLOS JIMENEZ PEREZ (FIRMA) Fecha: 2026.02.27 16:54:41 -06'00'");
+  assert.deepEqual(a, { clientSigned: '2026-02-27', clientName: 'LAURA URENA ALFARO', regenteSigned: '2026-02-27' });
+  const b2 = signaturesOf("LAURA UREÑA ALFARO (FIRMA) Firmado digitalmente por CARLOS CARLOS JIMENEZ JIMENEZ PEREZ (FIRMA) PEREZ (FIRMA) Fecha: 2024.03.07 19:01:46 -06'00' Firmado digitalmente por LAURA UREÑA ALFARO (FIRMA) Fecha: 2024.03.07 09:13:51");
+  assert.equal(b2.regenteSigned, '2024-03-07'); assert.equal(b2.clientName, 'LAURA URENA ALFARO');
+  const c = signaturesOf("Firmado digitalmente por CARLOS JIMENEZ PEREZ (FIRMA) Fecha: 2024.09.13 13:36:48 Firmado por LAURA UREÑA ALFARO (FIRMA) ALFARO Fecha: 2024.09.12 (FIRMA) 17:16:25");
+  assert.equal(c.clientSigned, '2024-09-12', 'signed by the client in September (sent to SETENA in November)');
+  assert.deepEqual(signaturesOf('Informe sin firmas'), { noSig: true });
 }
 // ---- where a project is, from its regencia («Ubicación del Proyecto»; CRTM05 checked against a photo's GPS) ----
 {

@@ -25,7 +25,15 @@ assert.equal(find('📝 Nota del mes')[0].text, 'Llevar casco');
 // dated tasks are exact; April's visit (ticked in an old version, no date) falls on the opening day, cut to April
 assert.deepEqual(find('Inspección').map(x => [x.date, x.exact]), [['2024-04-29', false], ['2024-03-28', true]]);
 assert.equal(find('Llenado de bitácora').length, 0, 'the bitácora on the SETENA entry day is shown as that entry');
-assert.equal(s[0].tag, '✓ bitácora');
+assert.equal(s[0].tag, '✓ bitácora', 'on the entry of the same day');
+// a bitácora ticked in a month with no SETENA entry (e.g. «marcar todo como hecho») is kept and flagged
+const b2 = normalize({ projects: [{ id: 'z', code: 'D1-0001-2024', name: 'Z', status: 'open', openedOn: '2024-01-14',
+  deliveries: { 'm:2024-05': { visit: '2024-05-14', uploaded: '2024-05-14', files: [] }, 'm:2024-06': { uploaded: '2024-06-14', files: [], notes: 'SETENA 25/06/2024: Avance.' } } }] }).projects[0];
+const t2 = timelineOf(b2);
+assert.equal(t2.find(x => x.title === 'Llenado de bitácora')?.date, '2024-05-14');
+assert.match(t2.find(x => x.title === 'Llenado de bitácora')!.tag!, /marcada en la app/);
+assert.equal(t2.filter(x => x.title === 'Llenado de bitácora').length, 1, 'June is proven by the entry of 25/06, another day of the same month');
+assert.equal(t2.find(x => x.kind === 'setena')!.tag, '✓ bitácora');
 // regencia steps, receipt, the PDF read by the scanner; files without a date in the name are left out
 assert.equal(find('Regencia subida a SETENA').length, 0, 'shown as the regencia PDF of that day');
 assert.equal(find('Elaboración de regencia')[0].date, '2024-08-20', 'another day: kept');
@@ -37,8 +45,28 @@ assert.ok(!t.some(x => x.title.includes('escaneado')));
 assert.equal(t[t.length - 1].kind, 'start');
 // v52 look migration: old data switches to light + SETENA blue once, newer data keeps its choice
 const old = normalize({ settings: { theme: 'dark', accent: '#4ade80' } }).settings;
-assert.deepEqual([old.theme, old.accent, old.look], ['light', '#007dc4', 1]);
+assert.deepEqual([old.theme, old.accent, old.look], ['light', '#007dc4', 2]);
+// v58: dark mode left with the SETENA blue gets its neon green back; a light-mode blue stays
+assert.equal(normalize({ settings: { theme: 'dark', accent: '#007dc4', look: 1 } }).settings.accent, '#4ade80');
+assert.equal(normalize({ settings: { theme: 'light', accent: '#007dc4', look: 1 } }).settings.accent, '#007dc4');
+assert.equal(normalize({ settings: { theme: 'dark', accent: '#007dc4', look: 2 } }).settings.accent, '#007dc4', 'chosen again after v58: kept');
 const kept = normalize({ settings: { theme: 'dark', accent: '#4ade80', look: 1 } }).settings;
 assert.deepEqual([kept.theme, kept.accent], ['dark', '#4ade80']);
+// photos uploaded to SETENA: one item per entry date; the inspection of that day is shown as those photos
+const ph = normalize({ projects: [{ id: 'p', code: 'D1-0002-2024', name: 'P', status: 'closing', openedOn: '2024-01-14', setenaPhotos: { '2024-03-20': 12, '2024-05-02': 1 },
+  deliveries: { 'm:2024-03': { visit: '2024-03-20', files: [] } } }] }).projects[0];
+const tp = timelineOf(ph);
+assert.deepEqual(tp.filter(x => x.kind === 'visit').map(x => [x.date, x.title, x.tag]), [['2024-05-02', '📷 1 foto en SETENA', 'fotos'], ['2024-03-20', '📷 12 fotos en SETENA', '✓ inspección']]);
+// the client's signature: from the PDF (with who signed); the check of the same day is not repeated
+const sg = normalize({ projects: [{ id: 's', code: 'D1-0003-2024', name: 'S', status: 'open', openedOn: '2024-03-12',
+  deliveries: { 'r:2024-09-12': { signed: '2024-09-12', uploaded: '2024-11-11', files: [] } },
+  docs: { '2024-11-11_12a34bb7.pdf': { kind: 'regencia', period: 'Septiembre 2024', clientSigned: '2024-09-12', clientName: 'LAURA URENA ALFARO', placed: true } } }] }).projects[0];
+const ts = timelineOf(sg).filter(x => x.title.startsWith('🖊️'));
+assert.deepEqual(ts.map(x => [x.date, x.title]), [['2024-09-12', '🖊️ Firmada por el cliente (LAURA URENA ALFARO)']]);
+// everything read from a PDF survives saving and loading
+const keptSg = normalize(JSON.parse(JSON.stringify({ projects: [sg] }))).projects[0].docs!['2024-11-11_12a34bb7.pdf'];
+assert.equal(keptSg.clientSigned, "2024-09-12"); assert.equal(keptSg.clientName, "LAURA URENA ALFARO");
+const kept2 = normalize({ projects: [{ id: 'k', code: 'D1-0004-2024', name: 'K', status: 'open', openedOn: '2024-01-01', docs: { 'a.pdf': { kind: 'regencia', project: 'LOTE I', place: 'Cartago, El Guarco, Tejar', lat: 9.84, lng: -83.96, noSig: true, placed: true } } }] }).projects[0].docs!['a.pdf'];
+assert.deepEqual([kept2.project, kept2.place, kept2.lat, kept2.lng, kept2.noSig], ['LOTE I', 'Cartago, El Guarco, Tejar', 9.84, -83.96, true]);
 console.log('timeline OK:', t.length, 'events');
 process.exit(0);

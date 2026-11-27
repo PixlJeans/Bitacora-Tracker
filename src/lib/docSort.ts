@@ -32,6 +32,9 @@ export const docReader = {
 export interface SortResult { read: number; moved: number; kinds: Record<string, number>; renamed?: string; located?: boolean }
 
 /** A project name that is really an error the SETENA page showed («Problema al consultar información…»), or empty. */
+/** PDFs that could not be opened in this session (not retried until the app restarts). */
+const failedThisSession = new Set<string>();
+
 export const isBrokenName = (b: Pick<Project, 'code' | 'name'>) =>
   !b.name.trim() || b.name.trim().toUpperCase() === b.code.toUpperCase() || /problema al consultar|remote server|error al|no se pudo/i.test(b.name);
 
@@ -61,13 +64,18 @@ export async function sortDocuments(b: Project, files: { path: string }[], budge
     const m = SETENA_PDF.exec(f.path);
     if (!m) continue;
     const k = known[m[3]];
-    const reread = !!k && k.kind === 'regencia' && ((needName && !k.project) || (needPlace && k.lat === undefined && !k.noPlace));
+    // read again (once) a regencia read by an older version: for the name, the place or the client's signature
+    const reread = !!k && k.kind === 'regencia' && ((needName && !k.project) || (needPlace && k.lat === undefined && !k.noPlace)
+      || (!k.clientSigned && !k.regenteSigned && !k.noSig));
     if (k && !reread) continue;
+    if (failedThisSession.has(f.path)) continue;
     if (budget.left <= 0) break;
     budget.left--;
     const [, month, sub, name, date] = m;
     let info: DocInfo;
-    try { info = classifyDoc(await docReader.text(f.path), b.code); } catch { info = { kind: 'notext' }; }
+    // a file that can't be opened right now (OneDrive still downloading it, open in another program…) is NOT a scan
+    // without text: nothing is changed, moved or unchecked, and it is tried again in a later session
+    try { info = classifyDoc(await docReader.text(f.path), b.code); } catch { failedThisSession.add(f.path); continue; }
     res.read++;
     if (needName && info.kind === 'regencia' && info.project) { newName = info.project; needName = false; }
     if (needPlace && info.kind === 'regencia' && info.lat !== undefined && info.lng !== undefined) { place = { lat: info.lat, lng: info.lng, text: info.place ?? '' }; needPlace = false; }
@@ -96,6 +104,7 @@ export async function sortDocuments(b: Project, files: { path: string }[], budge
         if (u.step === 'uploaded') {
           // it was also marked «elaborada» and moved to that date by the same file
           if (deliveryOf(x, u.key).letter === u.date) applyStep(x, u.key, 'letter', null);
+          if (deliveryOf(x, u.key).signed === u.date) applyStep(x, u.key, 'signed', null);
           if (deliveryOf(x, u.key).due === u.date) x.deliveries![u.key] = { ...deliveryOf(x, u.key), due: null };
         }
       }

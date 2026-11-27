@@ -22,7 +22,7 @@ export const DEFAULT_SETTINGS: Settings = {
   radiusKm: 15,
   home: null,
   roundTrip: true,
-  look: 1
+  look: 2
 };
 
 // ---------- Loading saved data ----------
@@ -61,7 +61,7 @@ function normDeliveries(raw: any): Record<string, Delivery> {
     if (!/^(m:\d{4}-\d{2}|r:\d{4}-\d{2}-\d{2}|s:start)$/.test(k) || !e || typeof e !== 'object') continue;
     out[k] = {
       planned: isoDate(e.planned), due: isoDate(pick(e, 'due', 'vence')), visit: isoDate(pick(e, 'visit', 'visita')), photos: isoDate(pick(e, 'photos', 'fotos')),
-      letter: isoDate(pick(e, 'letter', 'carta')), uploaded: isoDate(pick(e, 'uploaded', 'subida')), received: isoDate(e.received),
+      letter: isoDate(pick(e, 'letter', 'carta')), signed: isoDate(pick(e, 'signed', 'firma')), uploaded: isoDate(pick(e, 'uploaded', 'subida')), received: isoDate(e.received),
       letterText: String(pick(e, 'letterText', 'textoCarta') || ''),
       ...(e.notes ? { notes: String(e.notes) } : {}),
       files: Array.isArray(e.files) ? e.files.filter((f: any) => f && pick(f, 'path', 'ruta')).map(normAttachment) : []
@@ -119,7 +119,13 @@ function normDocs(o: any): NonNullable<Project['docs']> {
   for (const [k, v] of Object.entries(o) as [string, any][]) {
     if (!v || !KINDS.includes(v.kind)) continue;
     const s = (x: any) => typeof x === 'string' ? x.slice(0, 60) : undefined;
-    out[k] = JSON.parse(JSON.stringify({ kind: v.kind, final: v.final ? true : undefined, ira: s(v.ira), expediente: s(v.expediente), period: s(v.period), number: s(v.number), placed: !!v.placed }));
+    const n = (x: any) => typeof x === 'number' && Number.isFinite(x) ? x : undefined;
+    const iso = (x: any) => isoDate(x) ?? undefined;
+    const t = (x: any) => typeof x === 'string' ? x.slice(0, 160) : undefined;
+    // everything read from the PDF is kept, so nothing has to be read again after a restart
+    out[k] = JSON.parse(JSON.stringify({ kind: v.kind, final: v.final ? true : undefined, ira: s(v.ira), expediente: s(v.expediente), period: s(v.period), number: s(v.number),
+      project: t(v.project), place: t(v.place), lat: n(v.lat), lng: n(v.lng), noPlace: v.noPlace ? true : undefined,
+      clientSigned: iso(v.clientSigned), clientName: t(v.clientName), regenteSigned: iso(v.regenteSigned), noSig: v.noSig ? true : undefined, placed: !!v.placed }));
   }
   return out;
 }
@@ -155,6 +161,8 @@ export function normalize(raw: any): AppData {
   };
   // v52: one-time switch to the SETENA look (light + SETENA blue); can be changed back in Ajustes
   if ((d.settings.look ?? 0) < 1) { d.settings.theme = 'light'; d.settings.accent = '#007dc4'; d.settings.look = 1; }
+  // v58: dark mode is the neon look again; if it was left with the SETENA blue, back to its neon green (once)
+  if ((d.settings.look ?? 0) < 2) { if (d.settings.theme === 'dark' && d.settings.accent.toLowerCase() === '#007dc4') d.settings.accent = '#4ade80'; d.settings.look = 2; }
 
   // Progress labels (v1 called them priorities: Urgente / Pendiente próximo / Al día)
   const rawLabels = pick(raw, 'labels', 'etiquetas');
@@ -231,7 +239,8 @@ export function normalize(raw: any): AppData {
         ...(isoDate(b.setenaStart) ? { setenaStart: isoDate(b.setenaStart)! } : {}),
         ...(typeof b.setenaUrl === 'string' && b.setenaUrl.startsWith('https://bitacora.setena.go.cr/') ? { setenaUrl: b.setenaUrl } : {}),
         ...(b.setena && typeof b.setena === 'object' ? { setena: normSetena(b.setena) } : {}),
-        ...(b.docs && typeof b.docs === 'object' && !Array.isArray(b.docs) ? { docs: normDocs(b.docs) } : {})
+        ...(b.docs && typeof b.docs === 'object' && !Array.isArray(b.docs) ? { docs: normDocs(b.docs) } : {}),
+        ...(b.setenaPhotos && typeof b.setenaPhotos === 'object' ? { setenaPhotos: Object.fromEntries(Object.entries(b.setenaPhotos).filter(([k, v]) => isoDate(k) && Number(v) > 0).map(([k, v]) => [k, Number(v)])) } : {})
       };
       // Older data: projects imported without a date got the import day as their opening date.
       // If nothing was done on them yet, mark the date as unknown so they don't show made-up deliveries.
@@ -416,9 +425,10 @@ export function markStep(id: string, key: string, step: Step, date: string | nul
     const b = d.projects.find(x => x.id === id);
     if (!b) return;
     applyStep(b, key, step, date);
-    // a Regencia uploaded was elaborated; with its nota de recibido it was also uploaded
+    // a Regencia goes: elaborated → signed by the client → uploaded → received. A later step implies the earlier ones.
     if (date && key.startsWith('r:')) {
-      if ((step === 'uploaded' || step === 'received') && !deliveryOf(b, key).letter) applyStep(b, key, 'letter', date);
+      if ((step === 'signed' || step === 'uploaded' || step === 'received') && !deliveryOf(b, key).letter) applyStep(b, key, 'letter', date);
+      if ((step === 'uploaded' || step === 'received') && !deliveryOf(b, key).signed) applyStep(b, key, 'signed', date);
       if (step === 'received' && !deliveryOf(b, key).uploaded) applyStep(b, key, 'uploaded', date);
     }
     clearSnoozed(d, id);
@@ -522,6 +532,7 @@ export function addDeliveryFiles(id: string, key: string, files: Attachment[]): 
     // Attaching the Regencia document = elaborated and uploaded
     if (docs.length > receipts.length && key.startsWith('r:')) {
       if (!e.letter) { applyStep(b, key, 'letter', todayISO()); marked.push('elaboración'); }
+      if (!e.signed) { applyStep(b, key, 'signed', todayISO()); marked.push('firma'); }
       if (!e.uploaded) { applyStep(b, key, 'uploaded', todayISO()); marked.push('subida'); }
     }
     clearSnoozed(d, id);

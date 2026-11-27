@@ -5,7 +5,7 @@ import { useState } from 'react';
 import type { AppData } from '../lib/types';
 import { reportTasks, REPORT_LABEL, type ReportTask } from '../lib/schedule';
 import { addDays, shortDate, fromISO, monthNameOf, todayISO } from '../lib/dates';
-import { getData, markAllBefore, markStep } from '../lib/store';
+import { getData, markStep } from '../lib/store';
 import { Ic, toast } from './core';
 import { openEditor } from './ProjectEditor';
 import { daysText, daysUntil, FolderButton } from './Delivery';
@@ -45,37 +45,92 @@ function TaskRow({ t, today, cont = false, more = false }: { t: ReportTask; toda
   );
 }
 
+const REG_STEPS: { kind: ReportTask['kind']; label: string }[] = [
+  { kind: 'regElab', label: '✍️ Elaboración' }, { kind: 'regSign', label: '🖊️ Firma del cliente' }, { kind: 'regUpload', label: '📤 Subir a SETENA' }];
+
+/** One Regencia in one row: its missing steps as buttons, in order (a later step marks the earlier ones too). */
+function RegRow({ steps, today }: { steps: ReportTask[]; today: string }) {
+  const t = steps[0];
+  const [done, setDone] = useState<string[]>([]);
+  const tick = (s: ReportTask) => {
+    // a later step implies the earlier ones (the store does the same)
+    const idx = REG_STEPS.findIndex(x => x.kind === s.kind);
+    setDone(REG_STEPS.slice(0, idx + 1).map(x => x.kind));
+    setTimeout(() => {
+      markStep(t.b.id, t.key, s.step, t.date <= today ? t.date : today);
+      toast(`✓ ${t.b.code}: ${REPORT_LABEL[s.kind].replace(/^\S+\s/, '')}`, true);
+    }, 250);
+  };
+  const days = daysUntil(t.date, today);
+  const missing = new Set(steps.map(x => x.kind));
+  const all = missing.size > 0 && REG_STEPS.every(x => !missing.has(x.kind) || done.includes(x.kind));
+  return (
+    <div className={`tk-row tk-reg ${all ? 'done' : ''} ${days < 0 ? 'late' : ''}`}>
+      <div className="tk-steps">
+        <span className="tk-what">🗂️ Regencia</span>
+        {REG_STEPS.map(x => {
+          const s = steps.find(y => y.kind === x.kind);
+          const on = !s || done.includes(x.kind);
+          return (
+            <button key={x.kind} type="button" className={`tk-step ${on ? 'on' : ''}`} disabled={on} title={on ? 'Hecho' : `Marcar «${x.label.replace(/^\S+\s/, '')}» hecho`} onClick={() => s && tick(s)}>
+              <span className="tk-step-box">{on && <Ic n="check" size={11} />}</span>{x.label}
+            </button>
+          );
+        })}
+      </div>
+      <button type="button" className="tk-proj" title="Abrir el proyecto" onClick={() => openEditor(getData().projects.find(b => b.id === t.b.id) ?? t.b)}>
+        <b className="mono">{t.b.code}</b> <span>{t.b.name}</span>
+      </button>
+      <span className="tk-date"><b>{WEEKDAYS[fromISO(t.date).getDay()]} {shortDate(t.date)}{t.date.slice(0, 4) !== today.slice(0, 4) ? ` ${t.date.slice(2, 4)}` : ''}</b><small>{daysText(days)}</small></span>
+      <span className="tk-folder"><FolderButton b={t.b} itemKey={t.key} /></span>
+    </div>
+  );
+}
+
+type Item = { t: ReportTask } | { reg: ReportTask[] };
+/** The tasks as rows: a Regencia's steps (same project, same key) become one row. */
+function itemsOf(list: ReportTask[]): Item[] {
+  const out: Item[] = [];
+  const regAt = new Map<string, ReportTask[]>();
+  for (const t of list) {
+    if (t.key.startsWith('r:') && REG_STEPS.some(x => x.kind === t.kind)) {
+      const id = `${t.b.id}|${t.key}`;
+      const g = regAt.get(id);
+      if (g) { g.push(t); continue; }
+      const ng = [t]; regAt.set(id, ng); out.push({ reg: ng });
+    } else out.push({ t });
+  }
+  return out;
+}
+
 export function TasksView({ d }: { d: AppData }) {
   const today = todayISO();
   const [allLate, setAllLate] = useState(false);
-  const [ask, setAsk] = useState(false);
   const { overdue, upcoming, noDate } = reportTasks(d, today, addDays(today, 30));
   const week = upcoming.filter(t => t.date <= addDays(today, 6));
   const later = upcoming.filter(t => t.date > addDays(today, 6));
-  const monthStart = `${today.slice(0, 7)}-01`;
-  const oldOnes = overdue.filter(t => t.date < monthStart).length;
-  const monthWord = monthNameOf(today.slice(0, 7)).split(' ')[0].toLowerCase();
 
   const section = (title: string, cls: string, list: ReportTask[], empty: string, limit?: number) => (
     <section className={`tk-sec ${cls}`}>
       <h3>{title} <span className="tk-n">{list.length}</span></h3>
       {!list.length && <p className="muted tk-empty">{empty}</p>}
-      {(limit ? list.slice(0, limit) : list).map((t, i, arr) => <TaskRow key={`${t.b.id}:${t.key}:${t.kind}`} t={t} today={today} cont={sameSlot(arr[i - 1], t)} more={sameSlot(t, arr[i + 1])} />)}
-      {limit && list.length > limit && <button type="button" className="dp-link tk-more" onClick={() => setAllLate(true)}>Ver las {list.length - limit} restantes</button>}
+      {(() => {
+        const items = itemsOf(list), shown = limit ? items.slice(0, limit) : items;
+        const tOf = (x?: Item) => (x && 't' in x ? x.t : undefined);
+        return <>
+          {shown.map((x, i) => 'reg' in x
+            ? <RegRow key={`${x.reg[0].b.id}:${x.reg[0].key}`} steps={x.reg} today={today} />
+            : <TaskRow key={`${x.t.b.id}:${x.t.key}:${x.t.kind}`} t={x.t} today={today} cont={sameSlot(tOf(shown[i - 1]), x.t)} more={sameSlot(x.t, tOf(shown[i + 1]))} />)}
+          {limit && items.length > limit && <button type="button" className="dp-link tk-more" onClick={() => setAllLate(true)}>Ver {items.length - limit} más</button>}
+        </>;
+      })()}
     </section>
   );
 
   return (
     <div className="tasks">
       <SetenaFeed d={d} />
-      {oldOnes > 0 && (
-        <div className="tk-catchup">
-          {ask ? <>¿Ya estaba hecho todo lo anterior a {monthWord}? Se marcan {oldOnes} tareas, cada una con su fecha (se puede deshacer).
-            <button className="btn sm primary" onClick={() => { const n = markAllBefore(d.projects.map(b => b.id), monthStart); setAsk(false); toast(`✓ ${n} tareas marcadas como hechas`, true); }}>Sí, marcar</button>
-            <button className="dp-link" onClick={() => setAsk(false)}>no</button></>
-            : <>Tienes {oldOnes} tareas de meses anteriores sin marcar. <button className="dp-link" onClick={() => setAsk(true)}>✓ Ya estaban hechas: marcarlas todas</button></>}
-        </div>
-      )}
+      {/* v56: no «mark everything as done» here: the app follows SETENA, and a bulk check made history SETENA doesn't have */}
       {noDate.length > 0 && (
         <div className="tk-catchup warn">📅 {noDate.length} proyecto(s) sin fecha de apertura:{' '}
           {noDate.map(b => <button key={b.id} className="dp-link" onClick={() => openEditor(b)}>{b.code}</button>)}</div>

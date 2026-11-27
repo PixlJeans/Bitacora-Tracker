@@ -43,13 +43,14 @@ export interface ProjectLocation {
 // ===== Deliveries: each Informe Regencial (monthly) and each Regencia (every 6 months) =====
 // Key: 'm:YYYY-MM' (monthly) or 'r:YYYY-MM-DD' (semiannual, automatic due date).
 // Each step stores the DATE it was done (editable) or null if it is still missing.
-export type Step = 'visit' | 'photos' | 'letter' | 'uploaded' | 'received';
+export type Step = 'visit' | 'photos' | 'letter' | 'signed' | 'uploaded' | 'received';
 // Monthly: INSPECCIÓN (site visit, `visit`) and BITÁCORA (presented to SETENA, `uploaded`).
 // Regencia (every 6 months): one check, presented (`uploaded`). Photos and letter are supporting material.
 export const STEPS: { id: Step; name: string; icon: string; main: boolean }[] = [
   { id: 'visit', name: 'Inspección', icon: '🚗', main: true },
   { id: 'photos', name: 'Fotos', icon: '📷', main: false },
   { id: 'letter', name: 'Carta', icon: '✉️', main: false },
+  { id: 'signed', name: 'Firma del cliente', icon: '🖊️', main: false },
   { id: 'uploaded', name: 'Bitácora', icon: '📋', main: true },
   { id: 'received', name: 'Nota de recibido', icon: '🧾', main: false }
 ];
@@ -58,14 +59,15 @@ export interface Delivery {
   due: string | null;    // due date adjusted by hand (null = automatic)
   visit: string | null;
   photos: string | null;
-  letter: string | null;    // date the letter was ready
+  letter: string | null;    // date the letter was ready (Regencia: «Elaboración»)
+  signed?: string | null;   // Regencia: date the client signed it (then it is sent to SETENA)
   uploaded: string | null;   // date it was uploaded to SETENA (= submitted)
   received: string | null; // Regencia: SETENA's «nota de recibido» (date)
   letterText: string;      // the letter for SETENA (a template will fill it later)
   notes?: string;          // notes of that month / Regencia
   files: Attachment[];     // photos and documents (letter, PDF) of this delivery, saved in proyectos/<code>/
 }
-export const emptyDelivery = (): Delivery => ({ planned: null, due: null, visit: null, photos: null, letter: null, uploaded: null, received: null, letterText: '', files: [] });
+export const emptyDelivery = (): Delivery => ({ planned: null, due: null, visit: null, photos: null, letter: null, signed: null, uploaded: null, received: null, letterText: '', files: [] });
 export const MONTHLY_NAME = 'Bitácora';
 export const SEMIANNUAL_NAME = 'Regencia';
 
@@ -132,7 +134,8 @@ export interface Project {
   setenaStart?: string;     // date of the first entry in the SETENA bitácora (the bottom of its page)
   setenaUrl?: string;       // its page in the SETENA portal
   setena?: SetenaInfo;      // what its SETENA page says (read with «Descargar todo de SETENA»)
-  docs?: Record<string, DocInfo & { placed: boolean }>; // each SETENA PDF (by file name): what it is, read from it
+  docs?: Record<string, DocInfo & { placed: boolean }>;
+  setenaPhotos?: Record<string, number>; // photos downloaded from SETENA, by the date of their entry (read from the folders) // each SETENA PDF (by file name): what it is, read from it
 }
 
 /** A saved overall review. */

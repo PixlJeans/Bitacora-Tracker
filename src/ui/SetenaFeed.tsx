@@ -11,7 +11,7 @@ import { openEditor } from './ProjectEditor';
 import { toast } from './core';
 
 const DAYS = 45;
-const ICON: Partial<Record<TlItem['kind'], string>> = { setena: '🌐', regencia: '🗂️', receipt: '🧾' };
+const ICON: Partial<Record<TlItem['kind'], string>> = { setena: '🌐', regencia: '🗂️', receipt: '🧾', visit: '📷' };
 
 export function SetenaFeed({ d }: { d: AppData }) {
   const today = todayISO();
@@ -24,7 +24,7 @@ export function SetenaFeed({ d }: { d: AppData }) {
       if (b.archived) continue;
       if (b.setena?.readAt && b.setena.readAt > readAt) readAt = b.setena.readAt;
       // only what SETENA itself shows: its entries and the PDFs downloaded from it (not tasks ticked in the app)
-      for (const x of timelineOf(b)) if (x.exact && (x.kind === 'setena' || (ICON[x.kind] && x.tag?.startsWith('PDF'))) && x.date >= from && x.date <= today) items.push({ b, x });
+      for (const x of timelineOf(b)) if (x.exact && (x.kind === 'setena' || (ICON[x.kind] && (x.tag?.startsWith('PDF') || x.title.startsWith('📷')))) && x.date >= from && x.date <= today) items.push({ b, x });
     }
     items.sort((a, c) => c.x.date.localeCompare(a.x.date) || a.b.code.localeCompare(c.b.code));
     return { items, readAt, quiet: quietInSetena(d, today) };
@@ -50,7 +50,7 @@ export function SetenaFeed({ d }: { d: AppData }) {
               <span className="sf-date">{shortDate(x.date)}</span>
               <span className="sf-ic">{ICON[x.kind]}</span>
               <span className="sf-code mono">{b.code}</span>
-              <span className="sf-txt"><b>{x.kind === 'setena' ? (x.text ?? '').split('\n')[0] : x.title}</b></span>
+              <span className="sf-txt"><b>{x.kind === 'setena' ? (x.text ?? '').split('\n')[0] : x.title.replace(/^📷 /, '')}</b></span>
             </button>
           ))}
           {items.length > 6 && <button type="button" className="dp-link sf-more" onClick={() => setAll(v => !v)}>{all ? 'Ver menos' : `Ver las ${items.length} anotaciones`}</button>}

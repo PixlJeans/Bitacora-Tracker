@@ -39,12 +39,18 @@ function byProject(list: ReportTask[]) {
   for (const t of list) { const x = m.get(t.b.id) ?? { b: t.b, tasks: [] }; x.tasks.push(t); m.set(t.b.id, x); }
   return [...m.values()].sort((a, c) => a.tasks[0].date.localeCompare(c.tasks[0].date));
 }
+const REG_STEP: Partial<Record<ReportTask['kind'], string>> = { regElab: 'elaboración', regSign: 'firma', regUpload: 'subir' };
 function kindSummary(tasks: ReportTask[]) {
-  return (Object.keys(REPORT_LABEL) as ReportTask['kind'][]).map(k => {
+  // a regencia's steps (elaboración, firma, subir) are one chip per regencia: «🗂️ Regencia 14 jun · falta firma, subir»
+  const regs = new Map<string, ReportTask[]>();
+  for (const t of tasks) if (REG_STEP[t.kind]) regs.set(t.key, [...(regs.get(t.key) ?? []), t]);
+  const regChips = [...regs.values()].map(l => ({ k: 'regUpload' as ReportTask['kind'], n: l.length, since: l[0].date,
+    text: `🗂️ Regencia ${shortDate(l[0].date)} · falta ${l.map(t => REG_STEP[t.kind]).join(', ')}` }));
+  return [...(['inspection', 'bitacora'] as ReportTask['kind'][]).map(k => {
     const l = tasks.filter(t => t.kind === k);
     if (!l.length) return null;
     return { k, n: l.length, since: l[0].date, text: `${REPORT_LABEL[k]}: ${l.length === 1 ? shortDate(l[0].date) : `${l.length} (desde ${shortDate(l[0].date)})`}` };
-  }).filter(Boolean) as { k: ReportTask['kind']; n: number; since: string; text: string }[];
+  }).filter(Boolean) as { k: ReportTask['kind']; n: number; since: string; text: string }[], ...regChips];
 }
 
 function StatusReport() {
@@ -121,7 +127,7 @@ ${noDate.length ? `<h2>Sin fecha de apertura</h2><ul>${noDate.map(b => `<li><b>$
         <div className={`sr-tile ${overdue.length ? 'bad' : 'ok'}`}><b>{overdue.length}</b><span>atrasadas · {late.length} proyectos</span></div>
         <div className="sr-tile"><b>{upcoming.length}</b><span>para {range === 'next' ? 'la próxima semana' : `los próximos ${range === 'two' ? 14 : 7} días`}</span></div>
         <div className="sr-tile"><b>{insp.length}</b><span>inspecciones · {tripsToShow.length} viajes juntos</span></div>
-        <div className="sr-tile"><b>{upcoming.filter(t => t.kind === 'regElab' || t.kind === 'regUpload').length}</b><span>tareas de regencia</span></div>
+        <div className="sr-tile"><b>{upcoming.filter(t => t.kind === 'regElab' || t.kind === 'regSign' || t.kind === 'regUpload').length}</b><span>tareas de regencia</span></div>
       </div>
 
       <h3 className="sr-h">📅 Para hacer · {rg.title}</h3>
