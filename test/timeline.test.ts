@@ -1,6 +1,7 @@
 import assert from 'node:assert';
 import { normalize } from '../src/lib/store';
-import { timelineOf } from '../src/lib/timeline';
+import { timelineOf, resignedInSetena } from '../src/lib/timeline';
+import { applySetena } from '../src/lib/setenaImport';
 
 const d = normalize({ settings: { look: 1 }, projects: [{
   id: 'a', code: 'D1-0170-2020', name: 'VISTA DEL BOSQUE', status: 'open', openedOn: '2024-02-29',
@@ -73,5 +74,25 @@ const dup = normalize({ projects: [{ id: 'd', code: 'D1-0005-2020', name: 'D', s
   docs: { '2023-06-16_aaaa1111.pdf': { kind: 'regencia', ira: 'IRA-I-2023', final: true, period: 'Diciembre 2022 - Mayo 2023', placed: true }, '2023-06-16_bbbb2222.pdf': { kind: 'regencia', ira: 'IRA-I-2023', final: true, period: 'Diciembre 2022 - Mayo 2023', placed: true } } }] }).projects[0];
 const td = timelineOf(dup).filter(x => x.title.startsWith('Informe'));
 assert.equal(td.length, 1); assert.equal(td[0].count, 2);
+// «Renuncia»: the last SETENA entry says the regente resigned → that state (once); SETENA's «Abierta» doesn't undo it
+const rz = normalize({ projects: [{ id: 'r', code: 'D1-0170-2020', name: 'CONDOMINIO VISTA DEL BOSQUE', status: 'open', openedOn: '2022-01-14',
+  deliveries: { 'm:2023-08': { files: [], notes: 'SETENA 28/08/2023: El proyecto cuenta con toda la infraestructura construida' },
+    'm:2024-02': { files: [], notes: 'SETENA 29/02/2024: Se procede a presentar informe de Regencia Ambiental I-2024. Se presenta nota de Renuncia' } } }] });
+assert.equal(resignedInSetena(rz.projects[0]), true);
+rz.projects[0].status = 'resigned'; rz.projects[0].resignChecked = true;
+assert.equal(resignedInSetena(rz.projects[0]), false, 'only once');
+const back = normalize(JSON.parse(JSON.stringify(rz)));
+assert.deepEqual([back.projects[0].status, back.projects[0].resignChecked], ['resigned', true], 'kept when saved');
+back.projects[0].status = 'open';
+assert.equal(resignedInSetena(back.projects[0]), false, 'changed back to Abierta by hand: not moved again');
+back.projects[0].status = 'resigned';
+applySetena(back, { projects: [{ code: 'D1-0170-2020', name: 'CONDOMINIO VISTA DEL BOSQUE', status: 'Abierta', closed: false, events: [] }] } as any, '2026-11-27');
+assert.equal(back.projects[0].status, 'resigned', 'SETENA still says «Abierta»: Renuncia stays');
+applySetena(back, { projects: [{ code: 'D1-0170-2020', name: 'CONDOMINIO VISTA DEL BOSQUE', status: 'Cerrada', closed: true, events: [] }] } as any, '2026-11-27');
+assert.equal(back.projects[0].status, 'finished', 'SETENA closes it: Terminada');
+// an entry that only mentions «renuncia» earlier, not the last one: no change
+const rz2 = normalize({ projects: [{ id: 'q', code: 'D1-0001-2021', name: 'Q', status: 'open', openedOn: '2021-01-01',
+  deliveries: { 'm:2023-01': { files: [], notes: 'SETENA 10/01/2023: Se presenta nota de renuncia del maestro de obras' }, 'm:2023-05': { files: [], notes: 'SETENA 10/05/2023: Avance normal.' } } }] });
+assert.equal(resignedInSetena(rz2.projects[0]), false);
 console.log('timeline OK:', t.length, 'events');
 process.exit(0);

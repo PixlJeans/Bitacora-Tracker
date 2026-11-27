@@ -25,7 +25,7 @@ function Review({ period: period }: { period: string }) {
   const r = summary(d);
   const last6 = months6();
   const et = (b: Project) => d.labels.find(e => e.id === b.labelId);
-  const groups: { e: Status; items: Project[] }[] = (['new', 'open', 'closing', 'finished'] as Status[])
+  const groups: { e: Status; items: Project[] }[] = (['new', 'open', 'closing', 'resigned', 'finished'] as Status[])
     .map(e => ({ e, items: d.projects.filter(b => !b.archived && b.status === e).sort((a, b) => a.code.localeCompare(b.code)) }));
   const toggle = (id: string) => setReviewed(x => (x.includes(id) ? x.filter(y => y !== id) : [...x, id]));
 

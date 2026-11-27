@@ -4,20 +4,23 @@
 
 import type { DocInfo } from './docKind';
 
-export type Status = 'open' | 'new' | 'closing' | 'finished';
+export type Status = 'open' | 'new' | 'closing' | 'resigned' | 'finished';
 
 export const STATUSES: { id: Status; name: string; short: string }[] = [
   { id: 'new', name: 'Nueva', short: 'Nueva' },
   { id: 'open', name: 'Abierta', short: 'Abierta' },
   { id: 'closing', name: 'Solicitud de Cierre', short: 'Sol. cierre' },
+  { id: 'resigned', name: 'Renuncia', short: 'Renuncia' },
   { id: 'finished', name: 'Terminada', short: 'Terminada' }
 ];
 export const statusName = (e: Status) => STATUSES.find(x => x.id === e)?.name ?? e;
 
 /** New and Open: monthly Informe Regencial + Regencia every 6 months, always.
- *  Closing request (Solicitud de Cierre): the project has ALREADY finished (SETENA hasn't updated it yet) → no deliveries, same as Finished. */
+ *  Closing request (Solicitud de Cierre): no more monthly / semester deliveries, but it has its own closing steps
+ *  (final regencia → SETENA approves → guarantee returned), see closure.ts. */
 export const isActiveProject = (b: { status: Status; archived?: boolean }) => (b.status === 'new' || b.status === 'open') && !b.archived;
-export const isFinished = (e: Status) => e === 'closing' || e === 'finished';
+/** No more deliveries: Solicitud de Cierre, Renuncia (the regente resigned) or Terminada. */
+export const isFinished = (e: Status) => e === 'closing' || e === 'resigned' || e === 'finished';
 
 /** A file saved in <data folder>/proyectos/<code>/ (path relative to the data folder). */
 export interface Attachment {
@@ -135,8 +138,15 @@ export interface Project {
   setenaUrl?: string;       // its page in the SETENA portal
   setena?: SetenaInfo;      // what its SETENA page says (read with «Descargar todo de SETENA»)
   docs?: Record<string, DocInfo & { placed: boolean }>;
-  setenaPhotos?: Record<string, number>; // photos downloaded from SETENA, by the date of their entry (read from the folders) // each SETENA PDF (by file name): what it is, read from it
+  setenaPhotos?: Record<string, number>;
+  closure?: Closure;       // closing the project (Solicitud de Cierre): steps checked by hand (null = unchecked by hand); see closure.ts
+  shiftedDues?: string[];  // Regencia keys whose due date the app moved because the semesters were postponed (regenciaShift)
+  resignChecked?: boolean; // its «renuncia» in SETENA was already turned into the Renuncia state once (not again if changed back) // photos downloaded from SETENA, by the date of their entry (read from the folders) // each SETENA PDF (by file name): what it is, read from it
 }
+
+/** Closing a project: final regencia steps, SETENA's approval, the guarantee returned to the owner. */
+export type ClosureStep = 'letter' | 'signed' | 'uploaded' | 'received' | 'approved' | 'guarantee';
+export type Closure = Partial<Record<ClosureStep, string | null>>;
 
 /** A saved overall review. */
 export interface Review {

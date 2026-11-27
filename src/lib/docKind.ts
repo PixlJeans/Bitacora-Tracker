@@ -10,7 +10,7 @@
 //  · scans without text (transfers, guarantees, signed letters)                             → sin texto (not moved)
 import { crtmFromText } from './geo';
 
-export type DocKind = 'regencia' | 'receipt' | 'setena' | 'letter' | 'foreign' | 'other' | 'notext';
+export type DocKind = 'regencia' | 'receipt' | 'setena' | 'letter' | 'guarantee' | 'photo' | 'foreign' | 'other' | 'notext';
 
 export interface DocInfo {
   kind: DocKind;
@@ -29,20 +29,29 @@ export interface DocInfo {
   regenteSigned?: string;   // date the regente signed it
   noSig?: boolean;          // regencia read for its signatures, and none could be read
   sigV?: number;            // version of the signature reader that read it (2 = also from the file's signature fields, v61)
+  ocr?: number;             // read with OCR (a scan): version of the OCR reader (1 = v68)
+  validFrom?: string;       // garantía: «… DEL 10-07-2024 AL 10-07-2025» (only when written like that)
+  validTo?: string;
+  uploadedIn?: string;      // a regencia found in ANOTHER project's SETENA bitácora (moved here): that project's code
+  misfiled?: boolean;       // …and this project's own bitácora has no copy of it (SETENA may not have it here)
+  closingRejected?: boolean; // a SETENA notice saying the closing request was NOT accepted
+  movedTo?: string;         // this project's file was another project's regencia: moved to that project's folder
 }
 
 /** Folder (inside the month) where each kind goes. `null` = leave it where it is. */
 export const KIND_FOLDER: Record<DocKind, string | null> = {
   regencia: 'Regencias', receipt: 'Notas de recibido', setena: 'Comunicados SETENA', letter: 'Cartas',
-  foreign: 'Documentos', other: 'Documentos', notext: null
+  guarantee: 'Garantía ambiental', photo: 'Fotos', foreign: 'Documentos', other: 'Documentos', notext: null
 };
 export const KIND_NAME: Record<DocKind, string> = {
   regencia: 'regencia', receipt: 'nota de recibido', setena: 'comunicado de SETENA', letter: 'carta',
-  foreign: 'regencia de otro proyecto', other: 'otro documento', notext: 'escaneado (sin texto)'
+  guarantee: 'garantía ambiental', photo: 'foto en PDF', foreign: 'regencia de otro proyecto', other: 'otro documento', notext: 'escaneado (sin texto)'
 };
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[ﬁ]/g, 'fi').replace(/\s+/g, ' ').trim();
 const codeKey = (c: string) => c.toUpperCase().replace(/\s/g, '');
+/** The guarantee: its documents say so plainly; 93015120210010005107 is the MINAE «Garantías ambientales» account. */
+const GUARANTEE = /Garantias?\s+Ambiental(?:es)?|Garantia\s+(?:de\s+cumplimiento|EXP\b)|Carta\s+de\s+valor|(?:En)?trada\s+de\s*.alor|MINAE[-\s]*SECRETARIA\s+TECN|Otros\s*valores|Seguro\s+(?:de\s+)?caucion|93015120210010005107/i;
 
 /** Classifies a document by the text of its first page(s). `code` = the project it was found in. */
 export function classifyDoc(text: string, code: string): DocInfo {
@@ -73,7 +82,21 @@ export function classifyDoc(text: string, code: string): DocInfo {
     return JSON.parse(JSON.stringify(info));
   }
   // ---- written BY SETENA: notices, technical reports ----
-  if (/^.{0,80}De:\s*Secretaria Tecnica Nacional Ambiental/i.test(head) || /\bINF-TEC-/i.test(head)) return { kind: 'setena' };
+  // (also its short replies with a link to its portal: «Le informamos que su solicitud de cierre no ha sido aceptada…»)
+  if (/^.{0,80}De:\s*Secretaria Tecnica Nacional Ambiental/i.test(head) || /\bINF-TEC-/i.test(head)
+    || (/\b(?:portal|bitacora)\.setena\.go\.cr\b/i.test(head) && /\bLe (?:informamos|solicitamos|comunicamos)\b/i.test(head))) {
+    return /solicitud de cierre (?:no ha sido aceptada|fue rechazada|no fue aceptada)|(?:rechaz|deneg)\w* (?:la )?solicitud de cierre/i.test(head) ? { kind: 'setena', closingRejected: true } : { kind: 'setena' };
+  }
+  // ---- the «Garantía ambiental» (the deposit / bond SETENA holds while the project is active): the bond itself
+  // («Entrada de valor», «Carta de valor», «Seguro caución»), the transfer to the MINAE guarantees account, or a
+  // letter sending its renewal. Before letters: a letter about the guarantee belongs with the guarantee. ----
+  if (GUARANTEE.test(t.slice(0, 4000))) {
+    const v = /\bDEL\s+(\d{2})[-/](\d{2})[-/](\d{4})\s+AL\s+(\d{2})[-/](\d{2})[-/](\d{4})\b/i.exec(t);
+    const ok = (y: string, m: string, d: string) => +m >= 1 && +m <= 12 && +d >= 1 && +d <= 31 && +y > 2000 && +y < 2100;
+    const out: DocInfo = { kind: 'guarantee', expediente: exp };
+    if (v && ok(v[3], v[2], v[1]) && ok(v[6], v[5], v[4])) { out.validFrom = `${v[3]}-${v[2]}-${v[1]}`; out.validTo = `${v[6]}-${v[5]}-${v[4]}`; }
+    return JSON.parse(JSON.stringify(out));
+  }
   // ---- letters TO SETENA ----
   if (/Senores\s*(?:de la\s*)?Secretaria Tecnica Nacional Ambiental/i.test(head)) return exp ? { kind: 'letter', expediente: exp } : { kind: 'letter' };
   return { kind: 'other' };

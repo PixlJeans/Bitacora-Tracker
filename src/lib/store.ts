@@ -3,12 +3,13 @@
 // persists to disk (with a short delay) and reschedules the native reminders.
 
 import { useSyncExternalStore } from 'react';
-import type { AppData, Attachment, Delivery, EntryType, ImportRow, LogEntry, Project, ProjectLocation, ReminderKind, SetenaInfo, Settings, Status, Step } from './types';
+import type { AppData, Attachment, Delivery, EntryType, ImportRow, LogEntry, Project, ProjectLocation, ReminderKind, SetenaInfo, Closure, ClosureStep, Settings, Status, Step } from './types';
 import { DEFAULT_LABELS, emptyDelivery } from './types';
 import { backend, esWeb } from './backend';
 import { computeReminders, deliveryKeyForDate, monthForVisit, pendingBefore } from './schedule';
 import { todayISO, uid } from './dates';
 import { deliveryFolder, folderOf } from './folders';
+import { closureOf } from './closure';
 
 export const DEFAULT_SETTINGS: Settings = {
   reminderTime: '08:00',
@@ -39,7 +40,7 @@ const pick = (o: any, key: string, legacy?: string) => (o?.[key] !== undefined ?
 const value = <T extends string>(v: any, allowed: readonly T[], legacy: Record<string, T>, fallback: T): T =>
   allowed.includes(v) ? v : legacy[v] ?? fallback;
 
-const LEGACY_STATUS: Record<string, Status> = { nueva: 'new', abierta: 'open', cierre: 'closing', terminada: 'finished' };
+const LEGACY_STATUS: Record<string, Status> = { nueva: 'new', abierta: 'open', cierre: 'closing', renuncia: 'resigned', terminada: 'finished' };
 const LEGACY_ENTRY_TYPE: Record<string, EntryType> = { visita: 'visit', informe: 'regencia', observacion: 'observation', otro: 'other' };
 const LEGACY_FILE_TYPE: Record<string, Attachment['type']> = { foto: 'photo', otro: 'other' };
 const LEGACY_LABEL_ID: Record<string, string> = { pendiente: 'pending', urgente: 'pending', proceso: 'inProgress', listo: 'done' };
@@ -113,7 +114,7 @@ export function useAppData(): AppData {
 
 /** Cleans up whatever was read from disk (older versions, missing fields, odd values). */
 const strList = (v: any): string[] => Array.isArray(v) ? v.filter((x: any) => typeof x === 'string').slice(0, 20) : [];
-const KINDS = ['regencia', 'receipt', 'setena', 'letter', 'foreign', 'other', 'notext'];
+const KINDS = ['regencia', 'receipt', 'setena', 'letter', 'guarantee', 'photo', 'foreign', 'other', 'notext'];
 function normDocs(o: any): NonNullable<Project['docs']> {
   const out: NonNullable<Project['docs']> = {};
   for (const [k, v] of Object.entries(o) as [string, any][]) {
@@ -125,7 +126,8 @@ function normDocs(o: any): NonNullable<Project['docs']> {
     // everything read from the PDF is kept, so nothing has to be read again after a restart
     out[k] = JSON.parse(JSON.stringify({ kind: v.kind, final: v.final ? true : undefined, ira: s(v.ira), expediente: s(v.expediente), period: s(v.period), number: s(v.number),
       project: t(v.project), place: t(v.place), lat: n(v.lat), lng: n(v.lng), noPlace: v.noPlace ? true : undefined,
-      clientSigned: iso(v.clientSigned), clientName: t(v.clientName), regenteSigned: iso(v.regenteSigned), noSig: v.noSig ? true : undefined, sigV: n(v.sigV), placed: !!v.placed }));
+      clientSigned: iso(v.clientSigned), clientName: t(v.clientName), regenteSigned: iso(v.regenteSigned), noSig: v.noSig ? true : undefined, sigV: n(v.sigV),
+      ocr: n(v.ocr), validFrom: iso(v.validFrom), validTo: iso(v.validTo), uploadedIn: s(v.uploadedIn), misfiled: v.misfiled ? true : undefined, movedTo: s(v.movedTo), closingRejected: v.closingRejected ? true : undefined, placed: !!v.placed }));
   }
   return out;
 }
@@ -190,7 +192,7 @@ export function normalize(raw: any): AppData {
   const session = pick(raw, 'importSession', 'importacion');
   const rows: ImportRow[] = Array.isArray(pick(session, 'rows', 'filas')) ? pick(session, 'rows', 'filas').filter((f: any) => f).map((f: any): ImportRow => ({
     code: String(pick(f, 'code', 'numero') || ''), name: String(pick(f, 'name', 'nombre') || ''),
-    status: value(pick(f, 'status', 'estado'), ['open', 'new', 'closing', 'finished'] as const, LEGACY_STATUS, 'open'),
+    status: value(pick(f, 'status', 'estado'), ['open', 'new', 'closing', 'resigned', 'finished'] as const, LEGACY_STATUS, 'open'),
     openedOn: String(pick(f, 'openedOn', 'apertura') || ''), labelId: labelId(pick(f, 'labelId', 'etiquetaId')),
     doubts: Array.isArray(pick(f, 'doubts', 'dudas')) ? pick(f, 'doubts', 'dudas') : [],
     existingId: pick(f, 'existingId', 'existenteId') ?? null,
@@ -221,7 +223,7 @@ export function normalize(raw: any): AppData {
         id,
         code: String(pick(b, 'code', 'numero')).toUpperCase().trim(),
         name: String(pick(b, 'name', 'nombre') || '').trim() || 'PROYECTO SIN NOMBRE',
-        status: value(pick(b, 'status', 'estado'), ['open', 'new', 'closing', 'finished'] as const, LEGACY_STATUS, 'open'),
+        status: value(pick(b, 'status', 'estado'), ['open', 'new', 'closing', 'resigned', 'finished'] as const, LEGACY_STATUS, 'open'),
         labelId: labelId(pick(b, 'labelId', 'etiquetaId')),
         openedOn: isoDate(pick(b, 'openedOn', 'apertura')) || isoDate(b.fechaInicio) || todayISO(),   // v1 saved «fechaInicio»
         notes: String(pick(b, 'notes', 'notas') || ''),
@@ -240,6 +242,9 @@ export function normalize(raw: any): AppData {
         ...(typeof b.setenaUrl === 'string' && b.setenaUrl.startsWith('https://bitacora.setena.go.cr/') ? { setenaUrl: b.setenaUrl } : {}),
         ...(b.setena && typeof b.setena === 'object' ? { setena: normSetena(b.setena) } : {}),
         ...(b.docs && typeof b.docs === 'object' && !Array.isArray(b.docs) ? { docs: normDocs(b.docs) } : {}),
+        ...(b.resignChecked ? { resignChecked: true } : {}),
+        ...(normClosure(b.closure) ? { closure: normClosure(b.closure) } : {}),
+        ...(Array.isArray(b.shiftedDues) && b.shiftedDues.length ? { shiftedDues: b.shiftedDues.filter((x: unknown) => typeof x === 'string') } : {}),
         ...(b.setenaPhotos && typeof b.setenaPhotos === 'object' ? { setenaPhotos: Object.fromEntries(Object.entries(b.setenaPhotos).filter(([k, v]) => isoDate(k) && Number(v) > 0).map(([k, v]) => [k, Number(v)])) } : {})
       };
       // Older data: projects imported without a date got the import day as their opening date.
@@ -420,6 +425,33 @@ function clearSnoozed(d: AppData, id: string) {
 }
 
 /** Marks a delivery step with a date (or null to unmark it). */
+/** Checks (date) or unchecks (null) a closing step by hand. Later steps imply the earlier final-regencia ones. */
+export function markClosure(id: string, step: ClosureStep, date: string | null) {
+  mutate(d => {
+    const b = d.projects.find(x => x.id === id);
+    if (!b) return;
+    const c: Closure = { ...(b.closure ?? {}), [step]: date };
+    if (date) {
+      const order: ClosureStep[] = ['letter', 'signed', 'uploaded', 'received', 'approved', 'guarantee'];
+      const auto = closureOf(b);
+      // the earlier steps of the final regencia get the same date when they are still empty (not «received», optional)
+      for (const s of order.slice(0, order.indexOf(step))) if (s !== 'received' && s !== 'approved' && !auto[s] && !c[s]) c[s] = date;
+    }
+    b.closure = c;
+    clearSnoozed(d, id);
+  });
+}
+
+function normClosure(v: unknown): Closure | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const out: Closure = {};
+  for (const k of ['letter', 'signed', 'uploaded', 'received', 'approved', 'guarantee'] as ClosureStep[]) {
+    const x = (v as any)[k];
+    if (x === null) out[k] = null; else if (typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x)) out[k] = x;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 export function markStep(id: string, key: string, step: Step, date: string | null) {
   mutate(d => {
     const b = d.projects.find(x => x.id === id);

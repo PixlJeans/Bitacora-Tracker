@@ -68,7 +68,7 @@ export function ProjectCalendar({ b, live: live = false }: { b: Project; onChang
       </div>
 
       <div className="pcal-checks">
-        {!isActiveProject(b) && <p className="muted sm">{b.archived ? 'Archivada: sin entregas.' : 'Ya terminó: sin entregas.'}</p>}
+        {!isActiveProject(b) && <p className="muted sm">{b.archived ? 'Archivada: sin entregas.' : b.status === 'resigned' ? 'Renuncia: sin entregas.' : b.status === 'closing' ? 'Solicitud de Cierre: sin entregas mensuales (sus pasos de cierre están arriba).' : 'Ya terminó: sin entregas.'}</p>}
         {active && ownMoved && <p className="muted sm pcal-moved">↪ La inspección y la bitácora de {monthName(month).toLowerCase()} se movieron al {longDate(ownMoved)}.{' '}
           <button type="button" className="dp-link" onClick={() => goTo(ownMoved)}>Ir a ese mes →</button></p>}
         {active && regMoved && <p className="muted sm pcal-moved">↪ La regencia de {monthName(month).toLowerCase()} se movió al {longDate(regMoved)}.{' '}

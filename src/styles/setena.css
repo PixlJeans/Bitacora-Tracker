@@ -187,3 +187,11 @@ body.theme-dark .tk-step:hover:not(:disabled){box-shadow:0 0 12px -3px rgba(167,
 
 /* Rutas: the week plan note */
 .rt-plan-note{font-size:.8rem;padding:.45rem .7rem;border-left:3px solid var(--accent);border-radius:6px;background:color-mix(in srgb,var(--accent) 6%,transparent);margin:.2rem 0 .6rem}
+
+/* «Renuncia»: the regente resigned (closed for the tracker, history kept) */
+.status-chip.status-resigned,.tile.status-resigned{background:color-mix(in srgb,#f472b6 18%,transparent);color:#db2777}
+body.theme-dark .status-chip.status-resigned{color:#f472b6;text-shadow:0 0 8px rgba(244,114,182,.45)}
+.fchip.status-resigned.on{background:#db2777;border-color:#db2777;color:#fff}
+.status-dot.status-resigned{background:#db2777}
+.prow3.status-resigned{opacity:.6}
+.imp-row .status-sel.status-resigned{color:#db2777}

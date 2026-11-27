@@ -10,6 +10,7 @@ import { Ic, toast } from './core';
 import { openEditor } from './ProjectEditor';
 import { daysText, daysUntil, FolderButton } from './Delivery';
 import { SetenaFeed } from './SetenaFeed';
+import { ClosureTasks, FileAlerts } from './Closure';
 
 const WEEKDAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
 const SHOW_LATE = 12;
@@ -140,7 +141,9 @@ export function TasksView({ d }: { d: AppData }) {
               : ' · ponla en ✏️ Editar datos, o se toma de la primera anotación en SETENA.'}
           </span></div>
       )}
+      <FileAlerts d={d} />
       {section('⚠️ Atrasadas', 'late', overdue, 'Nada atrasado. ✓', allLate ? undefined : SHOW_LATE)}
+      <ClosureTasks d={d} />
       {section('📅 Esta semana', 'week', week, 'Nada para esta semana.')}
       {section('🗓️ Próximos 30 días', 'later', later, 'Nada más en los próximos 30 días.')}
     </div>

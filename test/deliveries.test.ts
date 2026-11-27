@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { applySetena } from '../src/lib/setenaImport';
 import { quietInSetena } from '../src/lib/setenaInfo';
-import { deliveryFolder, folderOf } from '../src/lib/folders';
+import { deliveryFolder, folderOf, regenciaShift, isExtraReport } from '../src/lib/folders';
 import { normalize, applyStep, emptyData, fileLogIntoDeliveries, replaceAll, getData, markStep, mutate } from '../src/lib/store';
 import { emptyDelivery } from '../src/lib/types';
 import { backend } from '../src/lib/backend';
@@ -405,7 +405,7 @@ console.log('deliveries OK');
   assert.equal(classifyDoc('Powered by TCPDF (www.tcpdf.org) Documento de evaluación ambiental Otro Secretaría Técnica Nacional (SETENA), Costa Rica. Número de expediente D1-0206-2022 Tipo de trámite TRAMITE EN LINEA', 'D1-0206-2022').kind, 'receipt');
   assert.equal(classifyDoc('Página 1 de 2 De: Secretaría Técnica Nacional Ambiental (SETENA) — Departamento de Auditoría y Seguimiento Para: Desarrolladores y Responsables Ambientales Asunto: Seguimiento apertura formal de bitácoras', 'D1-0607-2026').kind, 'setena');
   assert.equal(classifyDoc('INF-TEC-DT-ASA-0339-2023 23 de junio de 2023 Asunto: Cierre de etapa única Desarrollador y Regente Ambiental a Notificar CONSTRUINMUEBLE del Este', 'D1-0550-2020').kind, 'setena');
-  assert.equal(classifyDoc('Cartago, 07 de agosto del 2024. CS-81-2024-07-08 Señores Secretaría Técnica Nacional Ambiental Ministerio del Ambiente & Energía ATENCIÓN: DEPARTAMENTO DE GARANTÍAS AMBIENTALES REFERENCIA: Exp. D1-0848-2022', 'D1-0848-2022').kind, 'letter');
+  assert.equal(classifyDoc('Cartago, 07 de agosto del 2024. CS-81-2024-07-08 Señores Secretaría Técnica Nacional Ambiental Ministerio del Ambiente & Energía ATENCIÓN: DEPARTAMENTO DE GARANTÍAS AMBIENTALES REFERENCIA: Exp. D1-0848-2022', 'D1-0848-2022').kind, 'guarantee', 'a letter to the guarantees department goes with the guarantee');
   assert.equal(classifyDoc('  \n ', 'D1-0848-2022').kind, 'notext');
 }
 // ---- the scanner moves each SETENA PDF to the folder of what it is, and undoes a check it caused ----
@@ -438,7 +438,7 @@ console.log('deliveries OK');
   const p = getData().projects[0];
   assert.equal(p.docs!['2026-07-01_22222222.pdf'].ira, 'IRA-I-2026');
   assert.equal(p.deliveries!['r:2026-11-10'].uploaded, null, 'the notice no longer counts as the November regencia');
-  assert.equal(p.deliveries!['r:2026-11-10'].due, null, 'back to its own date');
+  assert.equal(p.deliveries!['r:2026-11-10'].due, '2026-12-10', 'not the notice date: the next semester, a month later like the one before (Enero - Junio)');
   assert.equal(p.deliveries!['r:2026-05-10'].uploaded, '2026-07-01', 'the real regencia is checked');
   assert.equal(p.deliveries!['r:2026-05-10'].received, '2026-07-02', 'and its receipt');
   assert(msg.includes('3 PDF de SETENA leídos'), msg);
@@ -498,4 +498,56 @@ console.log('deliveries OK');
   assert.deepEqual(placeOf('Informe sin ubicación'), { noPlace: true });
 }
 console.log('moved / no-date OK');
+
+// ---- postponed regencias: later semesters follow the period of the last regencia PDF ----
+{
+  const b: any = { id: 'sh', code: 'D1-0299-2024', name: 'SHIFT', status: 'open', openedOn: '2024-04-29', createdOn: '2024-04-29', noOpeningDate: false,
+    docs: {
+      'a.pdf': { kind: 'regencia', period: 'Febrero - Abril 2024' },
+      'b.pdf': { kind: 'regencia', period: 'Mayo 2024 - Enero 2025' }
+    }, deliveries: {} };
+  assert.equal(isExtraReport(b, 'Febrero - Abril 2024'), true, 'the initial report is not a semester');
+  assert.equal(isExtraReport(b, 'Mayo 2024 - Enero 2025'), false);
+  assert.equal(isExtraReport(b, undefined), false, 'no period: nothing to say');
+  const sh = regenciaShift(b, '2026-12-31');
+  assert.equal(sh['2025-04-29'], '2025-07-29', 'the next semester moves 3 months, like the one that ran to January');
+  assert.equal(sh['2025-10-29'], '2026-01-29');
+  assert.equal(sh['2024-10-29'], undefined, 'the covered semester keeps its key');
+  assert.deepEqual(regenciaShift({ ...b, docs: { 'b.pdf': { kind: 'regencia', period: 'Mayo - Octubre 2024' } } }, '2026-12-31'), {}, 'on time: nothing moves');
+  assert.deepEqual(regenciaShift({ ...b, noOpeningDate: true }, '2026-12-31'), {});
+}
+
+// ---- closing a project: final regencia (from its PDF) → SETENA approves → guarantee returned ----
+{
+  const { closureOf, closureNext, inClosure } = await import('../src/lib/closure');
+  const base: any = { id: 'cz', code: 'D1-0761-2022', name: 'ROBLEDO', status: 'closing', openedOn: '2022-06-10', createdOn: '2022-06-10', noOpeningDate: false,
+    uploads: [], visits: [], regencias: [], archived: false, archivedOn: null, entries: [], notes: '', labelId: '', lastUpdated: null, deliveries: {}, docs: {} };
+  assert.equal(closureNext(base)!.step, 'letter', 'no final regencia yet: make it');
+  assert.equal(inClosure(base), true);
+  const withPdf = { ...base, docs: {
+    '2026-04-26_solicitudcierre_2026_4_26.pdf': { kind: 'regencia', final: true, period: 'Diciembre 2025 - Febrero 2026', clientSigned: '2026-04-24', placed: true },
+    '2026-04-27_abcd1234.pdf': { kind: 'receipt', placed: true },
+    '2025-01-01_old.pdf': { kind: 'regencia', period: 'Junio - Noviembre 2024', placed: true } } };
+  const c = closureOf(withPdf);
+  assert.deepEqual([c.letter, c.signed, c.uploaded, c.received, c.approved, c.guarantee], ['2026-04-24', '2026-04-24', '2026-04-26', '2026-04-27', null, null]);
+  assert.equal(closureNext(withPdf)!.wait, true, 'waiting for SETENA');
+  const approved = { ...withPdf, closure: { approved: '2026-10-01' } };
+  assert.equal(closureNext(approved)!.step, 'guarantee');
+  // SETENA closes it: Terminada, but still in closure until the guarantee is back
+  const fin = { ...approved, status: 'finished' };
+  assert.equal(inClosure(fin), true);
+  assert.equal(inClosure({ ...fin, closure: { approved: '2026-10-01', guarantee: '2026-11-20' } }), false);
+  assert.equal(inClosure({ ...base, status: 'finished' }), false, 'an old Terminada project is not in closure');
+  // unchecked by hand wins over the PDF
+  assert.equal(closureOf({ ...withPdf, closure: { received: null } }).received, null);
+  // the store: a later step fills the earlier final-regencia ones
+  replaceAll(normalize({ projects: [base] }));
+  const { markClosure } = await import('../src/lib/store');
+  markClosure('cz', 'uploaded', '2026-05-02');
+  const b2 = getData().projects[0];
+  assert.deepEqual(b2.closure, { letter: '2026-05-02', signed: '2026-05-02', uploaded: '2026-05-02' });
+  replaceAll(normalize(JSON.parse(JSON.stringify(getData()))));
+  assert.deepEqual(getData().projects[0].closure, { letter: '2026-05-02', signed: '2026-05-02', uploaded: '2026-05-02' }, 'kept on restart');
+  console.log('closure OK');
+}
 process.exit(0); // store.ts leaves an hourly timer running

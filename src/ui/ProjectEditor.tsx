@@ -3,6 +3,8 @@
 // Delivery dates are calculated from the opening date; each one can then be adjusted in the calendar.
 import { useState } from 'react';
 import { Timeline } from './Timeline';
+import { ClosureBox, GuaranteeLine } from './Closure';
+import { inClosure } from '../lib/closure';
 import type { Project, Status, ProjectLocation } from '../lib/types';
 import { STATUSES, isActiveProject, isFinished } from '../lib/types';
 import { codeExists, getData, mutate, labelForStatus, archive, useAppData, markAllBefore } from '../lib/store';
@@ -143,6 +145,7 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
         </div>
       )}
       {b && !editFields && view.setena && <SetenaLine b={view} />}
+      {b && !editFields && <GuaranteeLine b={d.projects.find(x => x.id === b.id) ?? b} />}
       {(!b || editFields) && <div className="ed-row">
         <div className="ed-f code">
           <label className="modal-label" htmlFor="ed_num">Número</label>
@@ -178,7 +181,8 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
             {b && live && behind > 0 && (askCatchUp
               ? <span className="catch-up">¿Marcar como hechas las {behind} tareas anteriores a {monthName(fromISO(today)).toLowerCase()}? <button type="button" className="btn sm primary" onClick={catchUp}>Sí, marcar</button> <button type="button" className="dp-link" onClick={() => setAskCatchUp(false)}>no</button></span>
               : <button type="button" className="dp-link catch-up" onClick={() => setAskCatchUp(true)}>✓ Marcar todo lo anterior a {monthName(fromISO(today)).toLowerCase()} como hecho ({behind})</button>)}</div>
-        : <p className="ed-auto-line muted">{f.archived ? 'Archivada: sin entregas.' : 'Ya terminó: no genera entregas. Ciérrala con 📦 Archivar.'}</p>}
+        : b && inClosure(b) ? <ClosureBox b={d.projects.find(x => x.id === b.id) ?? b} />
+        : <p className="ed-auto-line muted">{f.archived ? 'Archivada: sin entregas.' : f.status === 'resigned' ? 'Renuncia del regente: ya no genera entregas (la historia se queda). Ciérrala con 📦 Archivar.' : 'Ya terminó: no genera entregas. Ciérrala con 📦 Archivar.'}</p>}
 
       <ProjectCalendar b={view} live={!!live} onChange={c => setF(x => ({ ...x, ...c }))} />
 

@@ -12,7 +12,7 @@
     "tauri": "tauri",
     "app:dev": "tauri dev",
     "app:build": "tauri build",
-    "test": "tsx test/parser.test.ts && tsx test/schedule.test.ts && tsx test/search.test.ts && tsx test/deliveries.test.ts && tsx test/timeline.test.ts && tsx test/plan.test.ts",
+    "test": "tsx test/parser.test.ts && tsx test/schedule.test.ts && tsx test/search.test.ts && tsx test/deliveries.test.ts && tsx test/timeline.test.ts && tsx test/plan.test.ts && tsx test/files.test.ts",
     "build:web": "vite build --mode web",
     "version:bump": "node scripts/bump-version.mjs"
   },
@@ -21,9 +21,11 @@
     "@tauri-apps/plugin-autostart": "^2.3.0",
     "@tauri-apps/plugin-dialog": "^2.2.2",
     "@tauri-apps/plugin-notification": "^2.2.2",
+    "@tesseract.js-data/spa": "^1.0.0",
     "pdfjs-dist": "^5.3.31",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.5.0",

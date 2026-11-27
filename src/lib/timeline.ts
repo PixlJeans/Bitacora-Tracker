@@ -56,14 +56,20 @@ export function timelineOf(b: Project): TlItem[] {
   for (const mk of b.visits) if (!datedMonths.has('v' + mk)) out.push({ date: taskDay(b, mk), kind: 'visit', title: 'Inspección', exact: false });
   for (const mk of b.uploads) if (!datedMonths.has('u' + mk)) out.push({ date: taskDay(b, mk), kind: 'bitacora', title: 'Llenado de bitácora', exact: false });
   for (const due of b.regencias) if (!dels[`r:${due}`]?.uploaded) out.push({ date: due, kind: 'regencia', title: 'Regencia presentada', exact: false });
+  // closing (only what was checked by hand: the final regencia's PDF is already in the list below)
+  if (b.closure?.approved) out.push({ date: b.closure.approved, kind: 'doc', title: '✅ Cierre aprobado por SETENA', exact: true });
+  if (b.closure?.guarantee) out.push({ date: b.closure.guarantee, kind: 'doc', title: '💵 Garantía ambiental devuelta al propietario', exact: true });
   // SETENA documents read by the scanner (their file name starts with the entry date)
   for (const [name, info] of Object.entries(b.docs ?? {})) {
     const date = /^(\d{4}-\d{2}-\d{2})_/.exec(name)?.[1];
-    if (!date) continue;
+    if (!date || info.kind === 'photo' || info.movedTo) continue; // photos: counted with the SETENA photos · moved: shown in its project
     const kind: TlKind = info.kind === 'regencia' ? 'regencia' : info.kind === 'receipt' ? 'receipt' : 'doc';
     const title = info.kind === 'regencia' ? `Informe de regencia${info.ira ? ' ' + info.ira : ''}${info.final ? ' (final)' : ''}`
-      : info.kind === 'receipt' ? `Nota de recibido${info.number ? ' ' + info.number : ''}` : `Documento: ${KIND_NAME[info.kind]}`;
-    out.push({ date, kind, title, text: info.period ? `Periodo ${info.period}` : undefined, tag: 'PDF', exact: true });
+      + (info.uploadedIn ? ` · subida en la bitácora de ${info.uploadedIn}${info.misfiled ? ' (no en la suya)' : ''}` : '')
+      : info.kind === 'receipt' ? `Nota de recibido${info.number ? ' ' + info.number : ''}`
+      : info.kind === 'guarantee' ? `🛡️ Garantía ambiental${info.validTo ? ` (vigencia hasta ${shortDate(info.validTo)} ${info.validTo.slice(2, 4)})` : ''}`
+      : info.closingRejected ? '⚠️ SETENA no aceptó la solicitud de cierre' : `Documento: ${KIND_NAME[info.kind]}`;
+    out.push({ date, kind, title, text: info.period ? `Periodo ${info.period}` : undefined, tag: info.ocr ? 'escaneado' : 'PDF', exact: true });
     // the client's digital signature inside the regencia (they sign it, then it is sent to SETENA)
     if (info.kind === 'regencia' && info.clientSigned)
       out.push({ date: info.clientSigned, kind: 'regencia', title: `🖊️ Firmada por el cliente${info.clientName ? ` (${info.clientName})` : ''}`, tag: 'firma digital', exact: true });
@@ -121,4 +127,12 @@ function dedupe(items: TlItem[]): TlItem[] {
     seen.set(k, { x, n: 1 }); out.push(x);
   }
   return out;
+}
+
+/** Open / new project whose LAST SETENA entry says the regente resigned («Se presenta nota de Renuncia»), not
+ *  turned into «Renuncia» before. Content rule only. */
+export function resignedInSetena(b: Project): boolean {
+  if (b.archived || b.resignChecked || (b.status !== 'open' && b.status !== 'new')) return false;
+  const last = timelineOf(b).find(x => x.kind === 'setena');
+  return !!last && /\brenuncia\b/i.test(last.text ?? '');
 }

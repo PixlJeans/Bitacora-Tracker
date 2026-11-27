@@ -13,7 +13,8 @@ import { getData, mutate, applyStep, deliveryOf } from './store';
 import { monthExists, inspectionDate, regenciaDue } from './schedule';
 import { readExif } from './exif';
 import { addMonths, todayISO } from './dates';
-import { projectFolder, regenciaKeyNear, regenciaKeyForPeriod, setenaTarget } from './folders';
+import { resignedInSetena } from './timeline';
+import { projectFolder, regenciaKeyNear, regenciaKeyForPeriod, regenciaShift, isExtraReport, setenaTarget } from './folders';
 import { sortDocuments } from './docSort';
 import { KIND_NAME, type DocKind } from './docKind';
 
@@ -21,7 +22,7 @@ const IMG = /\.(jpe?g|png|heic|heif|webp)$/i;
 const DOC = /\.(docx?|pdf|odt|rtf|xlsx?)$/i;
 const MONTH_DIR = /\/(\d{4})\/(\d{2}) - [^/]+\/(Fotos|Regencias|Notas de recibido)\/([^/]+)$/;
 /** A file downloaded from SETENA: …/<Año>/<MM - Mes>/SETENA/<YYYY-MM-DD>_… (the date of its SETENA entry). */
-const SETENA_FILE = /\/(\d{4})\/(\d{2}) - [^/]+\/(?:SETENA|Fotos|Regencias|Documentos)\/(\d{4}-\d{2}-\d{2})_[0-9a-f]{8}\.[a-z0-9]{2,5}$/i;
+const SETENA_FILE = /\/(\d{4})\/(\d{2}) - [^/]+\/(?:SETENA|Fotos|Regencias|Documentos|Garantía ambiental)\/(\d{4}-\d{2}-\d{2})_[0-9a-f]{8}\.[a-z0-9]{2,5}$/i;
 // files still waiting to be sorted: in the month's SETENA folder, or SETENA documents left in the old «Documentos» folder
 const IN_SETENA = /\/(\d{4})\/(\d{2}) - [^/]+\/(?:SETENA\/([^/]+)|Documentos\/(\d{4}-\d{2}-\d{2}_[0-9a-f]{8}\.[a-z0-9]{2,5}))$/i;
 
@@ -53,21 +54,26 @@ export async function scanFolders(force = false): Promise<string> {
   const photoRecords: { id: string; shots: Record<string, number> }[] = [];
   const wrong: { id: string; key: string; date: string }[] = [];
   const signFills: { id: string; key: string; date: string; fromPdf: boolean; fix?: boolean }[] = [];
+  const dueFixes: { id: string; key: string; due: string | null }[] = [];
   let sorted = 0;
   const starts: { id: string; date: string }[] = [];
   const places: { id: string; lat: number; lng: number }[] = [];
   const docKinds: Record<string, number> = {};
   let docsRead = 0, docsMoved = 0;
-  const budget = { left: 80 };
+  const budget: { left: number; ocr?: number } = { left: 80 };
   // empty project folders (made by 📂 or by moves) go to «Carpetas vacías (se pueden borrar)»
   let tidied = 0, adopted = 0;
   const renamed: string[] = [], locatedByDoc: string[] = [];
   try { tidied = await backend.tidyEmptyFolders(); } catch { /* not on desktop */ }
   const tidyMsg = tidied ? `${tidied} carpeta(s) vacía(s) movidas a «Carpetas vacías (se pueden borrar)»` : '';
+  // the regente resigned (his last SETENA entry says so): the project goes to «Renuncia», once
+  const resigned = getData().projects.filter(resignedInSetena).map(b => b.id);
+  if (resigned.length) mutate(d => { for (const b of d.projects) if (resigned.includes(b.id)) { b.status = 'resigned'; b.resignChecked = true; } });
+  const resignMsg = resigned.length ? `${resigned.map(id => getData().projects.find(b => b.id === id)?.code).join(', ')} → «Renuncia» (su última anotación en SETENA lo dice)` : '';
   try {
     for (const b0 of getData().projects) {
       if (b0.archived) continue;
-      let b = b0;
+      let b = getData().projects.find(x => x.id === b0.id) ?? b0; // fresh: an earlier project may have moved a file into this one
       // every project with an opening date: active ones and also «Solicitud de Cierre» / terminadas (their history)
       const tracked = !b.noOpeningDate;
       let files: { path: string; size: number; modified: number }[];
@@ -77,8 +83,8 @@ export async function scanFolders(force = false): Promise<string> {
       if (!files.length) continue;
       // ---- PDFs from SETENA: read what each one is and put it in its folder (every project, once per file) ----
       if (budget.left > 0) {
-        const r = await sortDocuments(b, files, budget);
-        if (r.read) {
+        const r = await sortDocuments(b, files, budget, getData().projects.filter(x => !x.noOpeningDate || x.setena));
+        if (r.read || r.moved) {
           docsRead += r.read; docsMoved += r.moved;
           for (const [k, n] of Object.entries(r.kinds)) docKinds[k] = (docKinds[k] ?? 0) + n;
           b = getData().projects.find(x => x.id === b.id) ?? b;
@@ -138,8 +144,8 @@ export async function scanFolders(force = false): Promise<string> {
         const ym = `${m[1]}-${m[2]}`, date = m[3];
         // an entry in a month = that month's bitácora filled in
         if (monthExists(b, ym)) earliest(sBits, `m:${ym}`, date);
-        // photos = that month's inspection
-        if (IMG.test(f.path)) { const k = inspectionKeyFor(b, ym); if (k) earliest(sVisits, k, date); shots[date] = (shots[date] ?? 0) + 1; }
+        // photos = that month's inspection (also a photo SETENA got as a PDF: read by its content, docSort)
+        if (IMG.test(f.path) || b.docs?.[f.path.split('/').pop()!]?.kind === 'photo') { const k = inspectionKeyFor(b, ym); if (k) earliest(sVisits, k, date); shots[date] = (shots[date] ?? 0) + 1; }
       }
       // entries with text only (no files) are in that month's notes: «SETENA dd/mm/yyyy: …»
       for (const [k, e] of Object.entries(b.deliveries ?? {})) {
@@ -155,16 +161,20 @@ export async function scanFolders(force = false): Promise<string> {
       // Regencia documents and notas de recibido, each to the closest Regencia (date: from the SETENA name, else the folder month)
       // regencias checked by an earlier version with a document that covers ANOTHER semester: uncheck them
       // (only when that check's date is exactly that document's date and no document covers this one)
-      const docKeyOfDate = new Map<string, string>(), covered = new Set<string>();
+      // what each regencia PDF of a day covers: a semester («r:…») or 'extra' (initial / extra report, never a semester)
+      const docKeysOfDate = new Map<string, Set<string>>(), covered = new Set<string>();
       for (const [name, info] of Object.entries(b.docs ?? {})) {
         if (info.kind !== 'regencia') continue;
         const d0 = /^(\d{4}-\d{2}-\d{2})_/.exec(name)?.[1], k = regenciaKeyForPeriod(b, info.period);
-        if (d0 && k) { docKeyOfDate.set(d0, k); covered.add(k); }
+        const v = k ?? (isExtraReport(b, info.period) ? 'extra' : null);
+        if (d0 && v) { docKeysOfDate.set(d0, new Set([...(docKeysOfDate.get(d0) ?? []), v])); if (k) covered.add(k); }
       }
+      const docKeyOfDate = (date: string) => { const s0 = docKeysOfDate.get(date); return s0 ? ([...s0].find(x => x !== 'extra') ?? 'extra') : undefined; };
       for (const [k, e] of Object.entries(b.deliveries ?? {})) {
         if (!k.startsWith('r:') || !e.uploaded) continue;
-        const k2 = docKeyOfDate.get(e.uploaded);
-        if (k2 && k2 !== k && !covered.has(k)) wrong.push({ id: b.id, key: k, date: e.uploaded });
+        const ks = docKeysOfDate.get(e.uploaded);
+        // checked with that day's PDF, but that PDF covers another semester (or is the initial report), and no PDF covers this one
+        if (ks && !ks.has(k) && !covered.has(k)) wrong.push({ id: b.id, key: k, date: e.uploaded });
       }
       const regDocs = new Map<string, string[]>(), recDocs = new Map<string, string[]>();
 
@@ -186,7 +196,10 @@ export async function scanFolders(force = false): Promise<string> {
           const date = /^(\d{4}-\d{2}-\d{2})_/.exec(m[4])?.[1] ?? `${ym}-15`;
           // a regencia says which semester it covers («Periodo … Agosto 2023 - Enero 2024»): that one, not the nearest date
           // a receipt goes with the regencia of its day (it is SETENA's receipt of that one)
-          const key = (m[3] === 'Regencias' ? regenciaKeyForPeriod(b, b.docs?.[m[4]]?.period) : docKeyOfDate.get(date)) || regenciaKeyNear(b, date);
+          // an initial / extra report (its period is no semester) never checks a semester, nor does its receipt
+          const per = m[3] === 'Regencias' ? b.docs?.[m[4]]?.period : undefined;
+          const own = m[3] === 'Regencias' ? (regenciaKeyForPeriod(b, per) ?? (isExtraReport(b, per) ? 'extra' : undefined)) : docKeyOfDate(date);
+          const key = own === 'extra' ? null : own || regenciaKeyNear(b, date);
           const map = m[3] === 'Regencias' ? regDocs : recDocs;
           if (key) map.set(key, [...(map.get(key) ?? []), date]);
         }
@@ -199,6 +212,17 @@ export async function scanFolders(force = false): Promise<string> {
         // and the PDF says the client signed earlier → its real date
         if (!e.signed) signFills.push({ id: b.id, key: k, date: sig && sig <= e.uploaded ? sig : e.uploaded, fromPdf: !!sig });
         else if (sig && e.signed === e.uploaded && sig < e.uploaded) signFills.push({ id: b.id, key: k, date: sig, fromPdf: true, fix: true });
+      }
+      // postponed semesters: the pending regencias after the last one handed in move like it did (only dates the
+      // app set itself or never set; a date moved by hand stays)
+      {
+        const want = regenciaShift(b, addMonths(today, 24)), mine = new Set(b.shiftedDues ?? []);
+        for (const [k, due] of Object.entries(want)) {
+          const e = deliveryOf(b, `r:${k}`);
+          if (e.uploaded || e.due === due || (e.due && !mine.has(k))) continue;
+          dueFixes.push({ id: b.id, key: k, due });
+        }
+        for (const k of mine) if (!want[k] && !deliveryOf(b, `r:${k}`).uploaded && deliveryOf(b, `r:${k}`).due) dueFixes.push({ id: b.id, key: k, due: null });
       }
       const fixing = new Set(wrong.filter(w => w.id === b.id).map(w => w.key));
       for (const [key, dates] of regDocs) {
@@ -243,10 +267,17 @@ export async function scanFolders(force = false): Promise<string> {
     const docsMsg = docsRead ? `${docsRead} PDF de SETENA leídos (${Object.entries(docKinds).map(([k, n]) => `${n} ${KIND_NAME[k as DocKind]}`).join(', ')})${docsMoved ? `, ${docsMoved} movidos a su carpeta` : ''}` : '';
     // SETENA photos per date (silent: only for the Línea de tiempo)
     if (photoRecords.length) mutate(d => { for (const r of photoRecords) { const b = d.projects.find(x => x.id === r.id); if (b) b.setenaPhotos = r.shots; } }, { undo: false });
-    if (!visits.length && !regs.length && !starts.length && !places.length && !bits.length && !wrong.length && !signFills.length)
-      return [sorted && `${sorted} archivo(s) de SETENA ordenados en Fotos / Regencias`, docsMsg, tidyMsg, renamed.length && `nombre corregido desde su regencia: ${renamed.join(', ')}`, locatedByDoc.length && `ubicación tomada de las coordenadas de su regencia: ${locatedByDoc.join(', ')}`, adopted && `${adopted} archivo(s) de una carpeta con el nombre viejo del proyecto pasados a la actual`].filter(Boolean).join(' · ');
+    if (!visits.length && !regs.length && !starts.length && !places.length && !bits.length && !wrong.length && !signFills.length && !dueFixes.length)
+      return [sorted && `${sorted} archivo(s) de SETENA ordenados en Fotos / Regencias`, docsMsg, tidyMsg, resignMsg, renamed.length && `nombre corregido desde su regencia: ${renamed.join(', ')}`, locatedByDoc.length && `ubicación tomada de las coordenadas de su regencia: ${locatedByDoc.join(', ')}`, adopted && `${adopted} archivo(s) de una carpeta con el nombre viejo del proyecto pasados a la actual`].filter(Boolean).join(' · ');
     mutate(d => {
       for (const v of visits) { const b = d.projects.find(x => x.id === v.id); if (b && !deliveryOf(b, v.key).visit) { applyStep(b, v.key, 'visit', v.date); applyStep(b, v.key, 'photos', v.date); } }
+      for (const f of dueFixes) {
+        const b = d.projects.find(x => x.id === f.id); if (!b) continue;
+        b.deliveries = { ...(b.deliveries ?? {}), [`r:${f.key}`]: { ...deliveryOf(b, `r:${f.key}`), due: f.due } };
+        const mine = new Set(b.shiftedDues ?? []);
+        if (f.due) mine.add(f.key); else mine.delete(f.key);
+        b.shiftedDues = [...mine];
+      }
       for (const f of signFills) {
         const b = d.projects.find(x => x.id === f.id); if (!b) continue;
         const e = deliveryOf(b, f.key);
@@ -276,7 +307,7 @@ export async function scanFolders(force = false): Promise<string> {
       for (const st of starts) { const b = d.projects.find(x => x.id === st.id); if (b) applyStep(b, 's:start', 'uploaded', st.date); }
       for (const p of places) { const b = d.projects.find(x => x.id === p.id); if (b && !b.location) b.location = { lat: p.lat, lng: p.lng, text: '', source: 'photo' }; }
     }, { undo: true });
-    return [docsMsg, sorted && `${sorted} archivo(s) de SETENA ordenados`, bits.length && `${bits.length} bitácora(s) marcadas por SETENA`, visits.length && `${visits.length} inspección(es) marcadas por sus fotos`, regs.length && `${regs.length} regencia(s) / nota(s) de recibido marcadas`, signFills.some(f => f.fromPdf) && `${signFills.filter(f => f.fromPdf).length} firma(s) del cliente leídas de las regencias`, wrong.length && `${wrong.length} regencia(s) que estaban en el semestre equivocado corregidas (según el periodo de su PDF)`,
-      starts.length && `${starts.length} carta(s) de inicio`, places.length && `ubicación de ${places.length} proyecto(s) tomada del GPS`, tidyMsg, renamed.length && `nombre corregido desde su regencia: ${renamed.join(', ')}`, locatedByDoc.length && `ubicación tomada de las coordenadas de su regencia: ${locatedByDoc.join(', ')}`, adopted && `${adopted} archivo(s) de una carpeta con el nombre viejo del proyecto pasados a la actual`].filter(Boolean).join(' · ');
+    return [docsMsg, sorted && `${sorted} archivo(s) de SETENA ordenados`, bits.length && `${bits.length} bitácora(s) marcadas por SETENA`, visits.length && `${visits.length} inspección(es) marcadas por sus fotos`, regs.length && `${regs.length} regencia(s) / nota(s) de recibido marcadas`, signFills.some(f => f.fromPdf) && `${signFills.filter(f => f.fromPdf).length} firma(s) del cliente leídas de las regencias`, dueFixes.some(f => f.due) && `${new Set(dueFixes.filter(f => f.due).map(f => f.id)).size} proyecto(s) con las regencias pendientes en su fecha nueva (semestres corridos, según el periodo de sus PDF)`, wrong.length && `${wrong.length} regencia(s) que estaban en el semestre equivocado corregidas (según el periodo de su PDF)`,
+      starts.length && `${starts.length} carta(s) de inicio`, places.length && `ubicación de ${places.length} proyecto(s) tomada del GPS`, tidyMsg, resignMsg, renamed.length && `nombre corregido desde su regencia: ${renamed.join(', ')}`, locatedByDoc.length && `ubicación tomada de las coordenadas de su regencia: ${locatedByDoc.join(', ')}`, adopted && `${adopted} archivo(s) de una carpeta con el nombre viejo del proyecto pasados a la actual`].filter(Boolean).join(' · ');
   } finally { busy = false; }
 }

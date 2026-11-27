@@ -73,7 +73,12 @@ export function applySetena(d: AppData, m: SetenaManifest, today = todayISO()) {
     } else {
       if (b.noOpeningDate && start) { b.openedOn = start; b.noOpeningDate = false; dates++; }
       const st = statusOf(sp);
-      if (b.status !== st && !b.archived) { b.status = st; statuses++; }
+      // SETENA keeps saying «Abierta» after the regente resigned: Renuncia is ours and stays (unless SETENA closes it)
+      if (b.status !== st && !b.archived && !(b.status === 'resigned' && st !== 'finished')) {
+        // SETENA closed a project that was in Solicitud de Cierre: the closing was approved (the guarantee comes next)
+        if (b.status === 'closing' && st === 'finished' && !b.closure?.approved) b.closure = { ...(b.closure ?? {}), approved: todayISO() };
+        b.status = st; statuses++;
+      }
     }
     if (start) b.setenaStart = start;
     // the page's summary: progress, newest entry, people, approval of the request
@@ -113,7 +118,8 @@ export function applySetena(d: AppData, m: SetenaManifest, today = todayISO()) {
         const receipt = !isImage(name) && firstDocOfDay.get(e.date) !== e;
         const folder = setenaTarget(b, ym, name, receipt);
         downloads.push({ url, folder, name });
-        if (receipt && folder.endsWith('/Notas de recibido')) moves.push({ from: `${monthFolderOf(b, ym, 'Regencias')}/${name}`, folder });
+        // (not when its content was already read and it is NOT a receipt: e.g. a second copy of the regencia)
+        if (receipt && folder.endsWith('/Notas de recibido') && (!b.docs?.[name] || b.docs[name].kind === 'receipt')) moves.push({ from: `${monthFolderOf(b, ym, 'Regencias')}/${name}`, folder });
       }
     }
   }

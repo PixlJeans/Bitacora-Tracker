@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAppData, isReady, Undo, mutate, reload } from './lib/store';
 import type { Project, Status } from './lib/types';
 import { isActiveProject, isFinished } from './lib/types';
+import { inClosure } from './lib/closure';
 import { reportTasks, REPORT_LABEL, completeIn, nextDue, upcomingRegencias, summary, monthTasks, type RegenciaInfo, sortDate } from './lib/schedule';
 import { matches } from './lib/search';
 import { addDays, monthKeyOf, monthNameOf, shortDate, todayISO } from './lib/dates';
@@ -182,8 +183,9 @@ export default function App() {
   }, [d, activeProjects, filter, labelFilter, sortOrder]);
 
   const archiveFinished = () => {
-    const n = d.projects.filter(b => !b.archived && isFinished(b.status)).length;
-    mutate(dd => { dd.projects.forEach(b => { if (!b.archived && isFinished(b.status)) { b.archived = true; b.archivedOn = todayISO(); } }); });
+    // not the ones still being closed (final regencia / SETENA's approval / guarantee pending)
+    const n = d.projects.filter(b => !b.archived && isFinished(b.status) && !inClosure(b)).length;
+    mutate(dd => { dd.projects.forEach(b => { if (!b.archived && isFinished(b.status) && !inClosure(b)) { b.archived = true; b.archivedOn = todayISO(); } }); });
     toast(`📦 ${n} proyecto(s) archivados (siguen en la pestaña Archivadas)`, true);
   };
 
@@ -224,7 +226,8 @@ export default function App() {
         {chip('new', 'Nuevas', r.new, 'status-new')}
         {chip('open', 'Abiertas', r.open, 'status-open')}
         {chip('closing', 'Sol. cierre', r.closing, 'status-closing')}
-        {r.finished > 0 && <button className="dp-link" title="Solicitud de Cierre y Terminadas ya no generan entregas; pasan a Archivadas con todo su historial" onClick={() => archiveFinished()}>📦 Archivar {r.finished} terminada(s)</button>}
+        {r.resigned > 0 && chip('resigned', 'Renuncia', r.resigned, 'status-resigned')}
+        {r.finished > 0 && <button className="dp-link" title="Renuncia y Terminadas (y los cierres ya completos, con la garantía devuelta) pasan a Archivadas con todo su historial" onClick={() => archiveFinished()}>📦 Archivar {r.finished} terminada(s)</button>}
       </div>
       {activeList.length ? <><RowHeader />{activeList.map(b => P(b))}</> : emptyData('Ninguna bitácora coincide con el filtro.')}
     </>;

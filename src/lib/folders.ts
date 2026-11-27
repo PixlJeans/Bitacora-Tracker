@@ -5,7 +5,7 @@
 //   Proyectos/<Código - Nombre>/<Año>/<MM - Mes>/Notas de recibido/ ← the receipt SETENA sends for a Regencia
 import type { Project } from './types';
 import { inspectionDate, regenciaDue, regenciaDueDates } from './schedule';
-import { addMonths, fromISO } from './dates';
+import { addMonths, daysInMonth, fromISO } from './dates';
 
 const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
@@ -61,6 +61,39 @@ export function regenciaKeyForPeriod(b: Project, period: string | undefined): st
   return best ? `r:${best}` : null;
 }
 
+/** Months from 'YYYY-MM' a to b. */
+const monthsBetween = (a: string, b: string) => (+b.slice(0, 4) - +a.slice(0, 4)) * 12 + (+b.slice(5, 7) - +a.slice(5, 7));
+
+/** Postponed semesters: when the regencias actually cover other months than the ones counted from the opening
+ *  (e.g. the last one covered «Mayo 2024 - Enero 2025» for the semester due in October), the semesters after the
+ *  last one handed in move by the same number of months. Returns the new due date for each later Regencia key
+ *  (only those that move). Only from the periods written in the regencias themselves. */
+export function regenciaShift(b: Project, until: string): Record<string, string> {
+  if (b.noOpeningDate) return {};
+  let lastKey = '', lastEnd = '';
+  for (const x of Object.values(b.docs ?? {})) {
+    if (x.kind !== 'regencia') continue;
+    const k = regenciaKeyForPeriod(b, x.period)?.slice(2), end = periodEnd(x.period);
+    if (k && end && k > lastKey) { lastKey = k; lastEnd = end; }
+  }
+  if (!lastKey) return {};
+  const shift = monthsBetween(lastKey.slice(0, 7), lastEnd);
+  if (!shift) return {};
+  const day = Number(b.openedOn.slice(8, 10)) || 1;
+  const out: Record<string, string> = {};
+  for (const k of regenciaDueDates(b, addMonths(`${lastKey.slice(0, 7)}-01`, 1), until)) {
+    if (k <= lastKey) continue;
+    const m = addMonths(`${k.slice(0, 7)}-01`, shift).slice(0, 7);
+    const [y, mo] = m.split('-').map(Number);
+    out[k] = `${m}-${String(Math.min(day, daysInMonth(y, mo - 1))).padStart(2, '0')}`;
+  }
+  return out;
+}
+
+/** A regencia whose period ends far from every semester (more than 3 months): the initial report right after the
+ *  opening («Abril 2025», «Febrero - Abril 2024») or an extra one. It never counts as a semester's regencia. */
+export const isExtraReport = (b: Project, period: string | undefined) => !!periodEnd(period) && !regenciaKeyForPeriod(b, period);
+
 const IMG = /\.(jpe?g|png|gif|webp|heic|heif)$/i;
 /** Where a file from SETENA goes, by the month of its entry (no guessing):
  *  photos → that month's Fotos · documents (PDF / Word) → that month's Regencias, or its «Notas de recibido» when
@@ -73,7 +106,7 @@ export function setenaTarget(b: Project, ym: string, name: string, receipt = fal
 export const isImage = (name: string) => IMG.test(name);
 
 /** Folder of one month of a project (by date), e.g. «…/2026/11 - Noviembre/Documentos». */
-export const monthFolderOf = (b: Pick<Project, 'code' | 'name'>, ym: string, sub: 'Fotos' | 'Regencias' | 'Notas de recibido' | 'Documentos' | 'SETENA' | 'Comunicados SETENA' | 'Cartas') => `${projectFolder(b)}/${monthFolder(ym)}/${sub}`;
+export const monthFolderOf = (b: Pick<Project, 'code' | 'name'>, ym: string, sub: 'Fotos' | 'Regencias' | 'Notas de recibido' | 'Documentos' | 'SETENA' | 'Comunicados SETENA' | 'Cartas' | 'Garantía ambiental' | 'Regencias en otra bitácora') => `${projectFolder(b)}/${monthFolder(ym)}/${sub}`;
 
 const monthFolder = (ym: string) => {
   const [y, m] = ym.split('-');

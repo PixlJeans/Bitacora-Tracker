@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import type { Project, AppData, Status } from '../lib/types';
 import { STATUSES, statusName, isActiveProject, isFinished } from '../lib/types';
+import { inClosure, closureNext } from '../lib/closure';
 import { taskColumns, type TaskColumn, type TaskKind } from '../lib/schedule';
 import { daysUntil, daysText } from './Delivery';
 import { shortDate, monthNameOf, todayISO } from '../lib/dates';
@@ -77,10 +78,10 @@ export function ProjectRow({ d: _d, b, data }: { d: AppData; b: Project; mode?: 
         <TaskCell b={b} kind="inspection" c={cols.inspection} />
         <TaskCell b={b} kind="bitacora" c={cols.bitacora} />
         <TaskCell b={b} kind="regencia" c={cols.regencia} />
-      </> : <span className="c-task na wide">{b.archived ? 'Archivada' : 'Terminada: sin entregas'}</span>}
+      </> : <span className={`c-task na wide ${inClosure(b) ? 'cz-next' : ''}`}>{b.archived ? 'Archivada' : inClosure(b) ? `🔒 ${closureNext(b)?.text ?? 'Cerrado'}` : b.status === 'resigned' ? 'Renuncia: sin entregas' : 'Terminada: sin entregas'}</span>}
 
       <button className={`status-chip status-${b.status}`} title="Cambiar estado" onClick={ev => { stop(ev); setPop(ev.currentTarget); }}
-        data-help-title="Estado" data-help="Estado en SETENA. Solicitud de Cierre y Terminada ya no generan entregas.">{STATUSES.find(s => s.id === b.status)?.short}</button>
+        data-help-title="Estado" data-help="Estado en SETENA. Solicitud de Cierre ya no genera entregas mensuales: tiene sus pasos de cierre (informe final, aprobación, devolución de la garantía).">{STATUSES.find(s => s.id === b.status)?.short}</button>
 
       <span className="c-acc" onClick={stop}>
         {(isFinished(b.status) || b.archived) && (

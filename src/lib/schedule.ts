@@ -11,6 +11,7 @@
 
 import type { Reminder, Project, AppData, Step } from './types';
 import { isActiveProject, isFinished } from './types';
+import { inClosure } from './closure';
 import { daysInMonth, shortDate, longDate, fromISO, monthKeyOf, msAt, monthNameOf, addDays, addMonths, toISO, todayISO } from './dates';
 
 const DAY = 864e5;
@@ -298,8 +299,9 @@ export function summary(d: AppData, today = todayISO()) {
     open: act.filter(b => b.status === 'open').length,
     new: act.filter(b => b.status === 'new').length,
     closing: act.filter(b => b.status === 'closing').length,
+    resigned: act.filter(b => b.status === 'resigned').length,
     finishedCount: act.filter(b => b.status === 'finished').length,
-    finished: act.filter(b => isFinished(b.status)).length,
+    finished: act.filter(b => isFinished(b.status) && !inClosure(b)).length,  // ready to archive (not while being closed)
     archivedCount: d.projects.filter(b => b.archived).length,
     pendingMonth: count(x => !completeIn(x.b, x.k)),
     notUploaded: count(x => !uploadedIn(x.b, x.k)),
