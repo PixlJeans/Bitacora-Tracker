@@ -26,6 +26,9 @@ function whyQuiet(b: Project): string {
 export function SetenaFeed({ d }: { d: AppData }) {
   const today = todayISO();
   const [all, setAll] = useState(false);
+  // folded by default (one line): the tasks are what the home screen is for; the choice is remembered
+  const [open_, setOpen] = useState(() => { try { return localStorage.getItem('bt_sf_open') === '1'; } catch { return false; } });
+  const toggle = () => setOpen(v => { try { localStorage.setItem('bt_sf_open', v ? '0' : '1'); } catch { /* */ } return !v; });
   const { items, readAt, quiet } = useMemo(() => {
     const from = addDays(today, -DAYS);
     const items: { b: Project; x: TlItem }[] = [];
@@ -45,15 +48,17 @@ export function SetenaFeed({ d }: { d: AppData }) {
   const open = (b: Project) => openEditor(d.projects.find(x => x.id === b.id) ?? b, undefined, 'timeline');
 
   return (
-    <section className="sf">
+    <section className={`sf ${open_ ? '' : 'folded'}`}>
       <div className="sf-h">
-        <h3>🌐 En SETENA <small>últimos {DAYS} días</small></h3>
+        <button type="button" className="sf-fold" onClick={toggle} aria-expanded={open_} title={open_ ? 'Plegar' : 'Ver lo último de SETENA'}>{open_ ? '▾' : '▸'}</button>
+        <h3 onClick={toggle} style={{ cursor: 'pointer' }}>🌐 En SETENA <small>últimos {DAYS} días</small></h3>
         <span className="sf-sum"><b>{items.length}</b> anotaciones en <b>{projects}</b> proyecto{projects === 1 ? '' : 's'}</span>
+        {!open_ && quiet.length > 0 && <span className="sf-sum muted">· ⏳ {quiet.length} sin anotar hace más de un mes</span>}
         <span className="grow" />
         {readAt && <span className="muted sf-read" title={`Leído de SETENA el ${readAt.slice(0, 10)}`}>leído {agoText(readAt.slice(0, 10), today)}</span>}
         <button type="button" className="btn sm" title="Abre SETENA y trae lo nuevo (no cambia nada en SETENA)" onClick={() => backend.setenaOpen().catch(e => toast(String(e)))}>📥 Actualizar</button>
       </div>
-      {shown.length > 0 ? (
+      {open_ && (shown.length > 0 ? (
         <div className="sf-list">
           {shown.map(({ b, x }, i) => (
             <button type="button" key={i} className={`sf-item k-${x.kind}`} onClick={() => open(b)} title="Ver la línea de tiempo del proyecto">
@@ -65,8 +70,8 @@ export function SetenaFeed({ d }: { d: AppData }) {
           ))}
           {items.length > 6 && <button type="button" className="dp-link sf-more" onClick={() => setAll(v => !v)}>{all ? 'Ver menos' : `Ver las ${items.length} anotaciones`}</button>}
         </div>
-      ) : <p className="muted sf-empty">Nada nuevo en SETENA en los últimos {DAYS} días.</p>}
-      {quiet.length > 0 && (
+      ) : <p className="muted sf-empty">Nada nuevo en SETENA en los últimos {DAYS} días.</p>)}
+      {open_ && quiet.length > 0 && (
         <div className="sf-quiet">
           <span>⏳ <b>{quiet.length}</b> abierta{quiet.length === 1 ? '' : 's'} sin anotar hace más de un mes:</span>
           {quiet.slice(0, 14).map(({ b, last }) => (

@@ -104,6 +104,9 @@ export interface Label {
 }
 
 /** Summary of a project's page in the SETENA portal. */
+/** One entry of a SETENA bitácora, exactly as the portal lists it. `files`: the names they were saved with. */
+export interface SetenaEntry { id?: string | null; date: string; time?: number | null; author: string; text: string; files: string[] }
+
 export interface SetenaInfo {
   avance: number | null;        // the progress % of the consultant's participation (slider on the page)
   lastEntry: string | null;     // date of the newest entry
@@ -139,6 +142,7 @@ export interface Project {
   setena?: SetenaInfo;      // what its SETENA page says (read with «Descargar todo de SETENA»)
   docs?: Record<string, DocInfo & { placed: boolean }>;
   setenaPhotos?: Record<string, number>;
+  setenaLog?: SetenaEntry[]; // every entry of its SETENA bitácora, as SETENA has it (oldest first), from «Descargar de SETENA»
   closure?: Closure;       // closing the project (Solicitud de Cierre): steps checked by hand (null = unchecked by hand); see closure.ts
   shiftedDues?: string[];  // Regencia keys whose due date the app moved because the semesters were postponed (regenciaShift)
   resignChecked?: boolean; // its «renuncia» in SETENA was already turned into the Renuncia state once (not again if changed back) // photos downloaded from SETENA, by the date of their entry (read from the folders) // each SETENA PDF (by file name): what it is, read from it

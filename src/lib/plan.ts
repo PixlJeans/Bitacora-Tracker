@@ -61,3 +61,10 @@ export function planWeek<T extends PlanStop>(stops: T[], days: string[], radiusK
   }
   return { days: days.map(day => ({ day, stops: byDay.get(day)! })).filter(x => x.stops.length), withoutLocation, overflow };
 }
+
+/** The week to plan when the screen opens: from Friday afternoon on, this week is over → next week. */
+export const planMonday = (today: string, now = new Date()) => {
+  const wd = fromISO(today).getDay();
+  return wd === 6 || wd === 0 || (wd === 5 && now.getHours() >= 14) ? addDays(mondayOfISO(today), 7) : mondayOfISO(today);
+};
+const mondayOfISO = (iso: string) => { const wd = fromISO(iso).getDay(); return addDays(iso, wd === 0 ? -6 : 1 - wd); };

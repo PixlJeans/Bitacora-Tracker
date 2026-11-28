@@ -442,3 +442,12 @@ export function reportTasks(d: AppData, today: string, until: string) {
     noDate: d.projects.filter(b => isActiveProject(b) && b.noOpeningDate)
   };
 }
+
+/** Monthly key whose inspection falls in folder month `ym` (it may have been moved), or that month itself. */
+export function inspectionKeyFor(b: Project, ym: string): string | null {
+  for (let i = -3; i <= 3; i++) {
+    const mk = addMonths(`${ym}-15`, i).slice(0, 7);
+    if (monthExists(b, mk) && inspectionDate(b, mk).slice(0, 7) === ym) return `m:${mk}`;
+  }
+  return monthExists(b, ym) ? `m:${ym}` : null;
+}

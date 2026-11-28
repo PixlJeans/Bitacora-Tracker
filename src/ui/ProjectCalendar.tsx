@@ -1,84 +1,126 @@
-// ===== Project delivery calendar (inside the editor) =====
-// Whole month with the days marked: ● monthly Informe Regencial (same day as the opening, or the adjusted date),
-// ◆ Regencia (every 6 months) and ⚑ opening. Below, the chosen month's delivery with its steps,
-// dates and the letter. On top, a 12-month strip with each month's state to jump quickly.
-import { useEffect, useState } from 'react';
+// ===== The project's dates (inside the editor) =====
+// v69: no more month calendar. Regencias are done on their own dates (not on the schedule's), so the project shows
+// a LIST OF DATES: every regencia with its real elaboración / firma / subida / recibido dates (and its period), and
+// the monthly inspección + bitácora with the day each was done. Pending items show their due date. Clicking a row
+// opens it below to check steps or change its date.
+import { useEffect, useMemo, useState } from 'react';
 import type { Project } from '../lib/types';
 import { isActiveProject } from '../lib/types';
-import { monthlyDue, regenciaDue, regenciaInMonth, dueInMonth, hasSchedule, monthlyKeysDueIn, completeIn, regenciaSubmitted, regenciaDueDates, inspectionDate, monthLive } from '../lib/schedule';
-import { shortDate, longDate, fromISO, monthKeyOf, monthName, todayISO } from '../lib/dates';
+import { hasSchedule } from '../lib/schedule';
+import { regenciaRows, monthRows, nextDates, type RegRow, type MonthRow, type RowState } from '../lib/projectDates';
+import { fromISO, longDate, todayISO } from '../lib/dates';
 import { DeliveryCard, StartLetter } from './Delivery';
+import { markStep } from '../lib/store';
+import { toast } from './core';
+import type { Step } from '../lib/types';
 
-const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 type Change = Partial<Pick<Project, 'uploads' | 'visits' | 'regencias'>>;
+const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+/** «14 may 26» — always with the year: these lists span years. */
+const d3 = (iso: string | null | undefined) => { if (!iso) return ''; const d = fromISO(iso); return `${d.getDate()} ${MONTHS[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`; };
+const monthLabel = (mk: string) => `${MONTHS[+mk.slice(5, 7) - 1]} ${mk.slice(0, 4)}`;
+const STATE: Record<RowState, string> = { done: 'hecha', late: 'atrasada', soon: 'pronto', future: 'pendiente', history: 'sin registro' };
 
-/** `live`: the project already exists → full deliveries are shown (steps, dates, letter), saved immediately. */
-export function ProjectCalendar({ b, live: live = false }: { b: Project; onChange?: (c: Change) => void; live?: boolean }) {
-  const today = todayISO(), thisMonth = today.slice(0, 7);
-  const [month, setMonth] = useState(() => {
-    const h = fromISO(today), a = fromISO(b.openedOn);
-    return a > h ? new Date(a.getFullYear(), a.getMonth(), 1, 12) : new Date(h.getFullYear(), h.getMonth(), 1, 12);
-  });
-  const mk = monthKeyOf(month);
-  // A delivery moved to another month: follow it there
+/** A date cell. Not done yet + `mark` → a small «✓ marcar» button right there (no need to open the row). */
+function Cell({ date, due, state, mark, label }: { date: string | null; due?: string | null; state: RowState; mark?: () => void; label?: string }) {
+  if (date) return <td className="pd-d"><b>{d3(date)}</b></td>;
+  const btn = mark && <button type="button" className="pd-mark" title={`Marcar ${label ?? ''} como hecho${state === 'late' && due ? ` (con su fecha, ${d3(due)})` : ' (hoy)'}`}
+    onClick={e => { e.stopPropagation(); mark(); }}>✓ marcar</button>;
+  if (due && state !== 'done') return <td className={`pd-d pd-due ${state}`} title="Fecha en que toca">{state === 'late' || state === 'history' ? 'debía ' : 'toca '}{d3(due)}{btn}</td>;
+  return <td className="pd-d muted">{btn ?? '—'}</td>;
+}
+
+/** `live`: the project already exists → rows open its deliveries (steps, dates, letter), saved immediately. */
+export function ProjectCalendar({ b, live = false }: { b: Project; onChange?: (c: Change) => void; live?: boolean }) {
+  const today = todayISO();
+  const regs = useMemo(() => regenciaRows(b, today), [b, today]);
+  const [months, setMonths] = useState(6);
+  const mrows = useMemo(() => monthRows(b, today, months), [b, today, months]);
+  const next = useMemo(() => nextDates(b, today), [b, today]);
+  const [allRegs, setAllRegs] = useState(false);
+  const [sel, setSel] = useState<string | null>(null);
+  // A delivery moved to another month: open it there
   useEffect(() => {
-    const go = (ev: Event) => { const m = (ev as CustomEvent<string>).detail; const [y, n] = m.split('-').map(Number); setMonth(new Date(y, n - 1, 1, 12)); };
+    const go = (ev: Event) => setSel(`m:${(ev as CustomEvent<string>).detail}`);
     window.addEventListener('bt-goto-month', go);
     return () => window.removeEventListener('bt-goto-month', go);
   }, []);
-  const shift = (n: number) => setMonth(new Date(month.getFullYear(), month.getMonth() + n, 1, 12));
   const active = hasSchedule(b);
+  const shownRegs = allRegs ? regs : regs.slice(0, 6);
+  const pick = (k: string) => setSel(s => (s === k ? null : k));
+  // quick check from the list: a late one keeps its own due date (like in Tareas), a coming one is done today
+  const markFn = (key: string, step: Step, due: string | null | undefined, what: string, state: RowState) =>
+    live && (state === 'late' || state === 'soon' || state === 'future') ? () => {
+      const date = due && due <= today ? due : today;
+      markStep(b.id, key, step, date);
+      toast(`✓ ${b.code}: ${what} (${d3(date)})`, true);
+    } : undefined;
 
-  /** What is due in month m: informes (possibly moved there from another month) and a Regencia. */
-  const dueIn = (m: string) => {
-    const keys = monthlyKeysDueIn(b, m, true), reg = regenciaInMonth(b, m);
-    const dates = [...new Set([...keys.flatMap(k => [monthlyDue(b, k), inspectionDate(b, k)]), ...(reg ? [regenciaDue(b, reg)] : [])]
-      .filter(d => d.slice(0, 7) === m))].sort();
-    const pending = keys.filter(k => !completeIn(b, k)).length + (reg && !regenciaSubmitted(b, reg) ? 1 : 0);
-    const state = !dates.length ? 'outside' : !pending ? 'done' : !monthLive(m, today) ? 'missed' : m < thisMonth || (m === thisMonth && dates[0] <= today) ? 'overdue' : m === thisMonth ? 'today' : 'future';
-    return { keys, reg, dates, state };
+  const regRow = (r: RegRow, i: number) => {
+    const k = r.key ? `r:${r.key}` : null;
+    return (
+      <tr key={r.key ?? `x${i}`} className={`pd-row st-${r.state} ${k && sel === k ? 'sel' : ''} ${k && live ? 'click' : ''}`}
+        onClick={() => k && live && pick(k)} title={k && live ? 'Abrir: marcar pasos o cambiar la fecha' : r.note}>
+        <td className="pd-what">
+          <b>{r.ira ?? (r.key ? 'Regencia' : 'Informe')}</b>
+          <small>{r.period ? `Periodo ${r.period}` : r.key ? `semestre del ${d3(r.key)}` : r.note}</small>
+          {r.key && r.note && <small className="pd-warn">{r.note}</small>}
+        </td>
+        <Cell date={r.letter} state={r.state} label="la elaboración" mark={k ? markFn(k, 'letter', null, 'elaboración', r.state) : undefined} />
+        <Cell date={r.signed} state={r.state} label="la firma del cliente" mark={k ? markFn(k, 'signed', null, 'firma del cliente', r.state) : undefined} />
+        <Cell date={r.uploaded} due={r.due} state={r.state} label="la subida" mark={k ? markFn(k, 'uploaded', r.state === 'late' ? today : null, 'regencia subida', r.state) : undefined} />
+        <Cell date={r.received} state={r.state} label="la nota de recibido" mark={k && r.uploaded ? markFn(k, 'received', null, 'nota de recibido', 'soon') : undefined} />
+        <td><span className={`pd-st ${r.key ? r.state : 'done'}`} title={r.key ? undefined : r.note}>{r.key ? STATE[r.state] : r.final ? 'final' : 'extra'}</span></td>
+      </tr>
+    );
   };
-  const cur = dueIn(mk);
-  // This month's own informe, if it was moved to another month
-  const ownMoved = active && dueInMonth(b, mk) && !cur.keys.includes(mk) ? monthlyDue(b, mk) : null;
-  // This month's automatic Regencia, if it was moved to another month
-  const regMoved = active ? regenciaDueDates(b, `${mk}-01`, `${mk}-31`).map(k => regenciaDue(b, k)).find(d => d.slice(0, 7) !== mk) ?? null : null;
-  const goTo = (d: string) => { const [y, n] = d.split('-').map(Number); setMonth(new Date(y, n - 1, 1, 12)); };
-
-  const strip = Array.from({ length: 12 }, (_, k) => monthKeyOf(new Date(month.getFullYear(), month.getMonth() - 5 + k, 1, 12)));
+  const monthRow = (m: MonthRow) => {
+    const k = `m:${m.mk}`;
+    return (
+      <tr key={m.mk} className={`pd-row st-${m.state} ${sel === k ? 'sel' : ''} ${live ? 'click' : ''}`} onClick={() => live && pick(k)} title={live ? 'Abrir: marcar o cambiar la fecha' : undefined}>
+        <td className="pd-what"><b>{monthLabel(m.mk)}</b></td>
+        {m.visited ? <td className="pd-d"><b>{m.visit ? d3(m.visit) : '✓'}</b></td> : <Cell date={null} due={m.inspDue} state={m.state} label="la inspección" mark={markFn(k, 'visit', m.inspDue, 'inspección', m.state)} />}
+        {m.up ? <td className="pd-d"><b>{m.uploaded ? d3(m.uploaded) : '✓'}</b></td> : <Cell date={null} due={m.bitDue} state={m.state} label="la bitácora" mark={markFn(k, 'uploaded', m.bitDue, 'bitácora', m.state)} />}
+        <td><span className={`pd-st ${m.state}`}>{STATE[m.state]}</span></td>
+      </tr>
+    );
+  };
 
   return (
-    <div className="pcal">
-      <div className="pcal-strip">
-        <button type="button" className="dp-nav" onClick={() => shift(-1)} title="Mes anterior">‹</button>
-        {strip.map(m => {
-          const [y, n] = m.split('-').map(Number);
-          const x = dueIn(m);
-          return (
-            <button type="button" key={m} className={`ct st-${x.state} ${m === mk ? 'sel' : ''} ${x.reg ? 'reg' : ''}`}
-              onClick={() => setMonth(new Date(y, n - 1, 1, 12))}
-              title={`${longDate(`${m}-01`).replace(/^\S+\s/, '')}${x.dates.length ? ' · entrega: ' + x.dates.map(shortDate).join(', ') : ' · sin entregas'}${x.state === 'missed' ? ' · sin anotación en SETENA (ya pasó: queda como historia)' : ''}`}>
-              <span>{MONTHS_SHORT[n - 1]}{n === 1 ? <small>{String(y).slice(2)}</small> : null}</span>
-              {m === b.openedOn.slice(0, 7) && <small className="ct-day" title="Mes de inicio: carta de Inicio de obras">🏗️ {fromISO(b.openedOn).getDate()}</small>}
-              {x.dates.length > 0 && <small className="ct-day">{x.dates.map(d => fromISO(d).getDate()).join('·')}</small>}
-            </button>
-          );
-        })}
-        <button type="button" className="dp-nav" onClick={() => shift(1)} title="Mes siguiente">›</button>
-      </div>
+    <div className="pcal pd">
+      {!isActiveProject(b) && <p className="muted sm">{b.archived ? 'Archivada: sin entregas.' : b.status === 'resigned' ? 'Renuncia: sin entregas (abajo, lo que se hizo).' : b.status === 'closing' ? 'Solicitud de Cierre: sin entregas mensuales (sus pasos de cierre están arriba).' : 'Ya terminó: sin entregas (abajo, lo que se hizo).'}</p>}
+      {active && (
+        <div className="pd-next">
+          <span>🚗 {next.insp && next.insp < today ? 'Inspección atrasada, debía' : 'Próxima inspección'}: <b className={next.insp && next.insp < today ? 'pd-late' : ''}>{next.insp ? longDate(next.insp) : '—'}</b></span>
+          <span>🗂️ {next.reg?.state === 'late' ? 'Regencia atrasada, debía' : 'Próxima regencia'}: <b className={next.reg?.state === 'late' ? 'pd-late' : ''}>{next.reg ? longDate(next.reg.due!) : '—'}</b>{next.reg && <small className="muted"> (semestre del {d3(next.reg.key)})</small>}</span>
+        </div>
+      )}
+      {live && isActiveProject(b) && b.openedOn.slice(0, 7) >= today.slice(0, 7) && <StartLetter b={b} />}
 
-      <div className="pcal-checks">
-        {!isActiveProject(b) && <p className="muted sm">{b.archived ? 'Archivada: sin entregas.' : b.status === 'resigned' ? 'Renuncia: sin entregas.' : b.status === 'closing' ? 'Solicitud de Cierre: sin entregas mensuales (sus pasos de cierre están arriba).' : 'Ya terminó: sin entregas.'}</p>}
-        {active && ownMoved && <p className="muted sm pcal-moved">↪ La inspección y la bitácora de {monthName(month).toLowerCase()} se movieron al {longDate(ownMoved)}.{' '}
-          <button type="button" className="dp-link" onClick={() => goTo(ownMoved)}>Ir a ese mes →</button></p>}
-        {active && regMoved && <p className="muted sm pcal-moved">↪ La regencia de {monthName(month).toLowerCase()} se movió al {longDate(regMoved)}.{' '}
-          <button type="button" className="dp-link" onClick={() => goTo(regMoved)}>Ir a ese mes →</button></p>}
-        {live && isActiveProject(b) && mk === b.openedOn.slice(0, 7) && <StartLetter b={b} />}
-        {active && !cur.keys.length && !cur.reg && !ownMoved && !regMoved && mk !== b.openedOn.slice(0, 7) && <p className="muted sm">Sin entregas en {monthName(month).toLowerCase()}.</p>}
-        {live && active && cur.keys.map(k => <DeliveryCard key={`m:${k}`} b={b} itemKey={`m:${k}`} />)}
-        {live && active && cur.reg && <DeliveryCard key={`r:${cur.reg}`} b={b} itemKey={`r:${cur.reg}`} />}
-        {!live && active && cur.dates.length > 0 && <p className="muted sm">Entrega: {cur.dates.map(longDate).join(' · ')}. Los pasos se marcan después de crearla.</p>}
-      </div>
+      {regs.length > 0 && (
+        <section className="pd-sec">
+          <h4>🗂️ Regencias <small className="muted">— las fechas reales de cada una (de los PDF y de SETENA, o marcadas a mano)</small></h4>
+          <div className="pd-scroll"><table className="pd-table">
+            <thead><tr><th>Regencia</th><th>Elaboración</th><th>Firma cliente</th><th>Subida a SETENA</th><th>Nota de recibido</th><th></th></tr></thead>
+            <tbody>{shownRegs.map(regRow)}</tbody>
+          </table></div>
+          {regs.length > 6 && <button type="button" className="dp-link" onClick={() => setAllRegs(v => !v)}>{allRegs ? 'Ver menos' : `Ver las ${regs.length}`}</button>}
+          {sel?.startsWith('r:') && live && <DeliveryCard key={sel} b={b} itemKey={sel} />}
+        </section>
+      )}
+
+      {mrows.length > 0 && (
+        <section className="pd-sec">
+          <h4>🚗 Inspección y 📋 bitácora <small className="muted">— el día en que se hizo cada mes</small></h4>
+          <div className="pd-scroll"><table className="pd-table">
+            <thead><tr><th>Mes</th><th>Inspección</th><th>Bitácora</th><th></th></tr></thead>
+            <tbody>{mrows.map(monthRow)}</tbody>
+          </table></div>
+          <button type="button" className="dp-link" onClick={() => setMonths(n => n + 12)}>Ver meses anteriores</button>
+          {sel?.startsWith('m:') && live && <DeliveryCard key={sel} b={b} itemKey={sel} />}
+        </section>
+      )}
+      {!regs.length && !mrows.length && <p className="muted sm">{b.noOpeningDate ? 'Sin fecha de apertura: las fechas aparecen con la primera anotación en SETENA.' : 'Todavía sin fechas.'}</p>}
     </div>
   );
 }

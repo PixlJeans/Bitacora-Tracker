@@ -12,7 +12,7 @@
     "tauri": "tauri",
     "app:dev": "tauri dev",
     "app:build": "tauri build",
-    "test": "tsx test/parser.test.ts && tsx test/schedule.test.ts && tsx test/search.test.ts && tsx test/deliveries.test.ts && tsx test/timeline.test.ts && tsx test/plan.test.ts && tsx test/files.test.ts",
+    "test": "tsx test/parser.test.ts && tsx test/schedule.test.ts && tsx test/search.test.ts && tsx test/deliveries.test.ts && tsx test/timeline.test.ts && tsx test/plan.test.ts && tsx test/files.test.ts && tsx test/dates.test.ts && tsx test/match.test.ts",
     "build:web": "vite build --mode web",
     "version:bump": "node scripts/bump-version.mjs"
   },

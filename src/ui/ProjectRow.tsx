@@ -112,8 +112,8 @@ function SetenaActivity({ b }: { b: Project }) {
   const quiet = isActiveProject(b) && b.status === 'open' && !s.participationClosed && (!s.lastEntry || daysSince(s.lastEntry, today) > 35);
   return (
     <small className={`c-setena ${quiet ? 'quiet' : ''}`} title={`SETENA: ${s.entries} anotaciones${s.avance !== null ? ` · avance ${s.avance}%` : ''} (leído el ${s.readAt.slice(0, 10)})`}>
-      🌐 {s.lastEntry ? `última anotación ${shortDate(s.lastEntry)}${s.lastEntry.slice(0, 4) !== today.slice(0, 4) ? ' ' + s.lastEntry.slice(0, 4) : ''} · ${agoText(s.lastEntry, today)}` : 'sin anotaciones en SETENA'}
-      {s.avance !== null && <span className="c-av"><i style={{ width: `${s.avance}%` }} /></span>}
+      {s.avance !== null && <span className="c-av" title={`avance ${s.avance}%`}><i style={{ width: `${s.avance}%` }} /></span>}
+      <span className="c-st">🌐 {s.lastEntry ? `última anotación ${shortDate(s.lastEntry)}${s.lastEntry.slice(0, 4) !== today.slice(0, 4) ? ' ' + s.lastEntry.slice(0, 4) : ''} · ${agoText(s.lastEntry, today)}` : 'sin anotaciones en SETENA'}</span>
     </small>
   );
 }

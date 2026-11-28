@@ -20,7 +20,7 @@ import { Tutorial, openTutorial } from './ui/Tutorial';
 import { Help } from './ui/Help';
 import { listenToPhone } from './ui/ProjectLog';
 import { openStatusReport } from './ui/StatusReport';
-import { TasksView } from './ui/Tasks';
+import { TasksView, rowCount } from './ui/Tasks';
 import { RoutesView } from './ui/Routes';
 import { openPhone } from './ui/Phone';
 import { scanFolders } from './lib/scan';
@@ -29,7 +29,11 @@ import { backend, esWeb } from './lib/backend';
 import { toCsv } from './lib/csv';
 
 type View = 'tasks' | 'active' | 'agenda' | 'month' | 'nextMonth' | 'regencias' | 'archive';
-type SortOrder = 'nextDue' | 'code' | 'name' | 'openedOn';
+type SortOrder = 'nextDue' | 'code' | 'name' | 'openedOn' | 'quiet';
+const SORTS: { id: SortOrder; label: string }[] = [
+  { id: 'nextDue', label: 'Más urgente primero' }, { id: 'quiet', label: 'Más tiempo sin anotar en SETENA' },
+  { id: 'code', label: 'Por número' }, { id: 'name', label: 'Por nombre' }, { id: 'openedOn', label: 'Por apertura' }
+];
 type StatusFilter = 'all' | Status | 'overdue' | 'nodate';
 
 const LS_VIEW = 'bt_vista';
@@ -39,7 +43,8 @@ export default function App() {
   const [view, setViewRaw] = useState<View>(() => { try { const v = localStorage.getItem(LS_VIEW) as View; return ['tasks', 'active', 'agenda', 'archive'].includes(v) ? v : 'tasks'; } catch { return 'tasks'; } });
   const [filter, setFilter] = useState<StatusFilter>('all');
   const labelFilter = null as string | null;
-  const sortOrder: SortOrder = 'nextDue';
+  const [sortOrder, setSortOrder] = useState<SortOrder>(() => { try { const v = localStorage.getItem('bt_sort') as SortOrder; return SORTS.some(x => x.id === v) ? v : 'nextDue'; } catch { return 'nextDue'; } });
+  const pickSort = (v: SortOrder) => { setSortOrder(v); try { localStorage.setItem('bt_sort', v); } catch { /* */ } };
   const [q, setQ] = useState('');
   const [dropAll, setDropAll] = useState(false);
   const [menu, setMenu] = useState<HTMLElement | null>(null);
@@ -166,7 +171,7 @@ export default function App() {
   // Search: ALWAYS across every project (active and archived), with no hidden filters
   const results = useMemo(() => searching ? d.projects.filter(b => matches(d, b, q)) : [], [d, q, searching]);
 
-  const taskCounts = useMemo(() => { const t = reportTasks(d, today, addDays(today, 6)); return { late: t.overdue.length, week: t.upcoming.length }; }, [d, today]);
+  const taskCounts = useMemo(() => { const t = reportTasks(d, today, addDays(today, 6)); return { late: rowCount(t.overdue), week: rowCount(t.upcoming) }; }, [d, today]);
   const activeList = useMemo(() => {
     // Priority = DATE of the most urgent pending delivery (Informe Regencial or Regencia): overdue first
     const pf = new Map(activeProjects.map(b => [b.id, nextDue(b)]));
@@ -177,7 +182,8 @@ export default function App() {
       nextDue: (a, b) => (isActiveProject(a) ? 0 : 1) - (isActiveProject(b) ? 0 : 1) || prox(a).localeCompare(prox(b)) || a.code.localeCompare(b.code),
       code: (a, b) => a.code.localeCompare(b.code),
       name: (a, b) => a.name.localeCompare(b.name),
-      openedOn: (a, b) => a.openedOn.localeCompare(b.openedOn)
+      openedOn: (a, b) => a.openedOn.localeCompare(b.openedOn),
+      quiet: (a, b) => (a.setena?.lastEntry ?? '0000').localeCompare(b.setena?.lastEntry ?? '0000') || a.code.localeCompare(b.code)
     };
     return [...l].sort(cmp[sortOrder]);
   }, [d, activeProjects, filter, labelFilter, sortOrder]);
@@ -219,7 +225,7 @@ export default function App() {
           <button className="btn" onClick={() => openEditor()}><Ic n="plus" /> Crear a mano</button></div>
       </div></div>
     ) : <>
-      <div className="filters simple" data-help-title="Filtros" data-help="Muestra solo las vencidas, las abiertas o las que ya terminaron. Clic otra vez para quitar el filtro. La lista siempre va por fecha: lo más urgente arriba.">
+      <div className="filters simple" data-help-title="Filtros" data-help="Muestra solo las vencidas, las abiertas o las que ya terminaron. Clic otra vez para quitar el filtro. ↕️ cambia el orden (por defecto, lo más urgente arriba).">
         {chip('all', 'Todas', activeProjects.length)}
         {chip('overdue', 'Vencidas', activeProjects.filter(b => nextDue(b)?.overdue).length, 'warn')}
         {activeProjects.some(b => b.noOpeningDate) && chip('nodate', 'Sin fecha', activeProjects.filter(b => b.noOpeningDate).length, 'warn')}
@@ -227,6 +233,10 @@ export default function App() {
         {chip('open', 'Abiertas', r.open, 'status-open')}
         {chip('closing', 'Sol. cierre', r.closing, 'status-closing')}
         {r.resigned > 0 && chip('resigned', 'Renuncia', r.resigned, 'status-resigned')}
+        <span className="grow" />
+        <label className="sort-pick" title="Orden de la lista">↕️ <select value={sortOrder} onChange={e => pickSort(e.target.value as SortOrder)} aria-label="Ordenar">
+          {SORTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+        </select></label>
         {r.finished > 0 && <button className="dp-link" title="Renuncia y Terminadas (y los cierres ya completos, con la garantía devuelta) pasan a Archivadas con todo su historial" onClick={() => archiveFinished()}>📦 Archivar {r.finished} terminada(s)</button>}
       </div>
       {activeList.length ? <><RowHeader />{activeList.map(b => P(b))}</> : emptyData('Ninguna bitácora coincide con el filtro.')}

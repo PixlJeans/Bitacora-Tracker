@@ -4,16 +4,18 @@
 import { useState } from 'react';
 import { Timeline } from './Timeline';
 import { ClosureBox, GuaranteeLine } from './Closure';
+import { SetenaMatch } from './SetenaMatch';
+import { matchSummary } from '../lib/setenaMatch';
 import { inClosure } from '../lib/closure';
 import type { Project, Status, ProjectLocation } from '../lib/types';
 import { STATUSES, isActiveProject, isFinished } from '../lib/types';
-import { codeExists, getData, mutate, labelForStatus, archive, useAppData, markAllBefore } from '../lib/store';
+import { codeExists, getData, mutate, labelForStatus, archive, useAppData } from '../lib/store';
 import { normalizeCode, isValidCode } from '../lib/parser';
 import { nextRegencia, openingFrom, pendingBefore, monthsSinceOpening, dueInMonth } from '../lib/schedule';
 import { mapLink, parseCoordinates } from '../lib/geo';
 import { gpsComun } from '../lib/exif';
 import { backend } from '../lib/backend';
-import { shortDate, longDate, fromISO, todayISO, uid, monthName, monthNameOf, addMonths } from '../lib/dates';
+import { shortDate, longDate, fromISO, todayISO, uid, monthNameOf, addMonths } from '../lib/dates';
 import { ProjectCalendar } from './ProjectCalendar';
 import { projectFolder } from '../lib/folders';
 import { agoText, daysSince } from '../lib/setenaInfo';
@@ -39,7 +41,7 @@ export async function deleteProject(b: Project): Promise<boolean> {
   return true;
 }
 
-type Tab = 'details' | 'timeline' | 'log' | 'notes' | 'location';
+type Tab = 'details' | 'timeline' | 'setena' | 'log' | 'notes' | 'location';
 
 export function openEditor(b?: Project, initial?: Partial<Project>, initialTab: Tab = 'details') {
   openModal(<ProjectEditor b={b} initial={initial} initialTab={initialTab} />, 'create-modal editor');
@@ -67,15 +69,9 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
 
   const day = fromISO(f.openedOn).getDate();
   const nextReg = nextRegencia(view, today);
+  const matchBad = (() => { if (!b) return 0; const s = matchSummary(view); return s.missing + s.only; })();
   const monthStart = `${today.slice(0, 7)}-01`;
   const behind = live ? pendingBefore(live, monthStart).length : 0;
-  const [askCatchUp, setAskCatchUp] = useState(false);
-  function catchUp() {
-    if (!b) return;
-    const n = markAllBefore([b.id], monthStart);
-    setAskCatchUp(false);
-    toast(`✓ ${b.code}: ${n} marcadas como hechas, cada una con su fecha`, true);
-  }
 
   function save() {
     const code = normalizeCode(f.code);
@@ -116,12 +112,14 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
           <div className="ed-tabs" role="tablist">
             <button type="button" role="tab" className={tab === 'details' ? 'on' : ''} onClick={() => setTab('details')}>📋 Entregas</button>
             <button type="button" role="tab" className={tab === 'timeline' ? 'on' : ''} onClick={() => setTab('timeline')}>🕘 Línea de tiempo</button>
+            <button type="button" role="tab" className={tab === 'setena' ? 'on' : ''} onClick={() => setTab('setena')}>🌐 SETENA{matchBad ? <b className="tab-badge">{matchBad}</b> : null}</button>
             <button type="button" role="tab" className={tab === 'notes' || tab === 'log' ? 'on' : ''} onClick={() => setTab('notes')}>📝 Notas</button>
             <button type="button" role="tab" className={tab === 'location' ? 'on' : ''} onClick={() => setTab('location')}>📍 Ubicación{view.location ? '' : <b className="tab-badge">!</b>}</button>
           </div>
         )}
       </div>
       {b && tab === 'timeline' ? <Timeline b={view} />
+        : b && tab === 'setena' ? <SetenaMatch b={view} />
         : b && (tab === 'notes' || tab === 'log') ? <MonthNotes b={view} f={f} setNotes={v => set('notes', v)} />
         : b && tab === 'location' ? <div className="ed-location"><LocationField b={view} onChange={setLoc} /></div> : <>
       {b && !editFields && (
@@ -178,9 +176,7 @@ function ProjectEditor({ b, initial: initial, initialTab: initialTab }: { b?: Pr
       {isActiveProject(f) && f.noOpeningDate ? null : isActiveProject(f)
         ? <div className="ed-auto-line muted">{!b && <>📅 Inspección y bitácora el día <b>{day}</b> de cada mes · Regencia cada 6 meses</>}
             {b && live && <><button type="button" className="dp-link" title="Ir al mes de inicio (carta de Inicio de obras)" onClick={() => window.dispatchEvent(new CustomEvent('bt-goto-month', { detail: view.openedOn.slice(0, 7) }))}>🏗️ Inicio de obras{live.deliveries?.['s:start']?.uploaded ? ' ✓' : ''}</button></>}
-            {b && live && behind > 0 && (askCatchUp
-              ? <span className="catch-up">¿Marcar como hechas las {behind} tareas anteriores a {monthName(fromISO(today)).toLowerCase()}? <button type="button" className="btn sm primary" onClick={catchUp}>Sí, marcar</button> <button type="button" className="dp-link" onClick={() => setAskCatchUp(false)}>no</button></span>
-              : <button type="button" className="dp-link catch-up" onClick={() => setAskCatchUp(true)}>✓ Marcar todo lo anterior a {monthName(fromISO(today)).toLowerCase()} como hecho ({behind})</button>)}</div>
+            {b && live && behind > 0 && <button type="button" className="dp-link catch-up" title="Las tareas pasadas se marcan solas cuando SETENA tiene su anotación; las demás se revisan en la pestaña SETENA" onClick={() => setTab('setena')}>🌐 {behind} tarea(s) pasada(s) sin anotación en SETENA: revisar</button>}</div>
         : b && inClosure(b) ? <ClosureBox b={d.projects.find(x => x.id === b.id) ?? b} />
         : <p className="ed-auto-line muted">{f.archived ? 'Archivada: sin entregas.' : f.status === 'resigned' ? 'Renuncia del regente: ya no genera entregas (la historia se queda). Ciérrala con 📦 Archivar.' : 'Ya terminó: no genera entregas. Ciérrala con 📦 Archivar.'}</p>}
 

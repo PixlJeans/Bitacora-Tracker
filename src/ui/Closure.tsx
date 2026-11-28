@@ -2,6 +2,7 @@
 import type { AppData, Project, ClosureStep } from '../lib/types';
 import { CLOSURE_STEPS, closureFromDocs, closureNext, closureOf, inClosure, guaranteeOf, fileAlerts } from '../lib/closure';
 import { markClosure, getData } from '../lib/store';
+import { appOnly } from '../lib/setenaMatch';
 import { shortDate, todayISO } from '../lib/dates';
 import { Ic, toast } from './core';
 import { openEditor } from './ProjectEditor';
@@ -92,10 +93,21 @@ export function GuaranteeLine({ b }: { b: Project }) {
 /** Warnings read from the documents (in Tareas): a regencia in the wrong bitácora, a closing request not accepted. */
 export function FileAlerts({ d }: { d: AppData }) {
   const list = fileAlerts(d.projects);
-  if (!list.length) return null;
+  // marks the app has that SETENA doesn't show (per project; reviewed in its «🌐 SETENA» tab)
+  const only = d.projects.filter(b => !b.archived).map(b => ({ b, n: appOnly(b).length })).filter(x => x.n);
+  if (!list.length && !only.length) return null;
   return (
     <section className="tk-sec cz-alerts">
-      <h3>⚠️ Revisar en SETENA <span className="tk-n">{list.length}</span></h3>
+      <h3>⚠️ Revisar en SETENA <span className="tk-n">{list.length + only.length}</span></h3>
+      {only.map(({ b, n }) => (
+        <div key={`only:${b.id}`} className="tk-row cz-alert">
+          <span className="tk-what">🔁 {n} marca{n === 1 ? '' : 's'} en la app que SETENA no tiene (inspección, bitácora o regencia)</span>
+          <button type="button" className="tk-proj" title="Ver la comparación con SETENA" onClick={() => openEditor(getData().projects.find(x => x.id === b.id) ?? b, undefined, 'setena' as any)}>
+            <b className="mono">{b.code}</b> <span>{b.name}</span>
+          </button>
+          <span className="tk-date"><small>revisar</small></span>
+        </div>
+      ))}
       {list.map(a => (
         <div key={`${a.b.id}:${a.kind}:${a.date}`} className="tk-row cz-alert">
           <span className="tk-what">{a.kind === 'misfiled' ? '📂' : '🔒'} {a.text}</span>

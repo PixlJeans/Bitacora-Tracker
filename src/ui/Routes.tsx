@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 import type { AppData, Project } from '../lib/types';
 import { reportTasks, type ReportTask } from '../lib/schedule';
-import { planDays, planWeek } from '../lib/plan';
+import { planDays, planWeek, planMonday } from '../lib/plan';
 import { addDays, fromISO, longDate, monthNameOf, shortDate, todayISO } from '../lib/dates';
 import { distanceKm, groupNearby, kmTxt, parseCoordinates, planRoute, routeKm, routeLink, type Point } from '../lib/geo';
 import { editDelivery, getData, markStep, mutate } from '../lib/store';
@@ -23,6 +23,7 @@ interface Stop { b: Project; tasks: ReportTask[]; date: string }
 
 const mondayOf = (iso: string) => { const wd = fromISO(iso).getDay(); return addDays(iso, wd === 0 ? -6 : 1 - wd); };
 
+
 /** One stop per project: its pending inspections in the range (the oldest one gives the date). */
 function stopsOf(list: ReportTask[]): Stop[] {
   const m = new Map<string, Stop>();
@@ -35,7 +36,7 @@ function stopsOf(list: ReportTask[]): Stop[] {
 
 export function RoutesView({ d }: { d: AppData }) {
   const today = todayISO();
-  const [mon, setMon] = useState(() => mondayOf(today));
+  const [mon, setMon] = useState(() => planMonday(today));
   const [mode, setMode] = useState<Mode>('plan');
   const [withLate, setWithLate] = useState(false);
   useEffect(() => {
@@ -82,7 +83,8 @@ export function RoutesView({ d }: { d: AppData }) {
           <button className="btn sm" onClick={() => setMon(addDays(mon, -7))} title="Semana anterior">‹</button>
           <b>Semana del {shortDate(mon)} al {shortDate(sun)}</b>
           <button className="btn sm" onClick={() => setMon(addDays(mon, 7))} title="Semana siguiente">›</button>
-          {mon !== mondayOf(today) && <button className="dp-link" onClick={() => setMon(mondayOf(today))}>esta semana</button>}
+          {mon !== mondayOf(today) && <button className="dp-link" onClick={() => setMon(mondayOf(today))}>{mon === addDays(mondayOf(today), 7) ? '← lo que queda de esta semana' : 'esta semana'}</button>}
+          {mon === addDays(mondayOf(today), 7) && <span className="muted sm">(la próxima semana)</span>}
         </div>
         <div className="ed-tabs">
           <button className={mode === 'plan' ? 'on' : ''} onClick={() => setMode('plan')} title="Todas las inspecciones pendientes (también las atrasadas), repartidas en los días que quedan, juntando proyectos cercanos">🗓️ Plan de la semana</button>

@@ -96,6 +96,9 @@ export function applySetena(d: AppData, m: SetenaManifest, today = todayISO()) {
       approvedOn: approved[approved.length - 1] ?? null,
       readAt: m.readAt ?? today
     };
+    // every entry, as SETENA lists it: what the app matches 1 to 1 (setenaMatch.ts)
+    b.setenaLog = events.map(e => ({ id: e.id ?? null, date: e.date, time: e.time ?? null, author: (e.author ?? '').trim(), text: (e.text ?? '').slice(0, 2000),
+      files: e.files.filter(u => /^https:\/\/bitacora\.setena\.go\.cr\/documents\//i.test(u)).map(u => fileName(u, e.date)) }));
     if (sp.url) { const u = new URL(sp.url.replace(/&amp;/g, '&'), 'https://bitacora.setena.go.cr/').href; if (u.startsWith('https://bitacora.setena.go.cr/')) b.setenaUrl = u; }
     for (const e of events) {
       const ym = e.date.slice(0, 7);

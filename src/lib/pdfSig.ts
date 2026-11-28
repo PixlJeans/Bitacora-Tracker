@@ -23,6 +23,12 @@ export function signaturesInPdf(data: ArrayBuffer | Uint8Array): { name: string;
     const near = after ?? before;
     if (near && name.trim()) out.push({ name: name.trim(), date: near.date });
   });
+  // signatures without a «/Name» (the SINPE «PERSONA FISICA» stamp): their visible stamp is a small drawing in the
+  // file, «(NAME \(FIRMA\)) Tj … (PERSONA FISICA, CPF-…) Tj … (Fecha declarada: 07/11/2023 04:50:56 PM) Tj»
+  for (const m of s.matchAll(/\(((?:[A-Z\u00c0-\u00dd]{2,}\s+){1,8})\\\(FIRMA\\\)\)\s*Tj[^]{0,300}?\(Fecha declarada:\s*(\d{2})\/(\d{2})\/(\d{4})/g)) {
+    const name = `${m[1].trim()} (FIRMA)`, date = `${m[4]}-${m[3]}-${m[2]}`;
+    if (!out.some(x => x.name.replace(/\s*\(FIRMA\)/i, '') === m[1].trim() && x.date === date)) out.push({ name, date });
+  }
   return out;
 }
 

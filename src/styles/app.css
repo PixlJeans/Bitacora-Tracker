@@ -1054,3 +1054,86 @@ button.sr-chip{cursor:pointer}
 .tk-sec.cz-alerts .tk-n{background:var(--danger);color:#fff}
 .tk-row.cz-alert{grid-template-columns:minmax(0,1.8fr) minmax(0,1fr) 110px}
 .tk-row.cz-alert .tk-what{white-space:normal;line-height:1.3}
+
+/* v69: the project's dates as a list (replaces the month calendar) */
+.pd-next{display:flex;flex-wrap:wrap;gap:6px 22px;padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card);font-size:.88rem;margin-bottom:10px}
+.pd-sec{margin:0 0 14px}
+.pd-sec h4{margin:4px 0 6px;font-size:.92rem}
+.pd-sec h4 small{font-weight:500;font-size:.78rem}
+.pd-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:10px}
+.pd-table{width:100%;border-collapse:collapse;font-size:.84rem}
+.pd-table th{text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700;padding:6px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+.pd-table td{padding:6px 10px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);white-space:nowrap;vertical-align:middle}
+.pd-table tr:last-child td{border-bottom:0}
+.pd-row.click{cursor:pointer}
+.pd-row.click:hover td{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.pd-row.sel td{background:color-mix(in srgb,var(--accent) 13%,transparent)}
+.pd-what b{display:block}
+.pd-what small{color:var(--muted);font-size:.74rem;white-space:normal}
+.pd-d b{font-variant-numeric:tabular-nums}
+.pd-due{font-size:.8rem;color:var(--muted)}
+.pd-due.late{color:var(--danger);font-weight:600}
+.pd-due.soon{color:#f59e0b;font-weight:600}
+.pd-row.st-history td{opacity:.6}
+.pd-st{display:inline-block;font-size:.7rem;font-weight:700;padding:1px 8px;border-radius:999px;border:1px solid var(--border);color:var(--muted)}
+.pd-st.done{color:#22c55e;border-color:color-mix(in srgb,#22c55e 50%,transparent)}
+.pd-st.late{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 50%,transparent)}
+.pd-st.soon{color:#f59e0b;border-color:color-mix(in srgb,#f59e0b 50%,transparent)}
+.pd .delivery{margin-top:8px}
+.pd-warn{display:block;color:#f59e0b !important;font-weight:600}
+.pd-late{color:var(--danger)}
+
+/* v70: «🌐 SETENA» tab — every entry next to its item in the app */
+.sm-sum{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:baseline;padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card);font-size:.88rem;margin-bottom:10px}
+.sm-sum .good{color:#22c55e}.sm-sum .bad{color:#f59e0b;font-weight:600}
+.sm-sum small{flex-basis:100%}
+.sm-only{border:1px solid color-mix(in srgb,#f59e0b 50%,var(--border));border-radius:10px;padding:8px 12px;margin-bottom:10px}
+.sm-only h4{margin:0 0 4px;font-size:.9rem}
+.sm-only-row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:4px 0;border-bottom:1px dashed var(--border);font-size:.84rem}
+.sm-only-row:last-of-type{border-bottom:0;margin-bottom:6px}
+.sm-q{width:100%;margin:0 0 8px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font:inherit}
+.sm-table td{vertical-align:top;white-space:normal}
+.sm-table td.pd-d{white-space:nowrap}
+.sm-who{display:block;color:var(--muted);font-size:.72rem;max-width:130px;white-space:normal}
+.sm-text{font-size:.82rem;line-height:1.35;max-height:5.4em;overflow:hidden}
+.sm-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.sm-chips .chip{font-size:.72rem;padding:1px 8px;border-radius:999px;border:1px solid var(--border)}
+.sm-links{min-width:210px;font-size:.8rem}
+.sm-links .ok{color:#22c55e}.sm-links .no{color:#f59e0b;font-weight:600}
+.sm-bad td{background:color-mix(in srgb,#f59e0b 6%,transparent)}
+
+/* v72: Tareas — a bar that stays on top (jump + filter), the «En SETENA» panel folds to one line */
+.tk-bar{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 10px;margin:0 0 4px;border:1px solid var(--border);border-radius:12px;background:color-mix(in srgb,var(--card) 92%,transparent);backdrop-filter:blur(8px)}
+.tk-jump{display:flex;flex-wrap:wrap;gap:6px}
+.tk-j{font:inherit;font-size:.82rem;font-weight:600;padding:4px 10px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+.tk-j b{margin-left:4px;font-variant-numeric:tabular-nums}
+.tk-j.late b{color:var(--danger)}
+.tk-j:hover{border-color:var(--accent)}
+.tk-filter{display:inline-flex;border:1px solid var(--border);border-radius:999px;overflow:hidden}
+.tk-filter button{font:inherit;font-size:.8rem;padding:4px 11px;border:0;background:transparent;color:var(--muted);cursor:pointer}
+.tk-filter button+button{border-left:1px solid var(--border)}
+.tk-filter button.on{background:var(--accent);color:#06130b;font-weight:700}
+.tk-sec{scroll-margin-top:84px}
+.sf.folded{padding-bottom:8px}
+.sf.folded .sf-h{margin-bottom:0}
+.sf-fold{font:inherit;border:0;background:transparent;color:var(--muted);cursor:pointer;padding:0 4px 0 0;font-size:1rem}
+.pd-mark{margin-left:8px;font:inherit;font-size:.72rem;font-weight:700;padding:1px 8px;border-radius:999px;border:1px solid color-mix(in srgb,#22c55e 55%,var(--border));background:transparent;color:#22c55e;cursor:pointer;opacity:.0;transition:opacity .12s}
+.pd-row:hover .pd-mark,.pd-mark:focus-visible{opacity:1}
+.pd-mark:hover{background:color-mix(in srgb,#22c55e 15%,transparent)}
+@media (hover:none){.pd-mark{opacity:1}}
+.sort-pick{display:inline-flex;align-items:center;gap:4px;font-size:.8rem;color:var(--muted)}
+.sort-pick{flex:0 0 auto}
+.sort-pick select{width:auto !important;max-width:260px;font:inherit;font-size:.8rem;padding:3px 8px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer}
+
+/* v74: Tareas grouped by project */
+.tk-groupt{display:inline-flex;align-items:center;gap:5px;font-size:.8rem;color:var(--muted);cursor:pointer;user-select:none}
+.tk-group{border:1px solid var(--border);border-radius:12px;padding:4px 6px 6px;margin:0 0 8px;background:color-mix(in srgb,var(--card) 60%,transparent)}
+.tk-gh{display:flex;align-items:baseline;gap:8px;width:100%;font:inherit;text-align:left;border:0;background:transparent;color:var(--text);padding:6px 8px;cursor:pointer;border-radius:8px}
+.tk-gh:hover{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.tk-gh .mono{color:var(--accent)}
+.tk-gname{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.tk-gn{font-size:.78rem;font-weight:700;color:var(--danger)}
+.tk-sec.week .tk-gn,.tk-sec.later .tk-gn{color:var(--muted)}
+.tk-group .tk-row{margin-bottom:4px}
+.tk-group .tk-proj{visibility:hidden}
+.c-setena .c-st{overflow:hidden;text-overflow:ellipsis;min-width:0}

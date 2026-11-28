@@ -69,7 +69,7 @@ export function classifyDoc(text: string, code: string): DocInfo {
   // (a receipt also quotes «Informe de Regencia Ambiental IRA-…» as its subject, so the title must OPEN the page)
   if (/^.{0,250}?Informe (?:(?:Final|Consolidado|de|Semestral)\s+){0,3}(?:de\s+)?Regencia Ambiental/i.test(head)) {
     const ira = /\bIRA\s*-\s*([IVX]+)\s*-\s*(\d{4})\b/.exec(head);
-    const per = /Peri[o]do(?: de(?:l)?)?(?: (?:Informe|la))?(?: (?:de )?Regenci(?:a|al))?\s*:?\s*([A-Za-z]+(?: (?:de(?:l)? )?\d{4})?\s*[-–]\s*[A-Za-z]+(?: (?:de(?:l)? )?\d{4})?|[A-Za-z]+ \d{4})/i.exec(head);
+    const per = /Peri[o]do(?: de(?:l)?)?(?: (?:Informe|la))?(?: (?:de )?Regenci(?:a|al))?(?: Ambiental)?\s*:?\s*([A-Za-z]+(?: (?:de(?:l)? )?\d{4})?\s*[-–]\s*[A-Za-z]+(?: (?:de(?:l)? )?\d{4})?|[A-Za-z]+ \d{4})/i.exec(head);
     const info: DocInfo = {
       kind: exp && codeKey(exp) !== codeKey(code) ? 'foreign' : 'regencia',
       final: /Final|Consolidado/i.test(head.slice(0, 120)) || undefined,
@@ -142,7 +142,13 @@ export function signaturesOf(text: string): Pick<DocInfo, 'clientSigned' | 'clie
     out.clientSigned = date;
     if (name) out.clientName = name;
   }
-  out.sigV = 2;
+  // the other stamp of Costa Rica's digital signature: «NAME (FIRMA) PERSONA FISICA, CPF-… Fecha declarada: 07/11/2023»
+  for (const m of flat.matchAll(/((?:[A-ZÁÉÍÓÚÑÜ]{2,}\s+){1,8})\(FIRMA\)\s*PERSONA (?:FISICA|FÍSICA|JURIDICA|JURÍDICA)[^]{0,60}?Fecha declarada:\s*(\d{2})\/(\d{2})\/(\d{4})/g)) {
+    const date = `${m[4]}-${m[3]}-${m[2]}`, name = m[1].trim().split(/\s+/).filter((w, i, a) => a.indexOf(w) === i).join(' ');
+    if (REGENTE.test(name)) { if (!out.regenteSigned || date < out.regenteSigned) out.regenteSigned = date; continue; }
+    if (!out.clientSigned || date < out.clientSigned) { out.clientSigned = date; out.clientName = name; }
+  }
+  out.sigV = 3;
   if (!out.clientSigned && !out.regenteSigned) out.noSig = true;
   return out;
 }

@@ -124,7 +124,7 @@ export function FolderButton({ b, itemKey: key, folder: given, label: givenLabel
   return (
     <button type="button" className={`btn sm folder-btn ${n ? 'has' : ''}`} title={`Abrir en el explorador: ${folder.replace(/\//g, '\\')}`}
       onClick={() => backend.openSubfolder(folder).catch(err => toast(String(err)))}>
-      📂 {label}{n !== null ? <b className="folder-n">{n}</b> : null}
+      📂 {label}{n ? <b className="folder-n">{n}</b> : null}
     </button>
   );
 }

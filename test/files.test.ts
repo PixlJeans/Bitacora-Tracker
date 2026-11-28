@@ -26,6 +26,16 @@ import { timelineOf } from '../src/lib/timeline';
   assert.deepEqual(classifyDoc('Estimado(a) señor(a):\nLe informamos que su solicitud de cierre no ha sido aceptada. Le solicitamos presentar su gestión de manera formal a través del siguiente enlace oficial:\nhttps://portal.setena.go.cr/correspondencia?id=28', 'D1-13049-2014'), { kind: 'setena', closingRejected: true });
 }
 
+// ---- v71: «Período del Informe de Regencia Ambiental …» and the SINPE «Fecha declarada» signature stamp ----
+{
+  const { signatureLines } = await import('../src/lib/pdfSig');
+  const raw = '191 0 obj\n<< /Type /XObject /Subtype /Form >>\nstream\r\nBT\n(RODRIGO ALBERTO CARRANZA ULLOA \\(FIRMA\\)) Tj\nT*\n0 0 Td\n(PERSONA FISICA, CPF-09-0047-0979.) Tj\nT*\n0 0 Td\n(Fecha declarada: 07/11/2023 04:50:56 PM) Tj\nET\nendstream /Name (CARLOS JIMENEZ PEREZ \\(FIRMA\\)) /M (D:20231103181806-06\'00\')';
+  const lines = signatureLines(new TextEncoder().encode(raw));
+  assert(lines.includes('RODRIGO ALBERTO CARRANZA ULLOA (FIRMA) Fecha: 2023.11.07'), lines);
+  const r = classifyDoc(`Informe de Regencia Ambiental IRA-I-2023 Proyecto: CONSTRUCCIÓN DE CALLE Y CANAL PLUVIAL Propietario: 3101675331 S.A Expediente Administrativo: D1-13049-2014-SETENA Período del Informe de Regencia Ambiental Mayo 2022 - Octubre 2023\n\n${lines}`, 'D1-13049-2014');
+  assert.deepEqual([r.period, r.clientSigned, r.clientName, r.regenteSigned, r.sigV], ['Mayo 2022 - Octubre 2023', '2023-11-07', 'RODRIGO ALBERTO CARRANZA ULLOA', '2023-11-03', 3]);
+}
+
 // ---- Word file with a .pdf name ----
 {
   const b64 = 'UEsDBBQAAAAIAAF8e13HHBc8CgAAAAgAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLMJqSxILda3AwBQSwMEFAAAAAgAAXx7XSWMTGjiAAAAZQEAABEAAAB3b3JkL2RvY3VtZW50LnhtbG2QQWrDQAxFryIImGTjoXYXxU7SVXe5hDqjOAJ7NJHkht6+jCFQSjdPC+l/Sf/4GJLEdaHs5+Nj+JT0XWup0Ao/f5jzgkn2eACjZte9voyiezwMx1D7lbqx/JVeCDhfRRdcxOC+EtgKJjNH9jVBIohMqgRZ4IZgnAQwUnFM2MKFnrObvCgZZUetJhOZc72lH3P1WTCTImy7ZkBwxa9m1/X9aJBoBuNpZcpOQHnGSCBXjozzADf3YkMIRdRxbo2cMraTtFFDFFWyIjlRjozvnE7dW4NLGVPxU//P/+GZYfgV7A9QSwECFAMUAAAACAABfHtdxxwXPAoAAAAIAAAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAAF8e10ljExo4gAAAGUBAAARAAAAAAAAAAAAAACAATsAAAB3b3JkL2RvY3VtZW50LnhtbFBLBQYAAAAAAgACAIAAAABMAQAAAAA=';
@@ -47,7 +57,7 @@ import { timelineOf } from '../src/lib/timeline';
     mk('c', 'D1-0950-2023', 'CERRITOS'),
     // D: a regencia the app had put in «Notas de recibido» (read before), and an old scan read before OCR existed
     mk('d', 'D1-0171-2022', 'LOTES', {
-      '2025-05-28_658bd73e.pdf': { kind: 'regencia', ira: 'IRA-II-2025', period: 'Febrero 2025 - Mayo 2025', sigV: 2, noPlace: true, placed: true },
+      '2025-05-28_658bd73e.pdf': { kind: 'regencia', ira: 'IRA-II-2025', period: 'Febrero 2025 - Mayo 2025', sigV: 3, noPlace: true, placed: true },
       '2023-09-04_24fef898.pdf': { kind: 'notext', placed: true }
     }, { deliveries: { 'r:2025-07-15': { received: '2025-05-28', files: [] } } })
   ] }));

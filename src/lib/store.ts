@@ -245,6 +245,10 @@ export function normalize(raw: any): AppData {
         ...(b.resignChecked ? { resignChecked: true } : {}),
         ...(normClosure(b.closure) ? { closure: normClosure(b.closure) } : {}),
         ...(Array.isArray(b.shiftedDues) && b.shiftedDues.length ? { shiftedDues: b.shiftedDues.filter((x: unknown) => typeof x === 'string') } : {}),
+        ...(Array.isArray(b.setenaLog) ? { setenaLog: b.setenaLog.filter((e: any) => e && isoDate(e.date)).map((e: any) => ({
+          id: typeof e.id === 'string' ? e.id : null, date: e.date, time: typeof e.time === 'number' ? e.time : null,
+          author: typeof e.author === 'string' ? e.author : '', text: typeof e.text === 'string' ? e.text : '',
+          files: Array.isArray(e.files) ? e.files.filter((f: unknown) => typeof f === 'string') : [] })) } : {}),
         ...(b.setenaPhotos && typeof b.setenaPhotos === 'object' ? { setenaPhotos: Object.fromEntries(Object.entries(b.setenaPhotos).filter(([k, v]) => isoDate(k) && Number(v) > 0).map(([k, v]) => [k, Number(v)])) } : {})
       };
       // Older data: projects imported without a date got the import day as their opening date.

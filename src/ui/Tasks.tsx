@@ -89,6 +89,8 @@ function RegRow({ steps, today }: { steps: ReportTask[]; today: string }) {
 }
 
 type Item = { t: ReportTask } | { reg: ReportTask[] };
+/** How many rows a list of tasks makes (a regencia's steps are one row): the number shown everywhere. */
+export const rowCount = (list: ReportTask[]) => itemsOf(list).length;
 /** The tasks as rows: a Regencia's steps (same project, same key) become one row. */
 function itemsOf(list: ReportTask[]): Item[] {
   const out: Item[] = [];
@@ -104,26 +106,64 @@ function itemsOf(list: ReportTask[]): Item[] {
   return out;
 }
 
+type Filter = 'all' | 'inspection' | 'bitacora' | 'reg';
+const FILTERS: { id: Filter; label: string; title: string }[] = [
+  { id: 'all', label: 'Todo', title: 'Todas las tareas' },
+  { id: 'inspection', label: '🚗 Inspecciones', title: 'Solo inspecciones (para planear salidas)' },
+  { id: 'bitacora', label: '📋 Bitácora', title: 'Solo llenado de bitácora' },
+  { id: 'reg', label: '🗂️ Regencias', title: 'Solo regencias (elaboración, firma, subida)' }
+];
+const passes = (f: Filter, t: ReportTask) => f === 'all' || (f === 'reg' ? t.kind.startsWith('reg') : t.kind === f);
+const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
 export function TasksView({ d }: { d: AppData }) {
   const today = todayISO();
   const [allLate, setAllLate] = useState(false);
-  const { overdue, upcoming, noDate } = reportTasks(d, today, addDays(today, 30));
+  const [filter, setFilter] = useState<Filter>(() => { try { return (localStorage.getItem('bt_tk_filter') as Filter) || 'all'; } catch { return 'all'; } });
+  const pick = (f: Filter) => { setFilter(f); try { localStorage.setItem('bt_tk_filter', f); } catch { /* */ } };
+  // one block per project (everything a site visit / a phone call settles at once), or one list by date
+  const [grouped, setGrouped] = useState(() => { try { return localStorage.getItem('bt_tk_group') === '1'; } catch { return false; } });
+  const toggleGroup = () => setGrouped(v => { try { localStorage.setItem('bt_tk_group', v ? '0' : '1'); } catch { /* */ } return !v; });
+  const res = reportTasks(d, today, addDays(today, 30));
+  const { noDate } = res;
+  const overdue = res.overdue.filter(t => passes(filter, t)), upcoming = res.upcoming.filter(t => passes(filter, t));
   const week = upcoming.filter(t => t.date <= addDays(today, 6));
   const later = upcoming.filter(t => t.date > addDays(today, 6));
 
+  const count = (list: ReportTask[]) => itemsOf(list).length;
   const section = (title: string, cls: string, list: ReportTask[], empty: string, limit?: number) => (
-    <section className={`tk-sec ${cls}`}>
-      <h3>{title} <span className="tk-n">{list.length}</span></h3>
+    <section className={`tk-sec ${cls}`} id={`tk-${cls}`}>
+      <h3>{title} <span className="tk-n">{count(list)}</span></h3>
       {!list.length && <p className="muted tk-empty">{empty}</p>}
       {(() => {
-        const items = itemsOf(list), shown = limit ? items.slice(0, limit) : items;
+        const items = itemsOf(list);
         const tOf = (x?: Item) => (x && 't' in x ? x.t : undefined);
-        return <>
-          {shown.map((x, i) => 'reg' in x
-            ? <RegRow key={`${x.reg[0].b.id}:${x.reg[0].key}`} steps={x.reg} today={today} />
-            : <TaskRow key={`${x.t.b.id}:${x.t.key}:${x.t.kind}`} t={x.t} today={today} cont={sameSlot(tOf(shown[i - 1]), x.t)} more={sameSlot(x.t, tOf(shown[i + 1]))} />)}
-          {limit && items.length > limit && <button type="button" className="dp-link tk-more" onClick={() => setAllLate(true)}>Ver {items.length - limit} más</button>}
-        </>;
+        const rows = (shown: Item[]) => shown.map((x, i) => 'reg' in x
+          ? <RegRow key={`${x.reg[0].b.id}:${x.reg[0].key}`} steps={x.reg} today={today} />
+          : <TaskRow key={`${x.t.b.id}:${x.t.key}:${x.t.kind}`} t={x.t} today={today} cont={sameSlot(tOf(shown[i - 1]), x.t)} more={sameSlot(x.t, tOf(shown[i + 1]))} />);
+        if (!grouped) {
+          const shown = limit ? items.slice(0, limit) : items;
+          return <>{rows(shown)}
+            {limit && items.length > limit && <button type="button" className="dp-link tk-more" onClick={() => setAllLate(true)}>Ver {items.length - limit} más</button>}</>;
+        }
+        // grouped: projects in the order of their most urgent task
+        const groups = new Map<string, Item[]>();
+        for (const x of items) { const id = ('reg' in x ? x.reg[0] : x.t).b.id; groups.set(id, [...(groups.get(id) ?? []), x]); }
+        const all = [...groups.values()], shownG = limit ? all.slice(0, Math.max(4, Math.round(limit / 2))) : all;
+        return <>{shownG.map(g => {
+          const first = 'reg' in g[0] ? g[0].reg[0] : g[0].t, b = first.b;
+          return (
+            <div key={b.id} className="tk-group">
+              <button type="button" className="tk-gh" title="Abrir el proyecto" onClick={() => openEditor(getData().projects.find(x => x.id === b.id) ?? b)}>
+                <b className="mono">{b.code}</b> <span className="tk-gname">{b.name}</span>
+                <span className="grow" /><span className="tk-gn">{g.length} pendiente{g.length === 1 ? '' : 's'}</span>
+                <small className="muted">desde {shortDate(first.date)}{first.date.slice(0, 4) !== today.slice(0, 4) ? ` ${first.date.slice(2, 4)}` : ''}</small>
+              </button>
+              {rows(g)}
+            </div>
+          );
+        })}
+          {shownG.length < all.length && <button type="button" className="dp-link tk-more" onClick={() => setAllLate(true)}>Ver {all.length - shownG.length} proyecto(s) más</button>}</>;
       })()}
     </section>
   );
@@ -141,10 +181,23 @@ export function TasksView({ d }: { d: AppData }) {
               : ' · ponla en ✏️ Editar datos, o se toma de la primera anotación en SETENA.'}
           </span></div>
       )}
-      <FileAlerts d={d} />
+      {/* a bar that stays on top: jump to each list, and show only one kind of task */}
+      <div className="tk-bar">
+        <nav className="tk-jump" aria-label="Ir a">
+          <button type="button" className="tk-j week" onClick={() => jump('tk-week')}>📅 Esta semana <b>{count(week)}</b></button>
+          <button type="button" className="tk-j late" onClick={() => jump('tk-late')}>⚠️ Atrasadas <b>{count(overdue)}</b></button>
+          <button type="button" className="tk-j later" onClick={() => jump('tk-later')}>🗓️ 30 días <b>{count(later)}</b></button>
+        </nav>
+        <span className="grow" />
+        <label className="tk-groupt" title="Juntar las tareas de cada proyecto"><input type="checkbox" checked={grouped} onChange={toggleGroup} /> Por proyecto</label>
+        <div className="tk-filter seg" role="group" aria-label="Mostrar">
+          {FILTERS.map(f => <button type="button" key={f.id} className={filter === f.id ? 'on' : ''} title={f.title} aria-pressed={filter === f.id} onClick={() => pick(f.id)}>{f.label}</button>)}
+        </div>
+      </div>
+      {filter === 'all' && <FileAlerts d={d} />}
+      {section('📅 Esta semana', 'week', week, filter === 'all' ? 'Nada para esta semana.' : 'Nada de esto para esta semana.')}
       {section('⚠️ Atrasadas', 'late', overdue, 'Nada atrasado. ✓', allLate ? undefined : SHOW_LATE)}
-      <ClosureTasks d={d} />
-      {section('📅 Esta semana', 'week', week, 'Nada para esta semana.')}
+      {filter === 'all' && <ClosureTasks d={d} />}
       {section('🗓️ Próximos 30 días', 'later', later, 'Nada más en los próximos 30 días.')}
     </div>
   );

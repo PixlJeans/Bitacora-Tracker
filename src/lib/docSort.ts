@@ -93,7 +93,9 @@ export async function sortDocuments(b: Project, files: { path: string }[], budge
     const k = known[m[3]];
     // read again (once) a regencia read by an older version: for the name, the place or the client's signature
     const reread = !!k && k.kind === 'regencia' && ((needName && !k.project) || (needPlace && k.lat === undefined && !k.noPlace)
-      || (!k.clientSigned && !k.regenteSigned && (k.sigV ?? 0) < 2));
+      || (!k.clientSigned && !k.regenteSigned && (k.sigV ?? 0) < 2)
+      // v71: periods written «Período del Informe de Regencia Ambiental …» and the «Fecha declarada» signature stamp
+      || (k.kind === 'regencia' && (!k.period || !k.clientSigned) && (k.sigV ?? 0) < 3));
     // a scan read before OCR existed: read it again with OCR (it may be placed anew)
     const rescan = !!k && k.kind === 'notext' && !k.ocr && (budget.ocr ?? OCR_PER_RUN) > 0;
     if (k && !reread && !rescan) { relocate(f.path, m, k); continue; }

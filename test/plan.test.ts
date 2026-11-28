@@ -31,4 +31,14 @@ const r3 = planWeek(many, ['2026-11-27'], 15, 6);
 assert.equal(r3.days[0].stops.length, 6); assert.equal(r3.overflow.length, 3);
 assert.deepEqual(r3.days[0].stops.map(s => s.b.id).sort(), ['M0', 'M1', 'M2', 'M3', 'M4', 'M5'], 'the most urgent go first');
 console.log('plan OK');
+
+// ---- the week Rutas opens on: from Friday afternoon, next week ----
+{
+  const { planMonday } = await import('../src/lib/plan');
+  assert.equal(planMonday('2026-11-25', new Date(2026, 10, 25, 9)), '2026-11-23', 'Wednesday: this week');
+  assert.equal(planMonday('2026-11-27', new Date(2026, 10, 27, 9)), '2026-11-23', 'Friday morning: still this week');
+  assert.equal(planMonday('2026-11-27', new Date(2026, 10, 27, 21)), '2026-11-30', 'Friday night: next week');
+  assert.equal(planMonday('2026-11-29', new Date(2026, 10, 29, 10)), '2026-11-30', 'Sunday: next week');
+  console.log('plan week OK');
+}
 process.exit(0);
